@@ -19,3 +19,8 @@ db.version(1).stores({
 db.version(2).stores({}).upgrade(async tx => {
   for (const t of tx.db.tables) await t.clear()
 })
+
+// v3: index smsLog.key so each SMS is only processed once
+db.version(3).stores({
+  smsLog: '++id, receivedAt, parseStatus, parsedEntityType, key'
+})

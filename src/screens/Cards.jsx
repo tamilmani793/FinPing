@@ -45,16 +45,6 @@ export default function Cards() {
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 80 }}>
       <TopBar sub="Cards" />
 
-      {/* SMS Listener Banner */}
-      <div style={{ margin: '10px 16px 0', background: 'var(--indigo-bg)', border: '1px solid var(--indigo-border)', borderRadius: 12, padding: '10px 12px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-        <div style={{ fontSize: 18, marginTop: 1 }}>📡</div>
-        <div>
-          <LabelCaps style={{ color: 'var(--indigo-dim)', marginBottom: 2 }}>Smart SMS Listener</LabelCaps>
-          <div style={{ fontSize: 11, color: 'var(--txt2)' }}>Bank sends "Payment of ₹XX received" → Pending balances instantly reconcile &amp; clear automatically.</div>
-        </div>
-        <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--mint)', flexShrink: 0, marginTop: 4 }} />
-      </div>
-
       {/* Summary Row */}
       <div style={{ margin: '10px 16px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div className="card-sm">
@@ -120,9 +110,9 @@ export default function Cards() {
 
             {/* Utilisation */}
             <div style={{ fontSize: 10, color: 'var(--txt2)', marginBottom: 4 }}>
-              Credit Utilisation: {Math.round((1 - card.availableCredit / card.creditLimit) * 100)}%
+              Credit Utilisation: {(card.creditLimit ? Math.round((1 - card.availableCredit / card.creditLimit) * 100) : 0)}%
             </div>
-            <ProgressBar pct={(1 - card.availableCredit / card.creditLimit) * 100} variant="gradient" />
+            <ProgressBar pct={card.creditLimit ? (1 - card.availableCredit / card.creditLimit) * 100 : 0} variant="gradient" />
 
             {!card.isLTF && card.feeWaiverThreshold > 0 && (
               <div style={{ marginTop: 8, fontSize: 11, color: 'var(--txt2)' }}>

@@ -22,7 +22,7 @@ export function SMSPill() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--mint-bg)', border: '1px solid var(--mint-border)', borderRadius: 9999, padding: '3px 8px', fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: 'var(--mint-dim)', fontWeight: 600, letterSpacing: '0.06em' }}>
       <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--mint)' }} />
-      SMS: LIVE
+      LOCAL ONLY
     </div>
   )
 }

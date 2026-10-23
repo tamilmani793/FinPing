@@ -46,7 +46,6 @@ export default function Dashboard() {
   // Due date alerts
   const dueCards = (cards || []).filter(c => c.currentBalance > 0)
 
-  const smsToday = useLiveQuery(() => db.smsLog.filter(l => new Date(l.receivedAt).toDateString() === new Date().toDateString()).count(), []) || 0
   const cap = 90000
   const spentPct = Math.min(100, Math.round(totalSpent / cap * 100))
   const daysLeft = Math.max(0, differenceInCalendarDays(monthEnd, now))
@@ -59,18 +58,6 @@ export default function Dashboard() {
       <TopBar sub="Dashboard" />
 
       <div style={{ padding: '10px 16px 0' }}>
-        {/* SMS Parse Status */}
-        <div style={{ background: 'var(--indigo-bg)', border: '1px solid var(--indigo-border)', borderRadius: 12, padding: '10px 12px', marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div style={{ fontSize: 20 }}>📡</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 1 }}>{smsToday} SMS Parsed Today</div>
-            <div style={{ fontSize: 11, color: 'var(--txt2)' }}>Auto-ingest ready</div>
-          </div>
-          <div style={{ width: 36, height: 20, background: 'var(--mint)', borderRadius: 10, position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 16, height: 16, background: '#000', borderRadius: '50%', position: 'absolute', right: 2, top: 2 }} />
-          </div>
-        </div>
-
         {/* Monthly Telemetry */}
         <Card style={{ marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
