@@ -30,7 +30,7 @@ jobs:
         env:
           BASE_PATH: ./
       - run: npx cap sync android
-      - run: chmod +x android/gradlew && ./gradlew assembleDebug
+      - run: chmod +x gradlew && ./gradlew assembleDebug
         working-directory: android
       - name: Publish APK to the "latest" release
         env:
