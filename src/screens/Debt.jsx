@@ -76,7 +76,7 @@ export default function Debt() {
   }
 
   return (
-    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 80 }}>
+    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
       <TopBar sub="Debt" />
 
       <div style={{ padding: '10px 16px 0' }}>

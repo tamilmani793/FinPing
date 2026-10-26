@@ -1,17 +1,25 @@
 import { format } from 'date-fns'
+import { ChevronLeft } from 'lucide-react'
+import { useStore } from '../store'
 
 export function TopBar({ title, sub, right }) {
+  const { activeTab, setActiveTab } = useStore()
+  const isSub = activeTab === 'debt' || activeTab === 'wealth'
   return (
-    <div style={{ padding: '12px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, borderBottom: '1px solid var(--border)', background: 'var(--bg0)' }}>
+    <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="FinPing" style={{ width: 30, height: 30, borderRadius: 8 }} />
+        {isSub ? (
+          <div onClick={() => setActiveTab('home')} style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <ChevronLeft size={18} />
+          </div>
+        ) : (
+          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="FinPing" style={{ width: 30, height: 30, borderRadius: 9 }} />
+        )}
         <div>
-          <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em' }}>FinPing</div>
-          {sub && <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{sub}</div>}
+          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{title || sub || 'FinPing'}</div>
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <SMSPill />
         {right || <Avatar />}
       </div>
     </div>
@@ -29,7 +37,7 @@ export function SMSPill() {
 
 export function Avatar({ initials = 'TS' }) {
   return (
-    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bg3)', border: '1.5px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: 'var(--txt2)' }}>{initials}</div>
+    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--gold-bg)', border: '1.5px solid var(--gold-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--gold-dim)' }}>{initials}</div>
   )
 }
 
@@ -79,7 +87,7 @@ export function MonoMd({ children, style }) {
 export function TxnRow({ icon, merchant, meta, amount, isCredit, badge, tags, onClick }) {
   return (
     <div className="txn-row" onClick={onClick} style={onClick ? { cursor: 'pointer' } : {}}>
-      <div className="txn-icon" style={{ background: isCredit ? 'var(--mint-bg)' : 'rgba(255,255,255,0.05)' }}>
+      <div className="txn-icon" style={{ background: isCredit ? 'var(--mint-bg)' : 'var(--bg2)' }}>
         {icon || '💳'}
       </div>
       <div className="txn-mid">
@@ -143,7 +151,7 @@ export function Notification({ msg, type }) {
   if (!msg) return null
   const color = type === 'success' ? 'var(--mint)' : type === 'error' ? 'var(--red)' : 'var(--amber)'
   return (
-    <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg2)', border: `1px solid ${color}`, borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 500, color, zIndex: 99, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>
+    <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg1)', border: `1px solid ${color}`, borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 500, color, zIndex: 99, boxShadow: '0 8px 24px rgba(90,60,20,0.2)', whiteSpace: 'nowrap' }}>
       {msg}
     </div>
   )

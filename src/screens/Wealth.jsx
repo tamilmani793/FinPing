@@ -80,7 +80,7 @@ export default function Wealth() {
   }
 
   return (
-    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 80 }}>
+    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
       <TopBar sub="Wealth" />
 
       <div style={{ padding: '10px 16px 0' }}>
@@ -213,7 +213,7 @@ export default function Wealth() {
           const returnPct = inv.investedAmount > 0 ? ((inv.currentValue - inv.investedAmount) / inv.investedAmount * 100).toFixed(1) : 0
           const isPositive = parseFloat(returnPct) >= 0
           return (
-            <div key={inv.id} style={{ background: '#0D0F17', border: '1px solid var(--indigo-border)', borderRadius: 12, padding: 12, marginBottom: 8 }}>
+            <div key={inv.id} style={{ background: 'var(--bg1)', border: '1px solid var(--indigo-border)', borderRadius: 12, padding: 12, marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
                 <div style={{ fontSize: 18, marginTop: 1 }}>{TYPE_ICONS[inv.type] || '💰'}</div>
                 <div style={{ flex: 1 }}>

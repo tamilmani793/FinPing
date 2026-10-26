@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
 import { db } from '../db/schema'
@@ -25,7 +25,9 @@ export default function Expenses() {
   const [parsed, setParsed] = useState(null)
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth())
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-  const { showNotification } = useStore()
+  const { showNotification, composeRequest } = useStore()
+
+  useEffect(() => { if (composeRequest > 0) setShowPasteSMS(true) }, [composeRequest])
 
   const [form, setForm] = useState({ merchant: '', amount: '', category: 'General', paymentMode: 'UPI', notes: '', tags: '' })
 
@@ -97,7 +99,7 @@ export default function Expenses() {
   }
 
   return (
-    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 80, position: 'relative' }}>
+    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150, position: 'relative' }}>
       <TopBar sub={`Expenses · ${MONTHS[selectedMonth]} ${selectedYear}`} />
 
       {/* Month Selector */}

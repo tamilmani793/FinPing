@@ -1,151 +1,166 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { startOfMonth, endOfMonth, format, differenceInCalendarDays } from 'date-fns'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+import { startOfMonth, subMonths, format } from 'date-fns'
+import { ArrowUpRight, ArrowDownLeft, PiggyBank, Receipt, CreditCard, Landmark, TrendingUp } from 'lucide-react'
 import { db } from '../db/schema'
-import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCaps, MonoLg, formatINR, getMerchantIcon, formatDate } from '../components/UI'
+import { TopBar, TxnRow, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
+import { getUserName } from '../lib/profile'
 
-const CATEGORY_COLORS = {
-  'Food Delivery': '#10B981', 'E-Commerce': '#6366F1', 'Utilities & Bills': '#F59E0B',
-  'Transport': '#8B5CF6', 'Health': '#EC4899', 'Fuel': '#F97316', 'Rent': '#EF4444',
-  'Grocery': '#14B8A6', 'Travel Online': '#06B6D4', 'General': '#6B7280',
+function greeting(now) {
+  const h = now.getHours()
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+}
+
+function pctChange(cur, prev) {
+  if (!prev) return null
+  return Math.round(((cur - prev) / prev) * 100)
+}
+
+function Delta({ cur, prev, goodWhenUp }) {
+  const p = pctChange(cur, prev)
+  if (p === null) return null
+  const up = p >= 0
+  const good = up === goodWhenUp
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, color: good ? 'var(--mint-dim)' : 'var(--red-dim)' }}>
+      {up ? '▲' : '▼'} {Math.abs(p)}%
+    </span>
+  )
+}
+
+function Tile({ Icon, tone, label, value, extra, onClick }) {
+  const tones = {
+    orange: ['#FCE6D6', '#D9701F'], green: ['#DDF3E7', '#2E9E6B'], blue: ['#E2E8FB', '#4A5FD0'],
+    gold: ['#F6EBCF', '#A57C2A'], red: ['#FBDDE0', '#D6455D'],
+  }
+  const [bg, fg] = tones[tone]
+  return (
+    <div className="stat-tile" onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <div className="stat-icon" style={{ background: bg, color: fg }}><Icon size={15} /></div>
+        <div className="label-caps">{label}</div>
+      </div>
+      <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{value}</div>
+      <div style={{ marginTop: 2, minHeight: 14 }}>{extra}</div>
+    </div>
+  )
 }
 
 export default function Dashboard() {
+  const { setActiveTab } = useStore()
   const now = new Date()
   const monthStart = startOfMonth(now)
-  const monthEnd = endOfMonth(now)
+  const prevStart = startOfMonth(subMonths(now, 1))
 
-  const transactions = useLiveQuery(() =>
-    db.transactions.filter(t => {
-      const d = new Date(t.date)
-      return d >= monthStart && d <= monthEnd
-    }).toArray()
-  , [])
+  const txnsAll = useLiveQuery(() => db.transactions.filter(t => new Date(t.date) >= prevStart && !t.isExcluded).toArray()) || []
+  const cards = useLiveQuery(() => db.creditCards.toArray()) || []
+  const investments = useLiveQuery(() => db.investments.toArray()) || []
+  const debts = useLiveQuery(() => db.debts.toArray()) || []
 
-  const cards = useLiveQuery(() => db.creditCards.toArray())
-  const debts = useLiveQuery(() => db.debts.where('status').equals('active').toArray())
-  const investments = useLiveQuery(() => db.investments.toArray())
+  const cur = txnsAll.filter(t => new Date(t.date) >= monthStart)
+  const prev = txnsAll.filter(t => new Date(t.date) < monthStart)
+  const sum = (arr, type) => arr.filter(t => t.type === type).reduce((s, t) => s + t.amount, 0)
 
-  const totalSpent = (transactions || []).filter(t => t.type === 'debit' && !t.isExcluded).reduce((s, t) => s + t.amount, 0)
-  const totalCashback = (transactions || []).filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0)
-  const totalDebt = (debts || []).reduce((s, d) => s + d.currentOutstanding, 0)
-  const totalInvestments = (investments || []).reduce((s, i) => s + i.currentValue, 0)
+  const expenses = sum(cur, 'debit'), income = sum(cur, 'credit')
+  const prevExpenses = sum(prev, 'debit'), prevIncome = sum(prev, 'credit')
+  const net = income - expenses
+  const savedPct = income > 0 ? Math.max(0, Math.round((net / income) * 100)) : 0
+  const spendShare = income > 0 ? Math.min(100, Math.round((expenses / income) * 100)) : expenses > 0 ? 100 : 0
 
-  // Category breakdown
-  const catMap = {}
-  for (const t of (transactions || [])) {
-    if (t.type === 'debit' && !t.isExcluded) {
-      catMap[t.category] = (catMap[t.category] || 0) + t.amount
-    }
-  }
-  const pieData = Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+  const bills = cur.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
+  const prevBills = prev.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
+  const invested = investments.reduce((s, i) => s + (i.investedAmount || 0), 0)
+  const cardDue = cards.reduce((s, c) => s + (c.currentBalance || 0), 0)
+  const activeDebts = debts.filter(d => d.status !== 'closed')
+  const emi = activeDebts.reduce((s, d) => s + (d.emiAmount || 0), 0)
 
-  const recent = [...(transactions || [])].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5)
-
-  // Due date alerts
-  const dueCards = (cards || []).filter(c => c.currentBalance > 0)
-
-  const cap = 90000
-  const spentPct = Math.min(100, Math.round(totalSpent / cap * 100))
-  const daysLeft = Math.max(0, differenceInCalendarDays(monthEnd, now))
-  const burn = Math.round(totalSpent / Math.max(1, now.getDate()))
-
-  const { setActiveTab } = useStore()
+  const recent = [...cur].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6)
+  const name = getUserName()
+  const mon = format(now, 'MMM').toUpperCase()
 
   return (
-    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 80 }}>
-      <TopBar sub="Dashboard" />
+    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
+      <TopBar title="FinPing" />
 
-      <div style={{ padding: '10px 16px 0' }}>
-        {/* Monthly Telemetry */}
-        <Card style={{ marginBottom: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <LabelCaps>Monthly Spend Telemetry</LabelCaps>
-            <Badge variant="amber">{spentPct}% Consumed · {daysLeft} days left</Badge>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-            <MonoLg>{formatINR(totalSpent)}</MonoLg>
-            <span style={{ fontSize: 13, color: 'var(--txt2)' }}>/ ₹90,000 cap</span>
-          </div>
-          <ProgressBar pct={spentPct} variant="gradient" />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11 }}>
-            <span style={{ color: 'var(--mint)' }}>● Burn Rate: {formatINR(burn)}/day</span>
-            <span style={{ color: 'var(--txt2)' }}>{formatINR(Math.max(0, cap - totalSpent))} safe to spend</span>
-          </div>
-          <Divider />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid var(--mint-border)', borderRadius: 8, padding: 10 }}>
-              <LabelCaps style={{ marginBottom: 4 }}>Fee Waivers</LabelCaps>
-              <div className="mono-md" style={{ color: 'var(--mint)' }}>{formatINR(0)}</div>
-              <div style={{ fontSize: 11, color: 'var(--txt2)' }}>unlocked</div>
-            </div>
-            <div style={{ background: 'var(--indigo-bg)', border: '1px solid var(--indigo-border)', borderRadius: 8, padding: 10 }}>
-              <LabelCaps style={{ marginBottom: 4 }}>Cashback Accrued</LabelCaps>
-              <div className="mono-md" style={{ color: 'var(--indigo-dim)' }}>{formatINR(totalCashback)}</div>
-              <div style={{ fontSize: 11, color: 'var(--txt2)' }}>this cycle</div>
-            </div>
-          </div>
-        </Card>
+      <div style={{ padding: '0 16px' }}>
+        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{greeting(now)}{name ? `, ${name}` : ''}</div>
 
-        {/* Period Tabs */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          {['This Month', 'Last 30 Days', 'Quarterly'].map((t, i) => (
-            <div key={t} style={{ flex: 1, textAlign: 'center', padding: '7px 4px', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', background: i === 0 ? 'var(--mint-bg)' : 'transparent', color: i === 0 ? 'var(--mint-dim)' : 'var(--txt2)', border: i === 0 ? '1px solid var(--mint-border)' : '1px solid var(--border2)' }}>{t}</div>
-          ))}
+        <div style={{ display: 'flex', gap: 8, margin: '12px 0 10px', overflowX: 'auto' }}>
+          <div className="pill-chip" onClick={() => setActiveTab('debt')}><Landmark size={14} color="var(--gold)" /> Debt</div>
+          <div className="pill-chip" onClick={() => setActiveTab('wealth')}><TrendingUp size={14} color="var(--gold)" /> Wealth</div>
+          <div className="pill-chip" onClick={() => setActiveTab('cards')}><CreditCard size={14} color="var(--gold)" /> Cards</div>
         </div>
 
-        {/* Spend Allocation with mini chart */}
-        <SectionHdr title="Spend Allocation" right={<Badge variant="grey">{pieData.length} DETECTED VERTICALS</Badge>} />
-        <Card style={{ marginBottom: 10 }}>
-          {pieData.slice(0, 5).map(({ name, value }) => {
-            const pct = totalSpent ? Math.round(value / totalSpent * 100) : 0
-            const color = CATEGORY_COLORS[name] || '#6B7280'
-            return (
-              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                <div style={{ flex: 1, fontSize: 13 }}>{name}</div>
-                <div className="mono-sm">{formatINR(value)}</div>
-                <div style={{ fontSize: 10, background: `${color}20`, color, border: `1px solid ${color}40`, borderRadius: 9999, padding: '1px 6px', fontWeight: 600, marginLeft: 4, minWidth: 34, textAlign: 'center' }}>{pct}%</div>
+        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>Today is <b style={{ color: 'var(--txt)' }}>{format(now, 'EEE, d MMM')}</b></div>
+
+        {/* Insights */}
+        <div className="label-caps" style={{ textAlign: 'center', marginBottom: 10, letterSpacing: '0.12em' }}>Insights</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <Tile Icon={ArrowUpRight} tone="orange" label={`${mon} Expenses`} value={formatINR(expenses)} extra={<Delta cur={expenses} prev={prevExpenses} goodWhenUp={false} />} onClick={() => setActiveTab('history')} />
+          <Tile Icon={ArrowDownLeft} tone="green" label={`${mon} Income`} value={formatINR(income)} extra={<Delta cur={income} prev={prevIncome} goodWhenUp />} onClick={() => setActiveTab('history')} />
+        </div>
+
+        <div className="stat-tile" style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div className="label-caps">Net Cash Flow</div>
+            <span className="badge badge-mint">{savedPct}% saved</span>
+          </div>
+          <div style={{ display: 'flex', height: 8, borderRadius: 9999, overflow: 'hidden', background: 'var(--mint)', marginBottom: 8 }}>
+            <div style={{ width: `${spendShare}%`, background: 'var(--red)' }} />
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: net >= 0 ? 'var(--mint-dim)' : 'var(--red-dim)' }}>
+            {net >= 0 ? '+' : '-'}{formatINR(Math.abs(net))}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <Tile Icon={PiggyBank} tone="blue" label={`${mon} Invest`} value={formatINR(invested)} onClick={() => setActiveTab('wealth')} />
+          <Tile Icon={Receipt} tone="gold" label={`${mon} Bills`} value={formatINR(bills)} extra={<Delta cur={bills} prev={prevBills} goodWhenUp={false} />} />
+          <Tile Icon={CreditCard} tone="red" label="Card Dues" value={formatINR(cardDue)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{cards.length} card{cards.length === 1 ? '' : 's'}</span>} onClick={() => setActiveTab('cards')} />
+          <Tile Icon={Landmark} tone="orange" label="Monthly EMI" value={formatINR(emi)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{activeDebts.length} active</span>} onClick={() => setActiveTab('debt')} />
+        </div>
+
+        {/* Accounts & cards */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="section-hdr">
+            <div className="section-title">Accounts &amp; Wallets</div>
+            <div style={{ fontSize: 12, color: 'var(--gold-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => setActiveTab('cards')}>View all</div>
+          </div>
+          {cards.length ? cards.slice(0, 4).map(c => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+              <div className="stat-icon" style={{ width: 34, height: 34, background: 'var(--bg2)', color: 'var(--gold-dim)' }}><CreditCard size={17} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{c.bank} •• {c.cardLast4}</div>
               </div>
-            )
-          })}
-        </Card>
-
-        {/* Due Date Alerts */}
-        {dueCards.length > 0 && (
-          <>
-            <SectionHdr title="Payment Alerts" right={<Badge variant="red">ACTION NEEDED</Badge>} />
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-              {dueCards.map(c => (
-                <div key={c.id} style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 8, padding: '6px 10px' }}>
-                  <div style={{ fontSize: 11, color: '#FCA5A5', fontWeight: 600 }}>{c.name}</div>
-                  <div className="mono-sm" style={{ color: 'var(--red)' }}>{formatINR(c.currentBalance)} due</div>
-                </div>
-              ))}
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: c.currentBalance > 0 ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{formatINR(c.currentBalance || 0)}</div>
+                <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{c.currentBalance > 0 ? 'due' : 'no dues'}</div>
+              </div>
             </div>
-          </>
-        )}
+          )) : (
+            <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--txt2)', fontSize: 12 }}>No cards yet — they appear once bank SMS are synced.</div>
+          )}
+        </div>
 
-        {/* Live Parsed Feeds */}
-        <SectionHdr title="Live Parsed Feeds" right={<Badge variant="indigo">AUTO-CLASSIFIED</Badge>} />
-        <Card style={{ padding: '10px 14px' }}>
+        {/* Recent */}
+        <div className="section-hdr"><div className="section-title">Recent Transactions</div></div>
+        <div className="card" style={{ padding: '4px 14px' }}>
           {recent.map(t => (
             <TxnRow
               key={t.id}
               icon={getMerchantIcon(t.merchant)}
               merchant={t.merchant}
-              meta={`${t.bank ? t.bank.split(' ')[0] : ''} · ${formatDate(t.date)}`}
+              meta={`${t.bank ? t.bank.split(' ')[0] : ''}${t.accountLast4 ? ` ••${t.accountLast4}` : ''} · ${formatDate(t.date)}`}
               amount={t.amount}
               isCredit={t.type === 'credit'}
               tags={t.tags}
-              badge={t.type === 'credit' ? <Badge variant="mint" style={{ fontSize: 9 }}>+Cashback</Badge> : null}
             />
           ))}
-          {(!recent.length) && (
-            <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--txt2)', fontSize: 13 }}>No transactions this month yet.<br />Share a bank SMS to get started.</div>
+          {!recent.length && (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--txt2)', fontSize: 13 }}>No transactions this month yet.</div>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   )
