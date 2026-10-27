@@ -46,7 +46,7 @@ jobs:
             PRE=""
           else
             # Branch builds get their own pre-release so they never replace the main APK.
-            TAG="apk-$(echo "$BUILD_BRANCH" | tr -c 'A-Za-z0-9._-' '-')"
+            TAG="apk-$(printf '%s' "$BUILD_BRANCH" | tr -c 'A-Za-z0-9._-' '-' | sed 's/-*$//')"
             TITLE="FinPing ($BUILD_BRANCH)"
             PRE="--prerelease"
           fi
