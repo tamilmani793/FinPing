@@ -82,10 +82,17 @@ function extractAccountLast4(text) {
 }
 
 function extractBank(text) {
-  const banks = { 'HDFC': 'HDFC Bank', 'ICICI': 'ICICI Bank', 'SBI': 'State Bank of India', 'AXIS': 'Axis Bank', 'KOTAK': 'Kotak Bank', 'YES': 'Yes Bank', 'IDFC': 'IDFC First Bank', 'AU': 'AU Small Finance Bank', 'INDUSIND': 'IndusInd Bank', 'PNB': 'PNB', 'BOB': 'Bank of Baroda', 'CANARA': 'Canara Bank', 'RBL': 'RBL Bank' }
+  const banks = [
+    [/\bHDFC\b/, 'HDFC Bank'], [/\bICICI\b/, 'ICICI Bank'], [/\bSBI\b|STATE BANK/, 'State Bank of India'],
+    [/\bAXIS\b/, 'Axis Bank'], [/\bHSBC\b/, 'HSBC'], [/\bSLICE\b/, 'Slice'], [/\bKOTAK\b/, 'Kotak Bank'],
+    [/\bYES BANK\b/, 'Yes Bank'], [/\bIDFC\b/, 'IDFC First Bank'], [/\bAU (?:SMALL|BANK)|\bAU SFB\b/, 'AU Small Finance Bank'],
+    [/\bINDUSIND\b/, 'IndusInd Bank'], [/\bPNB\b|PUNJAB NATIONAL/, 'PNB'], [/\bBOB\b|BANK OF BARODA/, 'Bank of Baroda'],
+    [/\bCANARA\b/, 'Canara Bank'], [/\bRBL\b/, 'RBL Bank'], [/\bAMEX\b|AMERICAN EXPRESS/, 'American Express'],
+    [/STANDARD CHARTERED|\bSCB\b/, 'Standard Chartered'], [/\bFEDERAL BANK\b/, 'Federal Bank'],
+  ]
   const upper = text.toUpperCase()
-  for (const [k, v] of Object.entries(banks)) {
-    if (upper.includes(k)) return v
+  for (const [re, name] of banks) {
+    if (re.test(upper)) return name
   }
   return 'Unknown Bank'
 }
@@ -111,7 +118,8 @@ function classifyCategory(merchant, text) {
 function detectPaymentMode(text) {
   const lower = text.toLowerCase()
   if (/upi|upi ref|upi:/.test(lower)) return 'UPI'
-  if (/credit card|debit card|card xx|card x{2}/.test(lower)) return isCreditCardSMS(text) ? 'Credit Card' : 'Debit Card'
+  const kind = detectCardKind(text)
+  if (kind) return kind === 'credit' ? 'Credit Card' : kind === 'debit' ? 'Debit Card' : 'Card'
   if (/netbanking|net banking|neft|imps|rtgs/.test(lower)) return 'NetBanking'
   if (/wallet|paytm|phonepe|gpay/.test(lower)) return 'Wallet'
   if (/atm|cash withdrawal/.test(lower)) return 'Cash'
@@ -120,13 +128,22 @@ function detectPaymentMode(text) {
 }
 
 // True only when the SMS is about a credit card, not a savings account or debit card.
-export function isCreditCardSMS(text) {
+// What kind of card an SMS is about:
+//   'credit' | 'debit' | 'unknown' (a card, but the SMS does not say which) | null (not a card SMS)
+export function detectCardKind(text) {
   const t = text.toLowerCase()
-  if (/credit card|\bcc\b|sbi card/.test(t)) return true
-  if (/debit card|atm|a\/c|\bac\b|account|upi/.test(t)) return false
-  // "Card x4092 / Card ending 1234" with a spend verb and no debit/account wording
-  return /\bcard\b/.test(t) && /spent|purchase|used|transaction of|txn|paid|due|limit/.test(t)
+  const debit = /debit card|atm card|\bdc\b/.test(t)
+  // "Avl limit" / "credit limit" only appear on credit-card SMS.
+  const credit = /credit card|\bcc\b|sbi card|slice (?:super )?card|(?:avl|avail(?:able)?)\.?\s*(?:credit\s*)?(?:limit|lmt)|credit limit/.test(t)
+  if (credit && !debit) return 'credit'
+  if (debit && !credit) return 'debit'
+  if (debit && credit) return 'unknown'
+  // Only a "card" word, with a spend verb and no account wording: can't tell which kind.
+  if (/\bcard\b/.test(t) && /spent|purchase|used|transaction of|txn|paid/.test(t) && !/a\/c|\bac\b|account/.test(t)) return 'unknown'
+  return null
 }
+
+export const isCreditCardSMS = text => detectCardKind(text) === 'credit'
 
 function detectStatementSMS(text) {
   const lower = text.toLowerCase()

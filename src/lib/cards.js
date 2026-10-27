@@ -45,6 +45,26 @@ const toDate = v => (v ? new Date(v) : null)
 //   sharedWith: ids of the other cards that share this card's limit (empty = not shared)
 //   sameStatement: copy statement dates / status / amounts to every card in the group
 export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatement = false } = {}) {
+  const cardType = form.cardType === 'debit' ? 'debit' : 'credit'
+  const identity = {
+    name: (form.name || '').trim(), bank: (form.bank || '').trim(), cardType,
+    network: form.network || '', variant: (form.variant || '').trim(), partner: (form.partner || '').trim(),
+  }
+
+  // Debit cards have no limit, statement, fee or shared pool: save the identity and leave the pool.
+  if (cardType === 'debit') {
+    const me = await db.creditCards.get(cardId)
+    if (!me) throw new Error('Card not found')
+    await db.creditCards.update(cardId, {
+      ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
+      limitGroup: null, creditLimit: 0, availableCredit: 0, currentBalance: 0, statementBalance: 0, pendingDue: 0, minimumDue: 0, unbilled: 0,
+      totalAnnualFee: 0, isLTF: true, feeWaiverThreshold: 0,
+    })
+    const left = await db.creditCards.toArray()
+    for (const c of left) if (c.limitGroup && left.filter(x => x.limitGroup === c.limitGroup).length < 2) await db.creditCards.update(c.id, { limitGroup: null })
+    return
+  }
+
   const limit = num(form.creditLimit)
   const available = num(form.availableCredit)
   if (limit > 0 && available > limit) throw new Error('Available credit cannot be more than the credit limit')
@@ -92,8 +112,7 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
 
   // 4. Card's own details.
   await db.creditCards.update(cardId, {
-    name: form.name.trim() || me.name,
-    bank: form.bank.trim() || me.bank,
+    ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
     totalAnnualFee: num(form.totalAnnualFee),
     isLTF: num(form.totalAnnualFee) === 0,
     feeWaiverThreshold: num(form.feeWaiverThreshold),

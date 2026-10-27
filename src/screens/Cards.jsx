@@ -8,6 +8,7 @@ import { groupOf } from '../lib/cards'
 import CardEditSheet from '../components/CardEditSheet'
 import { format, startOfMonth } from 'date-fns'
 import { Gift, CreditCard } from 'lucide-react'
+import { typeLabel, networkLabel } from '../lib/cardCatalog'
 
 const TABS = ['Transactions', 'Statement', 'Rewards', 'Analysis']
 const REWARD_PERIODS = ['Monthly', 'Quarterly', 'Annual']
@@ -40,11 +41,13 @@ export default function Cards() {
 
   if (!cards) return <div style={{ padding: 20, color: 'var(--txt2)' }}>Loading...</div>
 
-  const totalDue = (cards || []).reduce((s, c) => s + (c.currentBalance || 0), 0)
+  const totalDue = (cards || []).filter(c => !c.cardType || c.cardType === 'credit').reduce((s, c) => s + (c.currentBalance || 0), 0)
 
   const rewardChartData = []
 
+  const isCreditCard = !card?.cardType || card.cardType === 'credit'
   const sharedCards = groupOf(card, cards)
+  const spendThisMonth = (allTxns || []).filter(t => t.type === 'debit' && !t.isExcluded && new Date(t.date) >= startOfMonth(new Date())).reduce((s, t) => s + t.amount, 0)
   const limit = card?.creditLimit || 0
   const used = limit ? Math.max(0, limit - (card?.availableCredit || 0)) : 0
   const utilPct = limit ? Math.round((used / limit) * 100) : 0
@@ -72,15 +75,23 @@ export default function Cards() {
       <div className="chip-scroll" style={{ paddingTop: 0 }}>
         {cards.map((c, i) => (
           <div key={c.id} className={`chip${i === activeCard ? ' active' : ''}`} onClick={() => { setActiveCard(i); setActiveTab(0) }}>
-            {c.name}{c.cardLast4 ? ` ••${c.cardLast4}` : ''}
+            {c.name}{c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''}{c.cardType === 'debit' ? ' · Debit' : c.cardType === 'unknown' ? ' · ?' : ''}
           </div>
         ))}
         {!cards.length && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>No cards linked yet</div>}
       </div>
 
       <div style={{ padding: '4px 16px 0' }}>
+        {card?.cardType === 'unknown' && (
+          <div className="card" style={{ marginBottom: 12, padding: '10px 14px', borderColor: 'var(--amber-border)', background: 'var(--amber-bg)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber-dim)' }}>Is this a credit or debit card?</div>
+            <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 8px' }}>The SMS didn't say. Until you choose, its spends are listed but no credit balance is tracked.</div>
+            <button className="btn-secondary" style={{ height: 34 }} onClick={() => setEditOpen(true)}>Choose card type</button>
+          </div>
+        )}
+
         {/* Cashback & rewards panel */}
-        {card && (
+        {card && isCreditCard && (
           <div className="card" style={{ marginBottom: 12, padding: '10px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div className="stat-icon" style={{ background: 'var(--pink-bg)', color: 'var(--pink)' }}><Gift size={15} /></div>
@@ -106,7 +117,22 @@ export default function Cards() {
                 <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{card.name}</div>
                 <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.bank} •• {card.cardLast4}</div>
               </div>
+              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#E8D29A' }}>{networkLabel(card) || typeLabel(card)}</div>
+                <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{[networkLabel(card) ? typeLabel(card) : '', card.partner].filter(Boolean).join(' · ')}</div>
+              </div>
             </div>
+
+            {!isCreditCard && (
+              <>
+                <div className="label-caps">Spent this month</div>
+                <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 10 }}>{formatINR(spendThisMonth)}</div>
+                <button className="btn-secondary" style={{ height: 34 }} onClick={() => setEditOpen(true)}>Edit card</button>
+              </>
+            )}
+
+            {isCreditCard && (
+              <>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
               <div>
@@ -123,11 +149,13 @@ export default function Cards() {
               <span className="label-caps">Utilization</span><span style={{ fontWeight: 700 }}>{utilPct}% of {formatINR(limit)}</span>
             </div>
             <ProgressBar pct={utilPct} variant={utilPct >= 70 ? 'red' : utilPct >= 40 ? 'amber' : 'mint'} />
+              </>
+            )}
           </div>
         )}
 
         {/* Fee structure */}
-        {card && (
+        {card && isCreditCard && (
           <div className="card" style={{ marginBottom: 12 }}>
             <div className="section-hdr" style={{ marginBottom: 4 }}>
               <div className="label-caps">Fee Structure</div>
@@ -148,7 +176,7 @@ export default function Cards() {
         )}
 
         {/* Statement details */}
-        {card && (
+        {card && isCreditCard && (
           <div className="card" style={{ marginBottom: 12 }}>
             <div className="label-caps" style={{ marginBottom: 4 }}>Statement Details</div>
             <Row k="Statement date" v={fmtD(stmt?.statementDate)} />
@@ -171,14 +199,14 @@ export default function Cards() {
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 2px 12px' }}>
+        {isCreditCard && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 2px 12px' }}>
           <div className="label-caps">Total Outstanding</div>
           <div style={{ fontSize: 16, fontWeight: 800 }}>{formatINR(totalDue)}</div>
-        </div>
+        </div>}
 
         {/* Tabs */}
         <div className="tab-bar" style={{ marginLeft: 0, marginRight: 0, marginBottom: 12 }}>
-          {TABS.map((t, i) => (
+          {TABS.filter((_, i) => isCreditCard || i === 0).map((t, i) => (
             <div key={t} className={`tab${activeTab === i ? ' active' : ''}`} onClick={() => setActiveTab(i)}>{t}</div>
           ))}
         </div>

@@ -4,6 +4,7 @@ import { db } from '../db/schema'
 import { useStore } from '../store'
 import { saveCardEdit, groupOf } from '../lib/cards'
 import { BtnPrimary } from './UI'
+import { CARD_TYPES, BANKS, NETWORKS, CARD_NAMES, PARTNERS, variantsFor } from '../lib/cardCatalog'
 
 const dateStr = d => (d ? format(new Date(d), 'yyyy-MM-dd') : '')
 const str = v => (v == null || v === 0 ? '' : String(v))
@@ -25,6 +26,7 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
   const [sameStatement, setSameStatement] = useState(false)
   const [form, setForm] = useState({
     name: card.name || '', bank: card.bank || '',
+    cardType: card.cardType === 'debit' ? 'debit' : 'credit', network: card.network || '', variant: card.variant || '', partner: card.partner || '',
     creditLimit: str(card.creditLimit), availableCredit: str(card.availableCredit),
     statementBalance: str(card.statementBalance), pendingDue: str(card.pendingDue ?? card.statementBalance),
     minimumDue: str(card.minimumDue), unbilled: str(card.unbilled),
@@ -32,6 +34,7 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
     status: statement ? (statement.isPaid ? 'paid' : 'pending') : (card.currentBalance > 0 ? 'pending' : 'paid'),
     totalAnnualFee: str(card.totalAnnualFee), feeWaiverThreshold: str(card.feeWaiverThreshold),
   })
+  const isCredit = form.cardType === 'credit'
   const set = k => e => setForm({ ...form, [k]: e.target.value })
   const num = k => ({ className: 'input', type: 'number', inputMode: 'decimal', value: form[k], onChange: set(k) })
 
@@ -63,11 +66,41 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
         <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 12 }}>Edit card</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {card.cardType === 'unknown' && (
+            <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: 'var(--amber-dim)' }}>
+              The SMS didn't say whether this is a credit or a debit card. Choose below.
+            </div>
+          )}
+          <Field label="Card type">
+            <div style={{ display: 'flex', gap: 8 }}>
+              {CARD_TYPES.map(t => (
+                <div key={t.id} className={`chip${form.cardType === t.id ? ' active' : ''}`} style={{ flex: 1, textAlign: 'center' }} onClick={() => setForm({ ...form, cardType: t.id })}>{t.label}</div>
+              ))}
+            </div>
+          </Field>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <Field label="Card name"><input className="input" value={form.name} onChange={set('name')} /></Field>
-            <Field label="Bank"><input className="input" value={form.bank} onChange={set('bank')} /></Field>
+            <Field label="Bank / issuer"><input className="input" list="dl-banks" value={form.bank} onChange={set('bank')} placeholder="HDFC Bank" /></Field>
+            <Field label="Card name"><input className="input" list="dl-names" value={form.name} onChange={set('name')} placeholder="Infinia" /></Field>
+            <Field label="Network">
+              <select className="input" value={form.network} onChange={e => setForm({ ...form, network: e.target.value })}>
+                <option value="">Select…</option>
+                {NETWORKS.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </Field>
+            <Field label="Variant"><input className="input" list="dl-variants" value={form.variant} onChange={set('variant')} placeholder="Signature" /></Field>
           </div>
+          {isCredit && (
+            <Field label="Third-party / co-brand partner (optional)">
+              <input className="input" list="dl-partners" value={form.partner} onChange={set('partner')} placeholder="Amazon Pay, Swiggy, PhonePe…" />
+            </Field>
+          )}
+          <datalist id="dl-banks">{BANKS.map(b => <option key={b} value={b} />)}</datalist>
+          <datalist id="dl-names">{(CARD_NAMES[form.bank] || []).map(n => <option key={n} value={n} />)}</datalist>
+          <datalist id="dl-variants">{variantsFor(form.network, form.cardType).map(v => <option key={v} value={v} />)}</datalist>
+          <datalist id="dl-partners">{PARTNERS.map(p => <option key={p} value={p} />)}</datalist>
 
+          {isCredit && (
+            <>
           <div className="label-caps" style={{ marginTop: 6, color: 'var(--gold-dim)' }}>Credit limit</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <Field label="Total limit (₹)"><input {...num('creditLimit')} /></Field>
@@ -115,6 +148,9 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
             <Field label="Annual fee (₹)"><input {...num('totalAnnualFee')} /></Field>
             <Field label="Fee waiver spend (₹)"><input {...num('feeWaiverThreshold')} /></Field>
           </div>
+
+            </>
+          )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <BtnPrimary onClick={save} style={{ flex: 1 }}>Save</BtnPrimary>

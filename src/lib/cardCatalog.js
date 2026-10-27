@@ -1,0 +1,62 @@
+// Suggestions for the card edit form. Every field also accepts free text.
+
+export const CARD_TYPES = [
+  { id: 'credit', label: 'Credit' },
+  { id: 'debit', label: 'Debit' },
+]
+
+export const BANKS = [
+  'HDFC Bank', 'ICICI Bank', 'State Bank of India', 'HSBC', 'Axis Bank', 'Slice',
+  'Kotak Bank', 'IDFC First Bank', 'Yes Bank', 'IndusInd Bank', 'RBL Bank',
+  'AU Small Finance Bank', 'American Express', 'Standard Chartered', 'Federal Bank', 'Bank of Baroda', 'PNB',
+]
+
+export const NETWORKS = ['Visa', 'Mastercard', 'RuPay', 'American Express', 'Diners Club']
+
+const CREDIT_VARIANTS = {
+  Visa: ['Signature', 'Infinite', 'Infinia', 'Platinum', 'Gold', 'Classic', 'Titanium', 'Select', 'Business'],
+  Mastercard: ['World Elite', 'World', 'Platinum', 'Titanium', 'Gold', 'Standard', 'Business'],
+  RuPay: ['Select', 'Platinum', 'Classic', 'Signature'],
+  'American Express': ['Platinum', 'Gold', 'SmartEarn', 'Membership Rewards', 'Platinum Travel', 'Centurion'],
+  'Diners Club': ['Black', 'Premium', 'Privilege', 'ClubMiles', 'Rewardz'],
+}
+
+const DEBIT_VARIANTS = {
+  Visa: ['Classic', 'Platinum', 'Signature', 'Gold', 'Business', 'Rewards'],
+  Mastercard: ['Standard', 'Platinum', 'World', 'Titanium', 'Business'],
+  RuPay: ['Classic', 'Platinum', 'Select'],
+  'American Express': [],
+  'Diners Club': [],
+}
+
+export function variantsFor(network, cardType) {
+  const table = cardType === 'debit' ? DEBIT_VARIANTS : CREDIT_VARIANTS
+  return network && table[network] ? table[network] : [...new Set(Object.values(table).flat())]
+}
+
+// Popular card names by issuer, used to suggest the card name.
+export const CARD_NAMES = {
+  'HDFC Bank': ['Infinia', 'Diners Club Black', 'Regalia Gold', 'Regalia', 'Millennia', 'MoneyBack+', 'Swiggy', 'Tata Neu Infinity', 'Pixel', 'IndianOil', 'Freedom', 'Rupay Credit'],
+  'ICICI Bank': ['Amazon Pay', 'Sapphiro', 'Coral', 'Rubyx', 'Emeralde', 'HPCL Super Saver', 'MakeMyTrip', 'Platinum Chip'],
+  'State Bank of India': ['Cashback', 'SimplyCLICK', 'SimplySAVE', 'Elite', 'PRIME', 'PhonePe Black', 'PhonePe Purple', 'BPCL Octane', 'IRCTC'],
+  HSBC: ['Premier', 'Cashback', 'Live+', 'Travel One', 'Visa Platinum'],
+  'Axis Bank': ['Magnus', 'Atlas', 'Reserve', 'Flipkart', 'Ace', 'Airtel', 'Myzone', 'Neo', 'Select', 'Privilege'],
+  Slice: ['Slice Super Card', 'Slice Credit Card'],
+  'Kotak Bank': ['811', 'Royale Signature', 'League Platinum', 'Zen Signature', 'Myntra'],
+  'IDFC First Bank': ['Wealth', 'Select', 'Millennia', 'Classic', 'Ashva'],
+  'Yes Bank': ['Reserv', 'Marquee', 'Paisabazaar', 'Ace'],
+  'IndusInd Bank': ['Legend', 'Platinum Aura Edge', 'Tiger', 'EazyDiner'],
+  'RBL Bank': ['Shoprite', 'Platinum Maxima', 'Bajaj Finserv', 'Play'],
+  'American Express': ['Platinum Charge', 'Platinum Travel', 'Gold Charge', 'SmartEarn', 'MRCC'],
+}
+
+// Third-party / co-branded card partners.
+export const PARTNERS = [
+  'Amazon Pay', 'Flipkart', 'Swiggy', 'PhonePe', 'Paytm', 'Tata Neu', 'Myntra', 'Airtel', 'BookMyShow',
+  'MakeMyTrip', 'IndianOil', 'BPCL', 'HPCL', 'IRCTC', 'Marriott', 'Vistara', 'Air India', 'Zomato', 'OneCard', 'Jupiter', 'CRED',
+]
+
+export const typeLabel = c => (c?.cardType === 'debit' ? 'Debit' : c?.cardType === 'unknown' ? 'Type not set' : 'Credit')
+
+// "Visa Signature" / "Mastercard" / ""
+export const networkLabel = c => [c?.network, c?.variant].filter(Boolean).join(' ')
