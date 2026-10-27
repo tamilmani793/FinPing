@@ -53,6 +53,9 @@ export function cardStats(card, txns, now = new Date()) {
   if (override === true) pendingBilled = 0
   const status = billed <= 0 ? 'none' : pendingBilled <= 0 ? 'paid' : paidThisCycle > 0 ? 'partial' : 'pending'
 
+  // A due date only means something while part of a bill is still unpaid.
+  const owing = status === 'pending' || status === 'partial'
+
   // Current outstanding = what is still due on the bill + everything spent after it.
   const totalDue = pendingBilled
   const outstanding = pendingBilled + unbilled
@@ -62,7 +65,7 @@ export function cardStats(card, txns, now = new Date()) {
     dates, prevStatement, unbilled, billed, billedIsEstimate: !hasStatement && !!dates.key, billedSpends,
     paidThisCycle, pendingBilled, status, payments, paymentsThisCycle,
     unbilledTxns, billedTxns,
-    totalDue, outstanding,
+    totalDue, outstanding, owing,
     bankUsed: limit > 0 ? Math.max(0, limit - available) : null, // what the bank's available limit implies is in use
     limit, available, utilPct: limit ? Math.min(100, Math.round(((limit - available) / limit) * 100)) : 0,
   }

@@ -81,7 +81,7 @@ function CardTile({ card, txns, onOpen }) {
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 11, color: 'var(--txt2)' }}>{s.dates.dueDate ? `Due ${fmtS(s.dates.dueDate)}` : 'Due date not set'}</span>
+            <span style={{ fontSize: 11, color: 'var(--txt2)' }}>{s.owing ? (s.dates.dueDate ? `Due ${fmtS(s.dates.dueDate)}` : 'Due date not set') : s.status === 'paid' ? 'Nothing due' : 'No bill yet'}</span>
             <span className={`badge ${st.badge}`}>{st.label}</span>
           </div>
           {s.limit > 0 && (
@@ -295,7 +295,7 @@ function Detail({ card, cards, byCard, onBack }) {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>
-                <span>Due date <b style={{ color: 'var(--txt)' }}>{s.dates.dueDate ? fmtD(s.dates.dueDate) : '—'}</b></span>
+                <span>{s.owing ? <>Due date <b style={{ color: 'var(--txt)' }}>{s.dates.dueDate ? fmtD(s.dates.dueDate) : '—'}</b></> : s.status === 'paid' ? 'Nothing due — bill paid' : 'No bill to pay yet'}</span>
                 <span>{st.label}</span>
               </div>
               {s.limit > 0 ? (
@@ -353,7 +353,7 @@ function Detail({ card, cards, byCard, onBack }) {
             {/* Billed */}
             <Section title="Billed details">
               <Row k="Statement date" sub={cycleLine} v={s.dates.statementDate ? fmtD(s.dates.statementDate) : 'Not set — tap Edit'} />
-              <Row k="Payment due date" sub={s.dates.dueDate ? `${card.paymentDueDays} days after statement` : undefined} v={s.dates.dueDate ? fmtD(s.dates.dueDate) : '—'} />
+              <Row k="Payment due date" sub={s.owing && s.dates.dueDate ? `${card.paymentDueDays} days after statement` : undefined} v={s.owing ? (s.dates.dueDate ? fmtD(s.dates.dueDate) : '—') : s.status === 'paid' ? 'Paid — nothing due' : 'No bill yet'} />
               {s.dates.nextStatementDate && <Row k="Next statement" v={`${fmtD(s.dates.nextStatementDate)} · due ${fmtS(s.dates.nextDueDate)}`} />}
               <div className="divider" />
               <Row k="Billed amount" sub={s.billedIsEstimate ? (s.billed > 0 ? 'estimate, no statement SMS yet' : undefined) : 'from statement'} v={formatINR(s.billed)} bold />
