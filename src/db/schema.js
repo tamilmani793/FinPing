@@ -33,3 +33,12 @@ db.version(4).stores({}).upgrade(async tx => {
   await tx.table('creditCards').filter(c => String(c.name).includes('••')).delete()
   try { localStorage.removeItem('finping_last_sms_sync') } catch (e) {}
 })
+
+// v5: card SMS parsing was fixed (card digits, spend/credit direction, merchant, limits).
+// Drop auto-imported data (manual entries are kept) so the next sync re-imports it correctly.
+db.version(5).stores({}).upgrade(async tx => {
+  await tx.table('transactions').filter(t => t.parsedBy === 'auto').delete()
+  await tx.table('smsLog').clear()
+  await tx.table('creditCards').filter(c => String(c.name).includes('••')).delete()
+  try { localStorage.removeItem('finping_last_sms_sync') } catch (e) {}
+})

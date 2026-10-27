@@ -54,7 +54,16 @@ export async function ingestSMS(rawText, meta = {}) {
         cardId: card ? card.id : null, rawSMS: text, parsedBy: 'auto',
         tags: [], notes: '', isExcluded: false, createdAt: new Date(),
       })
-      if (card && !isCashback) await adjustCard(card, type === 'debit' ? parsed.amount : -parsed.amount)
+      if (card && !isCashback) {
+        await adjustCard(card, type === 'debit' ? parsed.amount : -parsed.amount)
+        // The bank's own "Avl Limit" is the source of truth for what is still available.
+        if (parsed.availableLimit != null) {
+          const fresh = await db.creditCards.get(card.id)
+          const patch = { availableCredit: parsed.availableLimit }
+          if (fresh.creditLimit > 0) patch.currentBalance = Math.max(0, fresh.creditLimit - parsed.availableLimit)
+          await db.creditCards.update(card.id, patch)
+        }
+      }
       await log('saved', 'transaction')
       return { status: 'success', message: `₹${parsed.amount} ${type === 'debit' ? 'spent at' : 'from'} ${parsed.merchant || 'Unknown'}` }
     }
