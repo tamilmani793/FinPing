@@ -4,7 +4,8 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 
 import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCaps, MonoLg, MonoMd, BtnPrimary, BtnSecondary, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
-import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { format, startOfMonth } from 'date-fns'
+import { Gift, CreditCard } from 'lucide-react'
 
 const TABS = ['Transactions', 'Statement', 'Rewards', 'Analysis']
 const REWARD_PERIODS = ['Monthly', 'Quarterly', 'Annual']
@@ -37,97 +38,133 @@ export default function Cards() {
   if (!cards) return <div style={{ padding: 20, color: 'var(--txt2)' }}>Loading...</div>
 
   const totalDue = (cards || []).reduce((s, c) => s + (c.currentBalance || 0), 0)
-  const nextDue = (cards || []).filter(c => c.currentBalance > 0).sort((a, b) => a.paymentDueDays - b.paymentDueDays)[0]
 
   const rewardChartData = []
 
-  return (
-    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 80 }}>
-      <TopBar sub="Cards" />
+  const limit = card?.creditLimit || 0
+  const used = limit ? Math.max(0, limit - (card?.availableCredit || 0)) : 0
+  const utilPct = limit ? Math.round((used / limit) * 100) : 0
+  const stmt = (statements || [])[0]
+  const monthStart = startOfMonth(new Date())
+  const cashbackTxns = (allTxns || []).filter(t => t.type === 'credit' && t.category === 'Cashback')
+  const cbMonth = cashbackTxns.filter(t => new Date(t.date) >= monthStart).reduce((s, t) => s + t.amount, 0)
+  const cbAll = cashbackTxns.reduce((s, t) => s + t.amount, 0)
+  const fmtD = d => (d ? format(new Date(d), 'd MMM') : '—')
+  const spentThisYear = card?.totalPaidThisYear || 0
+  const isPaid = stmt ? stmt.isPaid : !(card?.currentBalance > 0)
 
-      {/* Summary Row */}
-      <div style={{ margin: '10px 16px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div className="card-sm">
-          <LabelCaps style={{ marginBottom: 3 }}>Total Available Credit</LabelCaps>
-          <div className="mono-md" style={{ color: 'var(--mint)' }}>{formatINR((cards || []).reduce((s, c) => s + (c.availableCredit || 0), 0))}</div>
-          <div style={{ fontSize: 10, color: 'var(--txt2)' }}>Across {cards?.length || 0} active cards</div>
-        </div>
-        <div className="card-sm">
-          <LabelCaps style={{ marginBottom: 3 }}>Total Due This Month</LabelCaps>
-          <div className="mono-md" style={{ color: totalDue > 0 ? 'var(--red)' : 'var(--mint)' }}>{formatINR(totalDue)}</div>
-          {nextDue && <div style={{ fontSize: 10, color: 'var(--amber)' }}>Next bill: {nextDue.name}</div>}
-        </div>
+  const Row = ({ k, v, color }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12 }}>
+      <span style={{ color: 'var(--txt2)' }}>{k}</span>
+      <span style={{ fontWeight: 600, color: color || 'var(--txt)' }}>{v}</span>
+    </div>
+  )
+
+  return (
+    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
+      <TopBar title="Card Portfolio" />
+
+      {/* Card selector chips */}
+      <div className="chip-scroll" style={{ paddingTop: 0 }}>
+        {cards.map((c, i) => (
+          <div key={c.id} className={`chip${i === activeCard ? ' active' : ''}`} onClick={() => { setActiveCard(i); setActiveTab(0) }}>
+            {c.name}{c.cardLast4 ? ` ••${c.cardLast4}` : ''}
+          </div>
+        ))}
+        {!cards.length && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>No cards linked yet</div>}
       </div>
 
-      <div style={{ padding: '12px 16px 0' }}>
-        {/* Card Tabs */}
-        <SectionHdr title={`Active Credit Cards`} right={<Badge variant="indigo">{cards?.length || 0} Linked</Badge>} />
-
-        {/* Card Scroll selector */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 }}>
-          {(cards || []).map((c, i) => (
-            <div key={c.id} onClick={() => { setActiveCard(i); setActiveTab(0) }}
-              style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                background: i === activeCard ? 'var(--mint-bg)' : 'transparent',
-                color: i === activeCard ? 'var(--mint-dim)' : 'var(--txt2)',
-                border: i === activeCard ? '1px solid var(--mint-border)' : '1px solid var(--border2)' }}>
-              {c.name.split(' ')[0]}
-            </div>
-          ))}
-        </div>
-
-        {/* Active Card Visual */}
+      <div style={{ padding: '4px 16px 0' }}>
+        {/* Cashback & rewards panel */}
         {card && (
-          <div className="cc-visual" style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--txt2)', textTransform: 'uppercase' }}>{card.bank}</div>
-                <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', marginBottom: 10 }}>{card.name}</div>
+          <div className="card" style={{ marginBottom: 12, padding: '10px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="stat-icon" style={{ background: 'var(--pink-bg)', color: 'var(--pink)' }}><Gift size={15} /></div>
+              <div style={{ flex: 1, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>Cashback &amp; Rewards</div>
+              <div style={{ textAlign: 'right' }}>
+                <div className="label-caps">This month</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--mint-dim)' }}>{formatINR(cbMonth)}</div>
               </div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: 'var(--txt2)', letterSpacing: '0.15em' }}>•• {card.cardLast4}</div>
+              <div style={{ textAlign: 'right', marginLeft: 8 }}>
+                <div className="label-caps">All-time</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--mint-dim)' }}>{formatINR(cbAll)}</div>
+              </div>
             </div>
+          </div>
+        )}
 
-            {card.currentBalance > 0 ? (
-              <div style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 6, padding: '4px 8px', marginBottom: 8, fontSize: 11, color: '#FCA5A5', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                ● Due {formatINR(card.currentBalance)}
-              </div>
-            ) : (
-              <div className="badge badge-mint" style={{ marginBottom: 8 }}>✓ Paid · No balance due</div>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+        {/* Active card */}
+        {card && (
+          <div className="cc-visual" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 17, background: 'rgba(232,210,154,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8D29A' }}><CreditCard size={18} /></div>
               <div>
-                <LabelCaps style={{ marginBottom: 2 }}>Available Credit</LabelCaps>
-                <div className="mono-sm" style={{ color: 'var(--mint)' }}>{formatINR(card.availableCredit)} / {formatINR(card.creditLimit / 100000 * 100000)}</div>
-              </div>
-              <div>
-                <LabelCaps style={{ marginBottom: 2 }}>Annual Fee</LabelCaps>
-                <div style={{ fontSize: 12, fontWeight: 600, color: card.isLTF ? 'var(--mint)' : 'var(--amber)' }}>
-                  {card.isLTF ? 'Lifetime Free (₹0)' : formatINR(card.totalAnnualFee)}
-                </div>
+                <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{card.name}</div>
+                <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.bank} •• {card.cardLast4}</div>
               </div>
             </div>
 
-            {/* Utilisation */}
-            <div style={{ fontSize: 10, color: 'var(--txt2)', marginBottom: 4 }}>
-              Credit Utilisation: {(card.creditLimit ? Math.round((1 - card.availableCredit / card.creditLimit) * 100) : 0)}%
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+              <div>
+                <div className="label-caps">Outstanding</div>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>{formatINR(card.currentBalance || 0)}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div className="label-caps">Due date</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{stmt ? fmtD(stmt.dueDate) : card.paymentDueDays ? `in ${card.paymentDueDays}d` : '—'}</div>
+              </div>
             </div>
-            <ProgressBar pct={card.creditLimit ? (1 - card.availableCredit / card.creditLimit) * 100 : 0} variant="gradient" />
 
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--txt2)', marginBottom: 4 }}>
+              <span className="label-caps">Utilization</span><span style={{ fontWeight: 700 }}>{utilPct}% of {formatINR(limit)}</span>
+            </div>
+            <ProgressBar pct={utilPct} variant={utilPct >= 70 ? 'red' : utilPct >= 40 ? 'amber' : 'mint'} />
+          </div>
+        )}
+
+        {/* Fee structure */}
+        {card && (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div className="section-hdr" style={{ marginBottom: 4 }}>
+              <div className="label-caps">Fee Structure</div>
+              <span className={`badge ${card.isLTF ? 'badge-mint' : 'badge-amber'}`}>{card.isLTF ? 'Lifetime Free' : `${formatINR(card.totalAnnualFee || 0)} / Yr`}</span>
+            </div>
             {!card.isLTF && card.feeWaiverThreshold > 0 && (
-              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--txt2)' }}>
-                Fee waiver: {formatINR(card.totalPaidThisYear || 0)} / {formatINR(card.feeWaiverThreshold)} spent
-              </div>
+              <>
+                <Row k="Fee waiver spend" v={`${formatINR(spentThisYear)} / ${formatINR(card.feeWaiverThreshold)}`} />
+                <ProgressBar pct={(spentThisYear / card.feeWaiverThreshold) * 100} variant="gradient" style={{ marginBottom: 4 }} />
+              </>
             )}
+            <Row k="Credit limit" v={formatINR(limit)} />
+            <Row k="Available credit" v={formatINR(card.availableCredit || 0)} color="var(--mint-dim)" />
+          </div>
+        )}
 
+        {/* Statement details */}
+        {card && (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div className="label-caps" style={{ marginBottom: 4 }}>Statement Details</div>
+            <Row k="Statement date" v={fmtD(stmt?.statementDate)} />
+            <Row k="Payment due date" v={fmtD(stmt?.dueDate)} />
+            <Row k="Status" v={isPaid ? 'Paid ✓' : 'Unpaid'} color={isPaid ? 'var(--mint-dim)' : 'var(--red-dim)'} />
+            <Row k="Minimum due" v={formatINR(card.minimumDue || 0)} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button className="btn-secondary" style={{ flex: 1, height: 38 }} onClick={() => setActiveTab(1)}>Details &amp; Limits</button>
+              <button className="btn-secondary" style={{ height: 38 }} onClick={() => showNotification('Editing cards is coming soon', 'info')}>Edit</button>
+            </div>
             {card.currentBalance > 0 && (
-              <button className="btn-primary" style={{ width: '100%', marginTop: 10, height: 40, fontSize: 13 }}
+              <button className="btn-primary" style={{ width: '100%', marginTop: 8, height: 42, fontSize: 13 }}
                 onClick={() => showNotification('Payment link would open here', 'info')}>
-                ⚡ Pay {formatINR(card.currentBalance)} Now
+                Pay {formatINR(card.currentBalance)} Now
               </button>
             )}
           </div>
         )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 2px 12px' }}>
+          <div className="label-caps">Total Outstanding</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{formatINR(totalDue)}</div>
+        </div>
 
         {/* Tabs */}
         <div className="tab-bar" style={{ marginLeft: 0, marginRight: 0, marginBottom: 12 }}>

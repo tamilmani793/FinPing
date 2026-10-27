@@ -2,8 +2,12 @@ import { create } from 'zustand'
 
 export const useStore = create((set, get) => ({
   // Navigation
-  activeTab: 'dashboard',
+  activeTab: 'home',
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  // Floating "+" button: bumps a counter the History screen listens to
+  composeRequest: 0,
+  requestCompose: () => set(s => ({ activeTab: 'history', composeRequest: s.composeRequest + 1 })),
 
   // SMS Sheet
   smsSheetOpen: false,

@@ -24,3 +24,12 @@ db.version(2).stores({}).upgrade(async tx => {
 db.version(3).stores({
   smsLog: '++id, receivedAt, parseStatus, parsedEntityType, key'
 })
+
+// v4: SMS import rules changed (bank accounts were being treated as credit cards).
+// Drop SMS-imported data so the next sync re-imports it correctly.
+db.version(4).stores({}).upgrade(async tx => {
+  await tx.table('transactions').clear()
+  await tx.table('smsLog').clear()
+  await tx.table('creditCards').filter(c => String(c.name).includes('••')).delete()
+  try { localStorage.removeItem('finping_last_sms_sync') } catch (e) {}
+})

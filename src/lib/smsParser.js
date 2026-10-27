@@ -91,11 +91,19 @@ function classifyCategory(merchant, text) {
 function detectPaymentMode(text) {
   const lower = text.toLowerCase()
   if (/upi|upi ref|upi:/.test(lower)) return 'UPI'
-  if (/credit card|debit card|card xx|card x{2}/.test(lower)) return 'Card'
+  if (/credit card|debit card|card xx|card x{2}/.test(lower)) return isCreditCardSMS(text) ? 'Credit Card' : 'Debit Card'
   if (/netbanking|net banking|neft|imps|rtgs/.test(lower)) return 'NetBanking'
   if (/wallet|paytm|phonepe|gpay/.test(lower)) return 'Wallet'
   if (/atm|cash withdrawal/.test(lower)) return 'Cash'
-  return 'Card'
+  if (/a\/c|\bac\b|account/.test(lower)) return 'Bank'
+  return 'Other'
+}
+
+// True only when the SMS is about a credit card, not a savings account or debit card.
+export function isCreditCardSMS(text) {
+  const t = text.toLowerCase()
+  if (/debit card|a\/c|\bac\b|account|upi/.test(t) && !/credit card/.test(t)) return false
+  return /credit card|\bcc\b|sbi card|card\s*(?:no\.?)?\s*x{2,}\d{4}|card\s*ending/.test(t)
 }
 
 function detectStatementSMS(text) {

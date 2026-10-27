@@ -1,5 +1,5 @@
 import { db } from '../db/schema'
-import { parseSMS } from './smsParser'
+import { parseSMS, isCreditCardSMS } from './smsParser'
 
 async function findOrCreateCard(parsed) {
   if (!parsed.cardLast4) return null
@@ -43,14 +43,14 @@ export async function ingestSMS(rawText, meta = {}) {
     case 'transaction':
     case 'cashback_credited': {
       const isCashback = parsed.type === 'cashback_credited'
-      const isCard = parsed.paymentMode === 'Card' || (isCashback && parsed.cardLast4)
+      const isCard = isCreditCardSMS(text)
       const card = isCard ? await findOrCreateCard(parsed) : null
       const type = isCashback ? 'credit' : (parsed.transactionType || 'debit')
       await db.transactions.add({
         date: receivedAt, amount: parsed.amount || 0, type,
         merchant: isCashback ? 'Cashback Credit' : (parsed.merchant || 'Unknown'),
         category: isCashback ? 'Cashback' : (parsed.category || 'General'),
-        paymentMode: parsed.paymentMode || 'Card', bank: parsed.bank || '',
+        paymentMode: parsed.paymentMode || 'Other', bank: parsed.bank || '', accountLast4: parsed.accountLast4 || parsed.cardLast4 || null,
         cardId: card ? card.id : null, rawSMS: text, parsedBy: 'auto',
         tags: [], notes: '', isExcluded: false, createdAt: new Date(),
       })
@@ -59,13 +59,13 @@ export async function ingestSMS(rawText, meta = {}) {
       return { status: 'success', message: `₹${parsed.amount} ${type === 'debit' ? 'spent at' : 'from'} ${parsed.merchant || 'Unknown'}` }
     }
     case 'payment_received': {
-      const card = await findOrCreateCard(parsed)
+      const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed) : null
       if (card) await adjustCard(card, -(parsed.amount || 0))
       await log('saved', 'payment_received')
       return { status: 'success', message: `Card payment of ₹${parsed.amount} recorded` }
     }
     case 'statement': {
-      const card = await findOrCreateCard(parsed)
+      const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed) : null
       if (card) {
         const patch = { statementBalance: parsed.totalDue || 0, currentBalance: parsed.totalDue || 0, minimumDue: parsed.minimumDue || 0 }
         if (card.creditLimit > 0) patch.availableCredit = Math.max(0, card.creditLimit - (parsed.totalDue || 0))
