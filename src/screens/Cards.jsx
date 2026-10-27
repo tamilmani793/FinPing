@@ -5,6 +5,7 @@ import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCaps, MonoLg, MonoMd, BtnPrimary, BtnSecondary, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
 import { groupOf } from '../lib/cards'
+import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import CardEditSheet from '../components/CardEditSheet'
 import { format, startOfMonth } from 'date-fns'
 import { Gift, CreditCard } from 'lucide-react'
@@ -51,14 +52,14 @@ export default function Cards() {
   const limit = card?.creditLimit || 0
   const used = limit ? Math.max(0, limit - (card?.availableCredit || 0)) : 0
   const utilPct = limit ? Math.round((used / limit) * 100) : 0
-  const stmt = (statements || [])[0]
+  const dates = card ? cycleDates(card) : {}
   const monthStart = startOfMonth(new Date())
   const cashbackTxns = (allTxns || []).filter(t => t.type === 'credit' && t.category === 'Cashback')
   const cbMonth = cashbackTxns.filter(t => new Date(t.date) >= monthStart).reduce((s, t) => s + t.amount, 0)
   const cbAll = cashbackTxns.reduce((s, t) => s + t.amount, 0)
-  const fmtD = d => (d ? format(new Date(d), 'd MMM') : '—')
+  const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
   const spentThisYear = card?.totalPaidThisYear || 0
-  const isPaid = stmt ? stmt.isPaid : !(card?.currentBalance > 0)
+  const isPaid = card ? isStatementPaid(card, dates) : true
 
   const Row = ({ k, v, color }) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12 }}>
@@ -141,7 +142,7 @@ export default function Cards() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div className="label-caps">Due date</div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{stmt ? fmtD(stmt.dueDate) : card.paymentDueDays ? `in ${card.paymentDueDays}d` : '—'}</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{dates.dueDate ? fmtD(dates.dueDate) : '—'}</div>
               </div>
             </div>
 
@@ -179,9 +180,11 @@ export default function Cards() {
         {card && isCreditCard && (
           <div className="card" style={{ marginBottom: 12 }}>
             <div className="label-caps" style={{ marginBottom: 4 }}>Statement Details</div>
-            <Row k="Statement date" v={fmtD(stmt?.statementDate)} />
-            <Row k="Payment due date" v={fmtD(stmt?.dueDate)} />
+            <Row k="Statement date" v={dates.statementDate ? `${fmtD(dates.statementDate)} · monthly on the ${ordinal(Number(card.billingCycleDate))}` : 'Not set — tap Edit'} />
+            <Row k="Payment due date" v={dates.dueDate ? `${fmtD(dates.dueDate)} · ${card.paymentDueDays} days after` : '—'} />
+            {dates.nextStatementDate && <Row k="Next statement" v={`${fmtD(dates.nextStatementDate)} · due ${fmtD(dates.nextDueDate)}`} />}
             <Row k="Status" v={isPaid ? 'Paid ✓' : 'Unpaid'} color={isPaid ? 'var(--mint-dim)' : 'var(--red-dim)'} />
+            <Row k="Current outstanding" v={formatINR(card.currentBalance || 0)} />
             <Row k="Statement amount" v={formatINR(card.statementBalance || 0)} />
             <Row k="Pending due" v={formatINR(isPaid ? 0 : (card.pendingDue ?? card.statementBalance ?? 0))} color={isPaid ? undefined : 'var(--red-dim)'} />
             <Row k="Minimum due" v={formatINR(card.minimumDue || 0)} />
@@ -342,7 +345,7 @@ export default function Cards() {
         </button>
       </div>
 
-      {editOpen && card && <CardEditSheet card={card} cards={cards} statement={stmt} onClose={() => setEditOpen(false)} />}
+      {editOpen && card && <CardEditSheet card={card} cards={cards} onClose={() => setEditOpen(false)} />}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
 import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, TxnRow, Divider, LabelCaps, BtnPrimary, BtnSecondary, SmsParsedCard, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { parseSMS } from '../lib/smsParser'
+import TxnEditSheet from '../components/TxnEditSheet'
 import { useStore } from '../store'
 
 const CATEGORY_ICONS = {
@@ -20,6 +21,7 @@ export default function Expenses() {
   const [activeFilter, setActiveFilter] = useState(0)
   const [expandedCats, setExpandedCats] = useState(new Set(['Food Delivery']))
   const [showAddForm, setShowAddForm] = useState(false)
+  const [editTxn, setEditTxn] = useState(null)
   const [showPasteSMS, setShowPasteSMS] = useState(false)
   const [smsText, setSmsText] = useState('')
   const [parsed, setParsed] = useState(null)
@@ -214,6 +216,7 @@ export default function Expenses() {
                       amount={t.amount}
                       isCredit={t.type === 'credit'}
                       tags={t.tags}
+                      onClick={() => setEditTxn(t)}
                       badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : null}
                     />
                   ))}
@@ -231,6 +234,7 @@ export default function Expenses() {
           </div>
         )}
       </div>
+      {editTxn && <TxnEditSheet txn={editTxn} onClose={() => setEditTxn(null)} />}
     </div>
   )
 }

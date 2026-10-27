@@ -3,10 +3,12 @@ import { format } from 'date-fns'
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { saveCardEdit, groupOf } from '../lib/cards'
+import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import { BtnPrimary } from './UI'
 import { CARD_TYPES, BANKS, NETWORKS, CARD_NAMES, PARTNERS, variantsFor } from '../lib/cardCatalog'
 
 const dateStr = d => (d ? format(new Date(d), 'yyyy-MM-dd') : '')
+const fmt = d => (d ? format(d, 'd MMM yyyy') : '—')
 const str = v => (v == null || v === 0 ? '' : String(v))
 
 function Field({ label, children }) {
@@ -28,14 +30,26 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
     name: card.name || '', bank: card.bank || '',
     cardType: card.cardType === 'debit' ? 'debit' : 'credit', network: card.network || '', variant: card.variant || '', partner: card.partner || '',
     creditLimit: str(card.creditLimit), availableCredit: str(card.availableCredit),
+    cardLast4: card.cardLast4 || '',
     statementBalance: str(card.statementBalance), pendingDue: str(card.pendingDue ?? card.statementBalance),
-    minimumDue: str(card.minimumDue), unbilled: str(card.unbilled),
-    statementDate: dateStr(statement?.statementDate), dueDate: dateStr(statement?.dueDate),
-    status: statement ? (statement.isPaid ? 'paid' : 'pending') : (card.currentBalance > 0 ? 'pending' : 'paid'),
+    minimumDue: str(card.minimumDue), unbilled: str(card.unbilled), currentBalance: str(card.currentBalance),
+    billingCycleDate: card.cycleSet ? str(card.billingCycleDate) : '', paymentDueDays: card.cycleSet ? str(card.paymentDueDays) : '',
+    status: isStatementPaid(card) ? 'paid' : 'pending',
+    annualFeeDate: dateStr(card.annualFeeDate), interestRate: str(card.interestRate), rewardPoints: str(card.rewardPoints), notes: card.notes || '',
     totalAnnualFee: str(card.totalAnnualFee), feeWaiverThreshold: str(card.feeWaiverThreshold),
   })
   const isCredit = form.cardType === 'credit'
-  const set = k => e => setForm({ ...form, [k]: e.target.value })
+  const [outTouched, setOutTouched] = useState(card.currentBalance > 0 && (card.currentBalance !== (card.pendingDue ?? card.statementBalance ?? 0) + (card.unbilled || 0)))
+  const set = k => e => {
+    const next = { ...form, [k]: e.target.value }
+    if (!outTouched && (k === 'pendingDue' || k === 'unbilled')) {
+      const sum = (Number(next.pendingDue) || 0) + (Number(next.unbilled) || 0)
+      next.currentBalance = sum ? String(sum) : ''
+    }
+    if (k === 'currentBalance') setOutTouched(true)
+    setForm(next)
+  }
+  const preview = cycleDates({ cycleSet: Number(form.billingCycleDate) >= 1, billingCycleDate: form.billingCycleDate, paymentDueDays: form.paymentDueDays })
   const num = k => ({ className: 'input', type: 'number', inputMode: 'decimal', value: form[k], onChange: set(k) })
 
   const toggle = id => {
@@ -88,6 +102,7 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
               </select>
             </Field>
             <Field label="Variant"><input className="input" list="dl-variants" value={form.variant} onChange={set('variant')} placeholder="Signature" /></Field>
+            <Field label="Last 4 digits"><input className="input" inputMode="numeric" maxLength={4} value={form.cardLast4} onChange={set('cardLast4')} placeholder="1234" /></Field>
           </div>
           {isCredit && (
             <Field label="Third-party / co-brand partner (optional)">
@@ -120,16 +135,29 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
             </div>
           )}
 
-          <div className="label-caps" style={{ marginTop: 6, color: 'var(--gold-dim)' }}>Statement</div>
+          <div className="label-caps" style={{ marginTop: 6, color: 'var(--gold-dim)' }}>Billing cycle</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <Field label="Statement date"><input className="input" type="date" value={form.statementDate} onChange={set('statementDate')} /></Field>
-            <Field label="Payment due date"><input className="input" type="date" value={form.dueDate} onChange={set('dueDate')} /></Field>
+            <Field label="Statement day of month (1–31)"><input className="input" type="number" inputMode="numeric" min="1" max="31" value={form.billingCycleDate} onChange={set('billingCycleDate')} placeholder="e.g. 5" /></Field>
+            <Field label="Payment due, days after statement"><input className="input" type="number" inputMode="numeric" min="0" max="60" value={form.paymentDueDays} onChange={set('paymentDueDays')} placeholder="e.g. 20" /></Field>
+          </div>
+          {preview.statementDate && (
+            <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: -2 }}>
+              Latest statement <b>{fmt(preview.statementDate)}</b> · due <b>{fmt(preview.dueDate)}</b><br />
+              Next statement <b>{fmt(preview.nextStatementDate)}</b> · due <b>{fmt(preview.nextDueDate)}</b>
+              {Number(form.billingCycleDate) >= 1 ? ` (every month on the ${ordinal(Number(form.billingCycleDate))})` : ''}
+            </div>
+          )}
+
+          <div className="label-caps" style={{ marginTop: 6, color: 'var(--gold-dim)' }}>Amounts</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Field label="Current outstanding (₹)"><input {...num('currentBalance')} /></Field>
             <Field label="Statement amount (₹)"><input {...num('statementBalance')} /></Field>
             <Field label="Pending due (₹)"><input {...num('pendingDue')} /></Field>
             <Field label="Minimum due (₹)"><input {...num('minimumDue')} /></Field>
-            <Field label="Pending / unbilled spends (₹)"><input {...num('unbilled')} /></Field>
+            <Field label="Unbilled spends (₹)"><input {...num('unbilled')} /></Field>
+            <Field label="Reward points"><input {...num('rewardPoints')} /></Field>
           </div>
-          <Field label="Status">
+          <Field label="Statement status">
             <div style={{ display: 'flex', gap: 8 }}>
               {[['pending', 'Pending'], ['paid', 'Paid']].map(([v, l]) => (
                 <div key={v} className={`chip${form.status === v ? ' active' : ''}`} style={{ flex: 1, textAlign: 'center' }} onClick={() => setForm({ ...form, status: v })}>{l}</div>
@@ -139,7 +167,7 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
           {shared.size > 0 && (
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--txt2)' }}>
               <input type="checkbox" checked={sameStatement} onChange={e => setSameStatement(e.target.checked)} style={{ marginTop: 2 }} />
-              Use these statement details (dates, status and amounts) for all cards sharing this limit
+              Use these billing-cycle, status and amount details for all cards sharing this limit
             </label>
           )}
 
@@ -147,10 +175,14 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <Field label="Annual fee (₹)"><input {...num('totalAnnualFee')} /></Field>
             <Field label="Fee waiver spend (₹)"><input {...num('feeWaiverThreshold')} /></Field>
+            <Field label="Annual fee date"><input className="input" type="date" value={form.annualFeeDate} onChange={set('annualFeeDate')} /></Field>
+            <Field label="Interest rate (% / month)"><input {...num('interestRate')} /></Field>
           </div>
 
             </>
           )}
+
+          <Field label="Notes"><textarea className="input" style={{ height: 60, fontSize: 13 }} value={form.notes} onChange={set('notes')} placeholder="Anything to remember about this card" /></Field>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <BtnPrimary onClick={save} style={{ flex: 1 }}>Save</BtnPrimary>

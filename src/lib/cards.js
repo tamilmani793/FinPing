@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { cycleDates } from './cycle'
 
 // Cards that share one credit limit carry the same `limitGroup` id.
 export const groupOf = (card, cards) =>
@@ -57,6 +58,7 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
     if (!me) throw new Error('Card not found')
     await db.creditCards.update(cardId, {
       ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
+      cardLast4: (form.cardLast4 || '').replace(/\D/g, '').slice(-4) || me.cardLast4, notes: form.notes || '',
       limitGroup: null, creditLimit: 0, availableCredit: 0, currentBalance: 0, statementBalance: 0, pendingDue: 0, minimumDue: 0, unbilled: 0,
       totalAnnualFee: 0, isLTF: true, feeWaiverThreshold: 0,
     })
@@ -92,29 +94,34 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
 
   // 2. Limit and available credit apply to the whole group.
   for (const id of chosen) await db.creditCards.update(id, { creditLimit: limit, availableCredit: available })
-  // 3. Statement data: this card, or the whole group when "same statement" is on.
+  // 3. Billing cycle + statement amounts: this card, or the whole group when "same statement" is on.
+  const day = Math.min(31, Math.max(0, Math.round(num(form.billingCycleDate))))
+  const dueDays = Math.max(0, Math.round(num(form.paymentDueDays)))
+  const cycle = day >= 1 ? { billingCycleDate: day, paymentDueDays: dueDays, cycleSet: true } : { cycleSet: false }
   const statementFields = {
     statementBalance: num(form.statementBalance),
     pendingDue: num(form.pendingDue),
     minimumDue: num(form.minimumDue),
     unbilled: num(form.unbilled),
+    // "Current outstanding" is what is owed right now; when left blank it is pending due + unbilled spends.
+    currentBalance: form.currentBalance === '' || form.currentBalance == null ? num(form.pendingDue) + num(form.unbilled) : num(form.currentBalance),
   }
+  const probe = { ...cycle, billingCycleDate: day }
+  const key = cycleDates(probe).key || null
+  const status = { statusPaid: form.status === 'paid', statusCycle: key }
   const targets = sameStatement ? [...chosen] : [cardId]
-  const isPaid = form.status === 'paid'
-  for (const id of targets) {
-    await db.creditCards.update(id, { ...statementFields, currentBalance: statementFields.pendingDue + statementFields.unbilled })
-    const stmts = await db.creditCardStatements.where('cardId').equals(id).toArray()
-    stmts.sort((a, b) => new Date(b.statementDate || 0) - new Date(a.statementDate || 0))
-    const row = { cardId: id, statementDate: toDate(form.statementDate), dueDate: toDate(form.dueDate), isPaid, totalDue: statementFields.statementBalance, minimumDue: statementFields.minimumDue }
-    if (stmts[0]) await db.creditCardStatements.update(stmts[0].id, row)
-    else if (form.statementDate || form.dueDate || statementFields.statementBalance) await db.creditCardStatements.add(row)
-  }
+  for (const id of targets) await db.creditCards.update(id, { ...statementFields, ...cycle, ...status })
 
   // 4. Card's own details.
   await db.creditCards.update(cardId, {
     ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
+    cardLast4: (form.cardLast4 || '').replace(/\D/g, '').slice(-4) || me.cardLast4,
     totalAnnualFee: num(form.totalAnnualFee),
     isLTF: num(form.totalAnnualFee) === 0,
     feeWaiverThreshold: num(form.feeWaiverThreshold),
+    annualFeeDate: toDate(form.annualFeeDate),
+    interestRate: num(form.interestRate),
+    rewardPoints: num(form.rewardPoints),
+    notes: form.notes || '',
   })
 }

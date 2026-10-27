@@ -36,7 +36,7 @@ function extractType(text) {
   // Spend verbs win: "spent Rs.500 ... reward points will be credited" is still a spend.
   const isRefund = /refund|reversal|reversed/.test(lower)
   if (!isRefund && /\b(?:spent|debited|withdrawn|deducted|purchase|txn of|transaction of)\b/.test(lower)) return 'debit'
-  if (/cashback|refund|credited|received|reward|points credited|reversal|reversed/.test(lower)) return 'credit'
+  if (/cashback|refund|credited|received|reward|points credited|reversal|reversed|\bdeposit(?:ed)?\b|\bcr\b|salary|interest paid/.test(lower)) return 'credit'
   if (/paid/.test(lower)) return 'debit'
   return 'debit'
 }
@@ -132,7 +132,11 @@ function detectPaymentMode(text) {
 //   'credit' | 'debit' | 'unknown' (a card, but the SMS does not say which) | null (not a card SMS)
 export function detectCardKind(text) {
   const t = text.toLowerCase()
-  const debit = /debit card|atm card|\bdc\b/.test(t)
+  // Money arriving in a bank account (deposit, salary, NEFT...) is not a card transaction.
+  const deposit = /credited (?:to|in|with)|has been credited|is credited|\bdeposit(?:ed)?\b|salary|\bcr\b/.test(t)
+  const account = /a\/c|\bac\b|account/.test(t)
+  if (deposit && account && !/credit card|debit card|refund|reversal|reversed|cashback/.test(t)) return null
+  const debit = /debit card|atm card/.test(t)
   // "Avl limit" / "credit limit" only appear on credit-card SMS.
   const credit = /credit card|\bcc\b|sbi card|slice (?:super )?card|(?:avl|avail(?:able)?)\.?\s*(?:credit\s*)?(?:limit|lmt)|credit limit/.test(t)
   if (credit && !debit) return 'credit'

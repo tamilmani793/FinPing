@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import { parseSMS, isCreditCardSMS, detectCardKind } from './smsParser'
 import { shiftAvailable, setLimitFields, groupOf } from './cards'
+import { cycleDates } from './cycle'
 
 // Finds the card by its last four digits (preferring the same bank), or creates it.
 // kind = what the SMS says: 'credit' | 'debit' | 'unknown'. Once a card exists, the type the
@@ -41,9 +42,7 @@ async function adjustCard(card, delta, kind = 'spend') {
   else patch.pendingDue = Math.max(0, (fresh.pendingDue ?? fresh.statementBalance ?? 0) + delta)
   await db.creditCards.update(card.id, patch)
   if (kind === 'payment' && patch.pendingDue === 0) {
-    const stmts = await db.creditCardStatements.where('cardId').equals(card.id).toArray()
-    stmts.sort((x, y) => new Date(y.statementDate || 0) - new Date(x.statementDate || 0))
-    if (stmts[0]) await db.creditCardStatements.update(stmts[0].id, { isPaid: true })
+    await db.creditCards.update(card.id, { statusPaid: true, statusCycle: cycleDates(fresh).key || null })
   }
   await shiftAvailable(card.id, -delta) // a spend lowers the (possibly shared) available credit
 }
@@ -102,7 +101,7 @@ export async function ingestSMS(rawText, meta = {}) {
     case 'statement': {
       const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed, 'credit') : null
       if (card) {
-        await db.creditCards.update(card.id, { statementBalance: parsed.totalDue || 0, pendingDue: parsed.totalDue || 0, unbilled: 0, currentBalance: parsed.totalDue || 0, minimumDue: parsed.minimumDue || 0 })
+        await db.creditCards.update(card.id, { statementBalance: parsed.totalDue || 0, pendingDue: parsed.totalDue || 0, unbilled: 0, currentBalance: parsed.totalDue || 0, minimumDue: parsed.minimumDue || 0, statusPaid: false, statusCycle: cycleDates(card).key || null })
       }
       await log('saved', 'statement')
       return { status: 'success', message: `Statement: ₹${parsed.totalDue} due` }
