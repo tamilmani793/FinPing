@@ -5,6 +5,9 @@ import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCaps, MonoLg, MonoMd, BtnPrimary, BtnSecondary, formatINR, formatDate } from '../components/UI'
 import { useStore } from '../store'
 import { parseSMS } from '../lib/smsParser'
+import { exportDebtsToFile, buildDebtBackup, importDebts, addManualRepayment, undoRepayment } from '../lib/debtBackup'
+
+const EMPTY_REPAY = { amount: '', principal: '', interest: '', date: format(new Date(), 'yyyy-MM-dd'), notes: '' }
 
 const DEBT_ICONS = { HomeLoan: '🏠', CarLoan: '🚗', PersonalLoan: '💼', FriendBorrowed: '🤝', FriendLent: '🤲', CreditLine: '💳' }
 
@@ -20,6 +23,10 @@ export default function Debt() {
   const [smsText, setSmsText] = useState('')
   const [parsed, setParsed] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
+  const [repayFor, setRepayFor] = useState(null)
+  const [repayForm, setRepayForm] = useState(EMPTY_REPAY)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importText, setImportText] = useState('')
   const { showNotification } = useStore()
 
   const [form, setForm] = useState({
@@ -70,6 +77,43 @@ export default function Debt() {
     showNotification(`Repayment of ${formatINR(parsed.amount)} linked!`, 'success')
   }
 
+  const handleSaveRepay = async () => {
+    try {
+      await addManualRepayment(repayFor, repayForm)
+      showNotification(`Repayment of ${formatINR(repayForm.amount)} recorded`, 'success')
+      setRepayFor(null); setRepayForm(EMPTY_REPAY)
+    } catch (e) { showNotification(e.message, 'error') }
+  }
+
+  const handleUndo = async (id) => {
+    await undoRepayment(id)
+    showNotification('Repayment removed and principal restored', 'success')
+  }
+
+  const handleExport = async () => {
+    try { showNotification(`Saved ${await exportDebtsToFile()}`, 'success') }
+    catch (e) { showNotification('Export failed', 'error') }
+  }
+
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(await buildDebtBackup()); showNotification('Backup copied to clipboard', 'success') }
+    catch (e) { showNotification('Could not copy — use Export file', 'error') }
+  }
+
+  const runImport = async (text) => {
+    try {
+      const { addedDebts, addedRepayments } = await importDebts(text)
+      showNotification(`Imported ${addedDebts} debt(s), ${addedRepayments} repayment(s)`, 'success')
+      setImportText(''); setImportOpen(false)
+    } catch (e) { showNotification(e.message, 'error') }
+  }
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) await runImport(await file.text())
+  }
+
   const handleMarkClosed = async (id) => {
     await db.debts.update(id, { status: 'closed' })
     showNotification('Debt marked as closed!', 'success')
@@ -111,6 +155,26 @@ export default function Debt() {
           <button className="btn-primary" style={{ height: 40, fontSize: 12 }} onClick={() => setAddOpen(!addOpen)}>+ Add New Debt</button>
           <button className="btn-secondary" style={{ height: 40, fontSize: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setMatchSMSOpen(!matchSMSOpen)}>📲 Match SMS Repay</button>
         </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <button className="btn-ghost" style={{ height: 36 }} onClick={handleExport}>⬇ Export</button>
+          <button className="btn-ghost" style={{ height: 36 }} onClick={() => setImportOpen(!importOpen)}>⬆ Import</button>
+        </div>
+
+        {importOpen && (
+          <Card style={{ marginBottom: 10 }}>
+            <LabelCaps style={{ marginBottom: 6 }}>Import debts</LabelCaps>
+            <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>
+              Choose a FinPing debt backup (.json), or paste its contents. Debts and repayments already here are skipped.
+            </div>
+            <input type="file" accept="application/json,.json" onChange={handleImportFile} style={{ fontSize: 12, marginBottom: 8, width: '100%' }} />
+            <textarea className="input" style={{ height: 80, marginBottom: 8, fontSize: 11 }} placeholder="…or paste backup JSON here" value={importText} onChange={e => setImportText(e.target.value)} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <BtnPrimary onClick={() => runImport(importText)} style={{ flex: 1, height: 36, fontSize: 12 }}>Import pasted JSON</BtnPrimary>
+              <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={handleCopy}>Copy backup</button>
+            </div>
+          </Card>
+        )}
 
         {/* Add Debt Form */}
         {addOpen && (
@@ -165,7 +229,7 @@ export default function Debt() {
         <SectionHdr title="Active Liabilities" right={<Badge variant="indigo">HYBRID TELEMETRY</Badge>} />
 
         {active.map(d => {
-          const paidPct = Math.round((d.totalPaid || 0) / d.principal * 100)
+          const paidPct = d.principal > 0 ? Math.min(100, Math.round((d.totalPaid || 0) / d.principal * 100)) : 0
           const isExpanded = expandedId === d.id
           return (
             <div key={d.id} style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, marginBottom: 10 }}>
@@ -206,8 +270,24 @@ export default function Debt() {
                     </div>
                   )}
                   {d.notes && <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>{d.notes}</div>}
+                  {repayFor === d.id && (
+                    <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, marginBottom: 8 }}>
+                      <LabelCaps style={{ marginBottom: 6 }}>Add payment · outstanding {formatINR(d.currentOutstanding)}</LabelCaps>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                        <input className="input" type="number" inputMode="decimal" placeholder="Amount paid (₹)" value={repayForm.amount} onChange={e => setRepayForm({ ...repayForm, amount: e.target.value })} />
+                        <input className="input" type="date" value={repayForm.date} onChange={e => setRepayForm({ ...repayForm, date: e.target.value })} />
+                        <input className="input" type="number" inputMode="decimal" placeholder="Principal (₹) — blank = all" value={repayForm.principal} onChange={e => setRepayForm({ ...repayForm, principal: e.target.value })} />
+                        <input className="input" type="number" inputMode="decimal" placeholder="Interest (₹)" value={repayForm.interest} onChange={e => setRepayForm({ ...repayForm, interest: e.target.value })} />
+                      </div>
+                      <input className="input" placeholder="Note (optional)" style={{ marginBottom: 8 }} value={repayForm.notes} onChange={e => setRepayForm({ ...repayForm, notes: e.target.value })} />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <BtnPrimary onClick={handleSaveRepay} style={{ flex: 1, height: 36, fontSize: 12 }}>Save payment</BtnPrimary>
+                        <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => setRepayFor(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                    <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => showNotification('Repayment form would open here')}>↺ Update Repay</button>
+                    <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setRepayFor(repayFor === d.id ? null : d.id); setRepayForm({ ...EMPTY_REPAY, amount: d.emiAmount > 0 ? String(d.emiAmount) : '' }) }}>＋ Add Payment</button>
                     <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setSmsText(''); setMatchSMSOpen(true) }}>📲 Link SMS Debit</button>
                     <button className="btn-ghost" style={{ height: 32, fontSize: 11, gridColumn: '1 / -1' }} onClick={() => handleMarkClosed(d.id)}>Mark as Closed</button>
                   </div>
@@ -228,13 +308,16 @@ export default function Debt() {
                   {r.source === 'sms' ? '✓' : '✎'}
                 </div>
                 <div className="txn-mid">
-                  <div className="txn-merchant">{debt?.name || 'Unknown Debt'} EMI</div>
+                  <div className="txn-merchant">{debt?.name || 'Unknown Debt'} payment</div>
                   <div className="txn-meta">{formatDate(r.date)} · <span style={{ color: r.source === 'sms' ? 'var(--mint)' : 'var(--txt2)' }}>{r.source === 'sms' ? 'Verified by SMS' : 'Manual Entry'}</span></div>
                 </div>
                 <div className="txn-amt">
-                  <div style={{ fontFamily: 'JetBrains Mono', fontSize: 13, color: 'var(--red)', fontWeight: 500 }}>-{formatINR(r.amount)}</div>
-                  <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{r.source === 'sms' ? 'AUTO-DEBIT' : 'MANUAL'}</div>
+                  <div style={{ fontSize: 13, color: 'var(--red)', fontWeight: 700 }}>-{formatINR(r.amount)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{r.interest > 0 ? `Principal ${formatINR(r.principal)}` : r.source === 'sms' ? 'AUTO-DEBIT' : 'MANUAL'}</div>
                 </div>
+                {r.source !== 'sms' && (
+                  <div onClick={() => handleUndo(r.id)} title="Remove and restore principal" style={{ marginLeft: 8, cursor: 'pointer', color: 'var(--txt3)', fontSize: 14, padding: 4 }}>✕</div>
+                )}
               </div>
             )
           })}
