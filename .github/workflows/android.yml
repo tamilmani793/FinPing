@@ -2,30 +2,23 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   workflow_dispatch:
-    inputs:
-      branch:
-        description: Branch to build the APK from
-        type: string
-        default: main
 
 permissions:
   contents: write
 
 concurrency:
-  group: android-${{ inputs.branch || github.ref_name }}
+  group: android-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   apk:
     runs-on: ubuntu-latest
     env:
-      BUILD_BRANCH: ${{ inputs.branch || github.ref_name }}
+      BUILD_BRANCH: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.BUILD_BRANCH }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
