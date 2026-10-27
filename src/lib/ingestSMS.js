@@ -6,7 +6,7 @@ import { cycleDates } from './cycle'
 // Finds the card by its last four digits (preferring the same bank), or creates it.
 // kind = what the SMS says: 'credit' | 'debit' | 'unknown'. Once a card exists, the type the
 // user (or an earlier SMS) set on it wins over the wording of later SMS.
-async function findOrCreateCard(parsed, kind) {
+export async function findOrCreateCard(parsed, kind) {
   if (!parsed.cardLast4) return null
   // Bank accounts and cards live in the same list but never match each other, even with the same last four digits.
   const isAccount = kind === 'account'
@@ -69,6 +69,18 @@ async function applyToLinkedAccount(accountId, type, amount, reportedBalance) {
   if (acct.accountBalance == null) return
   const next = acct.accountBalance + (type === 'debit' ? -amount : amount)
   await db.creditCards.update(accountId, { accountBalance: Math.round(next * 100) / 100 })
+}
+
+// A spend / credit entered by hand against a card or account has the same effect an SMS would have.
+export async function applyTxnToCard(card, type, amount) {
+  if (card.cardType === 'account') {
+    if (card.accountBalance == null) return
+    await db.creditCards.update(card.id, { accountBalance: Math.round((card.accountBalance + (type === 'debit' ? -amount : amount)) * 100) / 100 })
+  } else if (card.cardType === 'debit') {
+    if (card.linkedAccountId != null) await applyToLinkedAccount(card.linkedAccountId, type, amount, null)
+  } else if (isCredit(card)) {
+    await adjustCard(card, type === 'debit' ? amount : -amount)
+  }
 }
 
 // Parse one SMS and apply it to local data. Returns { status, message }.

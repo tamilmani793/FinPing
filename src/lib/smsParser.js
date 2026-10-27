@@ -77,7 +77,8 @@ export function extractAvailableLimit(text) {
 }
 
 function extractAccountLast4(text) {
-  const m = text.match(/(?:a\/c|ac|account|A\/C)[:\s*X]*(\d{4})/i)
+  // "A/c XX1234", "A/c no. 1234", "Acct *1234", "account ending with 1234"
+  const m = text.match(/\b(?:a\/c|a\.c\.?|acct?\.?|account)(?:\s*(?:no\.?|number|ending(?:\s+with|\s+in)?))?[\s:*xX.\-]*(\d{4})\b/i)
   return m ? m[1] : null
 }
 

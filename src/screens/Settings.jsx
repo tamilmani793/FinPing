@@ -6,6 +6,7 @@ import { isNative } from '../lib/nativeSms'
 import { getUserName, setUserName } from '../lib/profile'
 import { exportBackup, copyBackup, inspectBackup, restoreBackup, lastBackupAt } from '../lib/backup'
 import { format } from 'date-fns'
+import { relinkTransactions } from '../lib/relink'
 
 function Row({ Icon, title, sub, onClick, right }) {
   return (
@@ -98,6 +99,17 @@ export default function Settings() {
           <input type="file" accept="application/json,.json" onChange={onPickFile} style={{ fontSize: 12, width: '100%', marginBottom: 8 }} />
           <textarea className="input" style={{ height: 70, fontSize: 11, marginBottom: 8 }} placeholder="…or paste backup contents here" value={pasted} onChange={e => setPasted(e.target.value)} />
           <button className="btn-secondary" style={{ width: '100%', height: 38 }} disabled={!pasted.trim() || busy} onClick={() => doRestore(pasted)}>Restore pasted backup</button>
+        </div>
+
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Link transactions</div>
+          <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 10px' }}>
+            If a spend shows in History but not on its card or bank account page, this ties every unlinked SMS transaction to the right card or account. Balances are not changed.
+          </div>
+          <button className="btn-secondary" style={{ width: '100%', height: 40 }} onClick={async () => {
+            try { const n = await relinkTransactions(); showNotification(n ? `${n} transactions linked` : 'Nothing to link — all transactions are already tied to a card or account', 'success') }
+            catch (e) { showNotification('Could not link: ' + e.message, 'error') }
+          }}>Link unlinked transactions</button>
         </div>
 
         <div className="card" style={{ marginBottom: 14, paddingTop: 4, paddingBottom: 4 }}>

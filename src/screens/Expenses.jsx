@@ -5,6 +5,7 @@ import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, TxnRow, Divider, LabelCaps, BtnPrimary, BtnSecondary, SmsParsedCard, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { parseSMS } from '../lib/smsParser'
 import TxnEditSheet from '../components/TxnEditSheet'
+import { applyTxnToCard } from '../lib/ingestSMS'
 import { useStore } from '../store'
 
 const CATEGORY_ICONS = {
@@ -31,7 +32,8 @@ export default function Expenses() {
 
   useEffect(() => { if (composeRequest > 0) setShowPasteSMS(true) }, [composeRequest])
 
-  const [form, setForm] = useState({ merchant: '', amount: '', category: 'General', paymentMode: 'UPI', notes: '', tags: '' })
+  const [form, setForm] = useState({ merchant: '', amount: '', category: 'General', paymentMode: 'UPI', cardId: '', notes: '', tags: '' })
+  const accountList = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft && c.cardType !== 'unknown')
 
   const monthStart = new Date(selectedYear, selectedMonth, 1)
   const monthEnd = endOfMonth(monthStart)
@@ -87,15 +89,20 @@ export default function Expenses() {
 
   const handleAddManual = async () => {
     if (!form.merchant || !form.amount) return
+    const amount = parseFloat(form.amount)
+    // "Paid from": a card or bank account, so the spend shows on its page and moves its balance.
+    const card = form.cardId ? await db.creditCards.get(Number(form.cardId)) : null
+    const cardMode = card ? (card.cardType === 'account' ? 'Bank' : card.cardType === 'debit' ? 'Debit Card' : 'Credit Card') : null
     await db.transactions.add({
-      date: new Date(), amount: parseFloat(form.amount),
+      date: new Date(), amount,
       type: 'debit', merchant: form.merchant,
-      category: form.category, paymentMode: form.paymentMode,
-      bank: '', cardId: null, rawSMS: null,
+      category: form.category, paymentMode: cardMode || form.paymentMode,
+      bank: card?.bank || '', accountLast4: card?.cardLast4 || null, cardId: card ? card.id : null, rawSMS: null,
       parsedBy: 'manual', tags: form.tags ? form.tags.split(',').map(t => t.trim()) : [],
       notes: form.notes, isExcluded: false, createdAt: new Date(),
     })
-    setForm({ merchant: '', amount: '', category: 'General', paymentMode: 'UPI', notes: '', tags: '' })
+    if (card) await applyTxnToCard(card, 'debit', amount)
+    setForm({ merchant: '', amount: '', category: 'General', paymentMode: 'UPI', cardId: '', notes: '', tags: '' })
     setShowAddForm(false)
     showNotification('Transaction added!', 'success')
   }
@@ -169,9 +176,15 @@ export default function Expenses() {
               <select className="input" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
                 {Object.keys(CATEGORY_ICONS).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <select className="input" value={form.paymentMode} onChange={e => setForm({ ...form, paymentMode: e.target.value })}>
-                {['UPI', 'Card', 'NetBanking', 'Cash', 'Wallet'].map(m => <option key={m} value={m}>{m}</option>)}
+              <select className="input" value={form.cardId} onChange={e => setForm({ ...form, cardId: e.target.value })}>
+                <option value="">Paid from: none (cash / other)</option>
+                {accountList.map(c => <option key={c.id} value={c.id}>{c.name}{c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''} · {c.cardType === 'account' ? 'bank account' : c.cardType === 'debit' ? 'debit card' : 'credit card'}</option>)}
               </select>
+              {!form.cardId && (
+                <select className="input" value={form.paymentMode} onChange={e => setForm({ ...form, paymentMode: e.target.value })}>
+                  {['UPI', 'Card', 'NetBanking', 'Cash', 'Wallet'].map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              )}
               <input className="input" placeholder="Tags (comma separated)" value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} />
               <input className="input" placeholder="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
               <div style={{ display: 'flex', gap: 6 }}>

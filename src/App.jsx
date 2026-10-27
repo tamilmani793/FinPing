@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { Plus } from 'lucide-react'
+import { relinkTransactions } from './lib/relink'
 import { useStore } from './store'
 import BottomNav from './components/BottomNav'
 import { Notification } from './components/UI'
@@ -15,8 +17,19 @@ const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, s
 const FAB_TABS = ['home', 'history']
 
 export default function App() {
-  const { activeTab, notification, requestCompose } = useStore()
+  const { activeTab, notification, requestCompose, showNotification } = useStore()
   const sms = useSmsSync()
+
+  // One-time tidy-up: tie older transactions to the cards / accounts they belong to.
+  useEffect(() => {
+    if (localStorage.getItem('finping_relink_v1')) return
+    relinkTransactions()
+      .then(n => {
+        localStorage.setItem('finping_relink_v1', '1')
+        if (n > 0) showNotification(`${n} transactions linked to your cards and accounts`, 'success')
+      })
+      .catch(() => {})
+  }, [])
   const ActiveScreen = SCREENS[activeTab] || Home
 
   return (
