@@ -66,6 +66,7 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
     await db.creditCards.update(cardId, {
       ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
       cardLast4: (form.cardLast4 || '').replace(/\D/g, '').slice(-4) || me.cardLast4, notes: form.notes || '',
+      linkedAccountId: cardType === 'debit' && form.linkedAccountId !== '' && form.linkedAccountId != null ? Number(form.linkedAccountId) : null,
       ...(cardType === 'account' ? { accountBalance: form.accountBalance === '' || form.accountBalance == null ? null : Number(form.accountBalance) || 0, network: '', variant: (form.variant || '').trim(), partner: '' } : {}),
       limitGroup: null, creditLimit: 0, availableCredit: 0, currentBalance: 0, statementBalance: 0, pendingDue: 0, minimumDue: 0, unbilled: 0,
       totalAnnualFee: 0, isLTF: true, feeWaiverThreshold: 0,
@@ -125,6 +126,7 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
   await db.creditCards.update(cardId, {
     ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
     cardLast4: (form.cardLast4 || '').replace(/\D/g, '').slice(-4) || me.cardLast4,
+    linkedAccountId: null,
     ...annualFeeFields(num(form.annualFee)),
     feeWaiverThreshold: num(form.feeWaiverThreshold),
     annualFeeDate: toDate(form.annualFeeDate),

@@ -17,6 +17,11 @@ const fmtS = d => (d ? format(new Date(d), 'd MMM') : '—')
 const isCredit = c => !c.cardType || c.cardType === 'credit'
 const cardLabel = c => `${c.name}${c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''}`
 
+// A bank account's activity also includes what the debit cards linked to it spent.
+const txnsFor = (card, cards, byCard) => (card.cardType === 'account'
+  ? [...(byCard[card.id] || []), ...cards.filter(c => c.linkedAccountId === card.id).flatMap(c => byCard[c.id] || [])]
+  : (byCard[card.id] || []))
+
 const STATUS = {
   paid: { label: 'Paid ✓', badge: 'badge-mint' },
   partial: { label: 'Partly paid', badge: 'badge-amber' },
@@ -138,7 +143,7 @@ function Portfolio({ cards, byCard, onOpen, onAdd }) {
         {groups.map(([title, list]) => list.length > 0 && (
           <div key={title}>
             <div className="label-caps" style={{ margin: '4px 2px 8px' }}>{title} · {list.length}</div>
-            {list.map(c => <CardTile key={c.id} card={c} txns={byCard[c.id] || []} onOpen={() => onOpen(c.id)} />)}
+            {list.map(c => <CardTile key={c.id} card={c} txns={txnsFor(c, cards, byCard)} onOpen={() => onOpen(c.id)} />)}
           </div>
         ))}
 
@@ -154,23 +159,25 @@ function Portfolio({ cards, byCard, onOpen, onAdd }) {
 
 // ───────────────────────────── detail ─────────────────────────────
 
-function TxnList({ card, list, emptyText }) {
+function TxnList({ card, list, emptyText, cards = [] }) {
   const [edit, setEdit] = useState(null)
   const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date))
+  const credit = isCredit(card)
   return (
     <>
       {sorted.map(t => {
         const r = rewardStatus(card, t)
+        const via = t.cardId !== card.id ? cards.find(c => c.id === t.cardId) : null // e.g. a debit card on this account
         return (
           <TxnRow
             key={t.id}
             icon={getMerchantIcon(t.merchant)}
             merchant={t.merchant}
-            meta={`${fmtS(t.date)} · ${t.category}`}
+            meta={`${fmtS(t.date)} · ${t.category}${via ? ` · via ${via.name}` : ''}`}
             amount={t.amount}
             isCredit={t.type === 'credit'}
             onClick={() => setEdit(t)}
-            badge={t.type === 'debit'
+            badge={!credit ? null : t.type === 'debit'
               ? (r.eligible
                 ? <span className="badge badge-mint" style={{ fontSize: 9 }}>✅ Rewards</span>
                 : <span className="badge badge-red" style={{ fontSize: 9 }}>⛔ {r.reason}</span>)
@@ -226,9 +233,12 @@ function PaymentDetails({ card, s }) {
   )
 }
 
-function Detail({ card, cards, txns, onBack }) {
+function Detail({ card, cards, byCard, onBack }) {
   const [editOpen, setEditOpen] = useState(false)
+  const txns = txnsFor(card, cards, byCard)
   const credit = isCredit(card)
+  const linkedAccount = card.cardType === 'debit' && card.linkedAccountId != null ? cards.find(c => c.id === card.linkedAccountId) : null
+  const linkedCards = card.cardType === 'account' ? cards.filter(c => c.linkedAccountId === card.id) : []
   const s = cardStats(card, txns)
   const st = STATUS[s.status]
   const shared = groupOf(card, cards).filter(c => c.id !== card.id)
@@ -311,6 +321,18 @@ function Detail({ card, cards, txns, onBack }) {
               )}
               <div className="label-caps">Spent this month</div>
               <div style={{ fontSize: card.cardType === 'account' ? 17 : 24, fontWeight: 800 }}>{formatINR(spentMonth)}</div>
+              {linkedAccount && (
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--txt2)' }}>
+                  Spends from <b style={{ color: 'var(--txt)' }}>{linkedAccount.name}</b>
+                  {linkedAccount.accountBalance != null ? <> · balance <b style={{ color: 'var(--txt)' }}>{formatINR(linkedAccount.accountBalance)}</b></> : ' · add its balance to track it'}
+                </div>
+              )}
+              {card.cardType === 'debit' && !linkedAccount && (
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--txt2)' }}>Not linked to a bank account yet. Tap Edit to link one, so spends reduce its balance.</div>
+              )}
+              {linkedCards.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--txt2)' }}>Debit cards on this account: <b style={{ color: 'var(--txt)' }}>{linkedCards.map(cardLabel).join(', ')}</b></div>
+              )}
             </>
           )}
         </div>
@@ -375,7 +397,7 @@ function Detail({ card, cards, txns, onBack }) {
 
         {!credit && (
           <Section title={card.cardType === 'account' ? 'Account transactions' : 'Transactions'}>
-            <TxnList card={card} list={spends} emptyText="No transactions yet for this card" />
+            <TxnList card={card} list={spends} cards={cards} emptyText="No transactions yet for this card" />
           </Section>
         )}
       </div>
@@ -413,7 +435,7 @@ export default function Accounts() {
   return (
     <>
       {card
-        ? <Detail card={card} cards={visible} txns={byCard[card.id] || []} onBack={() => setOpenId(null)} />
+        ? <Detail card={card} cards={visible} byCard={byCard} onBack={() => setOpenId(null)} />
         : <Portfolio cards={visible} byCard={byCard} onOpen={setOpenId} onAdd={addNew} />}
       {draft && <CardEditSheet isNew card={draft} cards={visible} onClose={id => { setNewId(null); if (id) setOpenId(id) }} />}
     </>

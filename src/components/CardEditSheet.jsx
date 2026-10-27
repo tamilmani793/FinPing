@@ -35,6 +35,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
   const [sameStatement, setSameStatement] = useState(false)
   const [form, setForm] = useState({
     name: card.name || '', bank: card.bank || '',
+    linkedAccountId: card.linkedAccountId != null ? String(card.linkedAccountId) : '',
     cardType: ['debit', 'account'].includes(card.cardType) ? card.cardType : 'credit', catalogKey: findCatalogKey(card) || (card.name && !card.name.includes('••') ? '__manual' : ''), accountBalance: card.accountBalance == null ? '' : String(card.accountBalance), network: card.network || '', variant: card.variant || '', partner: card.partner || '',
     creditLimit: str(card.creditLimit), availableCredit: str(card.availableCredit),
     cardLast4: card.cardLast4 || '',
@@ -48,6 +49,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
   })
   const isCredit = form.cardType === 'credit'
   const entries = catalogEntries()
+  const accounts = cards.filter(c => c.cardType === 'account' && c.id !== card.id)
   const pickCard = e => {
     const key = e.target.value
     const hit = entries.find(x => x.key === key)
@@ -81,7 +83,9 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
   const remove = async () => {
     if (!window.confirm(`Remove ${card.name}? Its transactions stay in History.`)) return
     await db.creditCards.delete(card.id)
-    showNotification('Card removed', 'success')
+    // Debit cards that drew on a removed account are no longer linked to anything.
+    await db.creditCards.filter(c => c.linkedAccountId === card.id).modify({ linkedAccountId: null })
+    showNotification('Removed', 'success')
     onClose()
   }
 
@@ -154,6 +158,21 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
           {isCredit && (
             <Field label="Third-party / co-brand partner (optional)">
               <input className="input" list="dl-partners" value={form.partner} onChange={set('partner')} placeholder="Amazon Pay, Swiggy, PhonePe…" />
+            </Field>
+          )}
+          {form.cardType === 'debit' && (
+            <Field label="Linked bank account">
+              <select className="input" value={form.linkedAccountId} onChange={set('linkedAccountId')}>
+                <option value="">Not linked</option>
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}{a.cardLast4 && !a.name.includes('••') ? ` ••${a.cardLast4}` : ''}{a.accountBalance != null ? ` · ₹${Number(a.accountBalance).toLocaleString('en-IN')}` : ''}</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 4 }}>
+                {accounts.length
+                  ? 'This card spends from that account: each new debit-card spend is taken off its balance (past spends are not changed).'
+                  : 'No bank account yet. Add one with ＋ Bank account on the Accounts screen, then link it here.'}
+              </div>
             </Field>
           )}
           <datalist id="dl-banks">{[...new Set([...BANKS, ...INDIAN_CARDS.map(b => b.bank)])].map(b => <option key={b} value={b} />)}</datalist>

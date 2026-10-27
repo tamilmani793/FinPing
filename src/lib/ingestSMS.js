@@ -59,6 +59,18 @@ async function applyBankLimit(cardId, availableLimit) {
   if (!shared && fresh.creditLimit > 0) await db.creditCards.update(cardId, { currentBalance: Math.max(0, fresh.creditLimit - availableLimit) })
 }
 
+// A debit-card spend (or refund) moves the linked bank account's balance. If the SMS reports the
+// account balance itself ("Avl Bal"), that is the truth; otherwise the amount is taken off the
+// last known balance. An account with no balance entered yet is left alone.
+async function applyToLinkedAccount(accountId, type, amount, reportedBalance) {
+  const acct = await db.creditCards.get(accountId)
+  if (!acct || acct.cardType !== 'account') return
+  if (reportedBalance != null) { await db.creditCards.update(accountId, { accountBalance: reportedBalance }); return }
+  if (acct.accountBalance == null) return
+  const next = acct.accountBalance + (type === 'debit' ? -amount : amount)
+  await db.creditCards.update(accountId, { accountBalance: Math.round(next * 100) / 100 })
+}
+
 // Parse one SMS and apply it to local data. Returns { status, message }.
 // meta = { address, date } with date in epoch ms. Safe to call twice for the same SMS.
 export async function ingestSMS(rawText, meta = {}) {
@@ -93,6 +105,10 @@ export async function ingestSMS(rawText, meta = {}) {
       })
       // A bank account keeps the balance the bank reports ("Avl Bal").
       if (card && card.cardType === 'account' && parsed.availableLimit != null) await db.creditCards.update(card.id, { accountBalance: parsed.availableLimit })
+      // A debit card spends from the bank account it is linked to.
+      if (card && card.cardType === 'debit' && card.linkedAccountId != null && !isCashback) {
+        await applyToLinkedAccount(card.linkedAccountId, type, parsed.amount || 0, parsed.availableLimit)
+      }
       // Only credit cards carry a balance / limit. Debit and not-yet-typed cards just collect their spends.
       if (card && isCredit(card) && !isCashback) {
         await adjustCard(card, type === 'debit' ? parsed.amount : -parsed.amount)
