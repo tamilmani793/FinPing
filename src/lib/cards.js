@@ -56,7 +56,7 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
   const cardType = form.cardType === 'debit' ? 'debit' : form.cardType === 'account' ? 'account' : 'credit'
   const identity = {
     name: (form.name || '').trim(), bank: (form.bank || '').trim(), cardType,
-    network: form.network || '', variant: (form.variant || '').trim(), partner: (form.partner || '').trim(),
+    network: form.network || '', variant: (form.variant || '').trim(), partner: (form.partner || '').trim(), draft: false,
   }
 
   // Debit cards and bank accounts have no limit, statement, fee or shared pool: save the identity and leave the pool.

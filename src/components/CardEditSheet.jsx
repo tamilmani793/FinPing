@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { db } from '../db/schema'
 import { useStore } from '../store'
@@ -21,8 +21,14 @@ function Field({ label, children }) {
   )
 }
 
-export default function CardEditSheet({ card, cards, statement, onClose }) {
+export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
   const { showNotification } = useStore()
+  const savedRef = useRef(false)
+  // A new entry starts as a hidden draft; closing without saving throws the draft away.
+  const close = id => {
+    if (isNew && !savedRef.current) db.creditCards.delete(card.id)
+    onClose(id)
+  }
   const members = groupOf(card, cards)
   const others = cards.filter(c => c.id !== card.id)
   const [shared, setShared] = useState(new Set(members.filter(c => c.id !== card.id).map(c => c.id)))
@@ -60,9 +66,15 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
 
   const save = async () => {
     try {
-      await saveCardEdit(card.id, form, { sharedWith: [...shared], sameStatement: sameStatement && shared.size > 0 })
-      showNotification('Card updated', 'success')
-      onClose()
+      let data = form
+      if (!form.name.trim()) {
+        if (form.cardType === 'credit') throw new Error('Choose your card from the list, or type its name')
+        data = { ...form, name: `${form.bank || 'Bank'} ${form.cardType === 'account' ? 'account' : 'debit card'}` }
+      }
+      await saveCardEdit(card.id, data, { sharedWith: [...shared], sameStatement: sameStatement && shared.size > 0 })
+      savedRef.current = true
+      showNotification(isNew ? 'Added' : 'Card updated', 'success')
+      close(card.id)
     } catch (e) { showNotification(e.message, 'error') }
   }
 
@@ -74,10 +86,11 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
+    <div className="overlay" onClick={() => close()}>
       <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
         <div className="sheet-handle" />
-        <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 12 }}>Edit card</div>
+        <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 12 }}>{isNew ? `Add ${card.cardType === 'account' ? 'bank account' : card.cardType === 'debit' ? 'debit card' : 'credit card'}` : 'Edit'}</div>
+        {isNew && <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '-6px 0 12px' }}>Enter the last 4 digits so bank SMS for it are matched to this entry automatically.</div>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {card.cardType === 'unknown' && (
@@ -238,9 +251,9 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <BtnPrimary onClick={save} style={{ flex: 1 }}>Save</BtnPrimary>
-            <button className="btn-ghost" style={{ height: 46 }} onClick={onClose}>Cancel</button>
+            <button className="btn-ghost" style={{ height: 46 }} onClick={() => close()}>Cancel</button>
           </div>
-          <button className="btn-ghost" style={{ color: 'var(--red-dim)', borderColor: 'var(--red-border)' }} onClick={remove}>Remove</button>
+          {!isNew && <button className="btn-ghost" style={{ color: 'var(--red-dim)', borderColor: 'var(--red-border)' }} onClick={remove}>Remove</button>}
         </div>
       </div>
     </div>

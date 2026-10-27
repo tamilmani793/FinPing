@@ -53,7 +53,7 @@ export default function Dashboard() {
   const prevStart = startOfMonth(subMonths(now, 1))
 
   const txnsAll = useLiveQuery(() => db.transactions.filter(t => new Date(t.date) >= prevStart && !t.isExcluded).toArray()) || []
-  const cards = useLiveQuery(() => db.creditCards.toArray()) || []
+  const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft)
   const investments = useLiveQuery(() => db.investments.toArray()) || []
   const debts = useLiveQuery(() => db.debts.toArray()) || []
 
@@ -88,7 +88,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', gap: 8, margin: '12px 0 10px', overflowX: 'auto' }}>
           <div className="pill-chip" onClick={() => setActiveTab('debt')}><Landmark size={14} color="var(--gold)" /> Debt</div>
           <div className="pill-chip" onClick={() => setActiveTab('wealth')}><TrendingUp size={14} color="var(--gold)" /> Wealth</div>
-          <div className="pill-chip" onClick={() => setActiveTab('cards')}><CreditCard size={14} color="var(--gold)" /> Cards</div>
+          <div className="pill-chip" onClick={() => setActiveTab('cards')}><CreditCard size={14} color="var(--gold)" /> Accounts</div>
           <div className="pill-chip" onClick={() => setActiveTab('charts')}><PieChart size={14} color="var(--gold)" /> Charts</div>
         </div>
 

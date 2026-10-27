@@ -1,10 +1,10 @@
-import { Home, ArrowLeftRight, CreditCard, Landmark, Settings } from 'lucide-react'
+import { Home, ArrowLeftRight, Wallet, Landmark, Settings } from 'lucide-react'
 import { useStore } from '../store'
 
 const TABS = [
   { id: 'home', label: 'Home', Icon: Home },
   { id: 'history', label: 'History', Icon: ArrowLeftRight },
-  { id: 'cards', label: 'Cards', Icon: CreditCard },
+  { id: 'cards', label: 'Accounts', Icon: Wallet },
   { id: 'debt', label: 'Debt', Icon: Landmark },
   { id: 'settings', label: 'Settings', Icon: Settings },
 ]

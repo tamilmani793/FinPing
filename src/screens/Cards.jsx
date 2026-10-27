@@ -103,7 +103,7 @@ function CardTile({ card, txns, onOpen }) {
   )
 }
 
-function Portfolio({ cards, byCard, onOpen }) {
+function Portfolio({ cards, byCard, onOpen, onAdd }) {
   const credit = cards.filter(isCredit)
   const debit = cards.filter(c => c.cardType === 'debit')
   const accounts = cards.filter(c => c.cardType === 'account')
@@ -115,8 +115,13 @@ function Portfolio({ cards, byCard, onOpen }) {
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
-      <TopBar title="Card Portfolio" />
+      <TopBar title="Accounts" />
       <div style={{ padding: '0 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+          {[['credit', 'Credit card'], ['debit', 'Debit card'], ['account', 'Bank account']].map(([t, l]) => (
+            <button key={t} className="btn-secondary" style={{ height: 42, fontSize: 12, padding: '0 4px' }} onClick={() => onAdd(t)}>＋ {l}</button>
+          ))}
+        </div>
         {credit.length > 0 && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
@@ -139,7 +144,7 @@ function Portfolio({ cards, byCard, onOpen }) {
 
         {!cards.length && (
           <div className="card" style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--txt2)', fontSize: 13 }}>
-            No cards yet. They appear automatically when bank SMS about a card arrive.
+            No cards or accounts yet. Add one above, or they appear automatically when bank SMS arrive.
           </div>
         )}
       </div>
@@ -382,16 +387,35 @@ function Detail({ card, cards, txns, onBack }) {
 
 // ───────────────────────────── screen ─────────────────────────────
 
-export default function Cards() {
+export default function Accounts() {
   const [openId, setOpenId] = useState(null)
+  const [newId, setNewId] = useState(null)
   const cards = useLiveQuery(() => db.creditCards.toArray())
   const allTxns = useLiveQuery(() => db.transactions.filter(t => t.cardId != null).toArray())
   if (!cards || !allTxns) return <div style={{ padding: 20, color: 'var(--txt2)' }}>Loading...</div>
 
   const byCard = {}
   for (const t of allTxns) (byCard[t.cardId] ||= []).push(t)
-  const card = cards.find(c => c.id === openId)
+  const visible = cards.filter(c => !c.draft)
+  const card = visible.find(c => c.id === openId)
+  const draft = cards.find(c => c.id === newId)
 
-  if (card) return <Detail card={card} cards={cards} txns={byCard[card.id] || []} onBack={() => setOpenId(null)} />
-  return <Portfolio cards={cards} byCard={byCard} onOpen={setOpenId} />
+  // Adds a hidden draft entry of the chosen type and opens the form for it.
+  const addNew = async type => {
+    const id = await db.creditCards.add({
+      name: '', bank: '', cardLast4: '', cardType: type, draft: true, network: '', variant: '', partner: '',
+      creditLimit: 0, availableCredit: 0, currentBalance: 0, statementBalance: 0, minimumDue: 0, isLTF: true,
+      rewardRules: [{ id: 'BASE', matchType: 'BASE', targets: [], rate: 0.01, cap: 0, capPeriod: 'uncapped' }],
+    })
+    setNewId(id)
+  }
+
+  return (
+    <>
+      {card
+        ? <Detail card={card} cards={visible} txns={byCard[card.id] || []} onBack={() => setOpenId(null)} />
+        : <Portfolio cards={visible} byCard={byCard} onOpen={setOpenId} onAdd={addNew} />}
+      {draft && <CardEditSheet isNew card={draft} cards={visible} onClose={id => { setNewId(null); if (id) setOpenId(id) }} />}
+    </>
+  )
 }
