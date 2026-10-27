@@ -21,6 +21,11 @@ export const useStore = create((set, get) => ({
   setSelectedYear: (y) => set({ selectedYear: y }),
   setSelectedMonth: (m) => set({ selectedMonth: m }),
 
+  // Accounts screen: open a particular card / account (from Home, a transaction detail...)
+  openCardId: null,
+  openCard: (id) => set({ activeTab: 'cards', openCardId: id }),
+  clearOpenCard: () => set({ openCardId: null }),
+
   // Cards
   selectedCardId: null,
   selectedCardTab: 'transactions',
@@ -28,8 +33,14 @@ export const useStore = create((set, get) => ({
   setSelectedCardTab: (tab) => set({ selectedCardTab: tab }),
 
   // Debt
+  // Debt screen shows loans or insurance policies
+  debtSegment: 'loans',
+  setDebtSegment: (seg) => set({ debtSegment: seg }),
   debtFormOpen: false,
   setDebtFormOpen: (open) => set({ debtFormOpen: open }),
+
+  // SMS sync status, shown as a small pill in every header
+  smsSync: { state: 'checking', enable: null },
 
   // Notification
   notification: null,

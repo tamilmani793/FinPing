@@ -5,6 +5,7 @@ import { useStore } from '../store'
 import { saveCardEdit, groupOf } from '../lib/cards'
 import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import { BtnPrimary } from './UI'
+import { relinkTransactions } from '../lib/relink'
 import { CARD_TYPES, BANKS, NETWORKS, PARTNERS, EXCLUSION_CATEGORIES, excludedFor, variantsFor } from '../lib/cardCatalog'
 import { INDIAN_CARDS, catalogEntries, findCatalogKey } from '../lib/indianCards'
 
@@ -75,6 +76,8 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
       }
       await saveCardEdit(card.id, data, { sharedWith: [...shared], sameStatement: sameStatement && shared.size > 0 })
       savedRef.current = true
+      // A card / account you just added or re-numbered may match spends that were tagged but unlinked.
+      await relinkTransactions({ create: false }).catch(() => {})
       showNotification(isNew ? 'Added' : 'Card updated', 'success')
       close(card.id)
     } catch (e) { showNotification(e.message, 'error') }

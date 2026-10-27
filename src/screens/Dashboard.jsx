@@ -1,6 +1,11 @@
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import EmiSheet, { useMonthlyEmi } from '../components/EmiSheet'
+import TxnDetailSheet from '../components/TxnDetailSheet'
+import { SmsPermissionCard } from '../components/SmsSync'
+import { cardStats } from '../lib/cardStats'
 import { startOfMonth, subMonths, format } from 'date-fns'
-import { ArrowUpRight, ArrowDownLeft, PiggyBank, Receipt, CreditCard, Landmark, TrendingUp, PieChart } from 'lucide-react'
+import { ArrowUpRight, ArrowDownLeft, PiggyBank, Receipt, CreditCard, Landmark, TrendingUp, PieChart, ChevronRight } from 'lucide-react'
 import { db } from '../db/schema'
 import { TopBar, TxnRow, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
@@ -47,7 +52,7 @@ function Tile({ Icon, tone, label, value, extra, onClick }) {
 }
 
 export default function Dashboard() {
-  const { setActiveTab } = useStore()
+  const { setActiveTab, openCard, smsSync } = useStore()
   const now = new Date()
   const monthStart = startOfMonth(now)
   const prevStart = startOfMonth(subMonths(now, 1))
@@ -55,7 +60,6 @@ export default function Dashboard() {
   const txnsAll = useLiveQuery(() => db.transactions.filter(t => new Date(t.date) >= prevStart && !t.isExcluded).toArray()) || []
   const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft)
   const investments = useLiveQuery(() => db.investments.toArray()) || []
-  const debts = useLiveQuery(() => db.debts.toArray()) || []
 
   const cur = txnsAll.filter(t => new Date(t.date) >= monthStart)
   const prev = txnsAll.filter(t => new Date(t.date) < monthStart)
@@ -71,8 +75,11 @@ export default function Dashboard() {
   const prevBills = prev.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
   const invested = investments.reduce((s, i) => s + (i.investedAmount || 0), 0)
   const cardDue = cards.reduce((s, c) => s + (c.currentBalance || 0), 0)
-  const activeDebts = debts.filter(d => d.status !== 'closed')
-  const emi = activeDebts.reduce((s, d) => s + (d.emiAmount || 0), 0)
+  // Monthly EMI = loan EMIs + insurance premiums (spread over their payment period)
+  const { loans: emiLoans, policies: emiPolicies, total: emi } = useMonthlyEmi()
+  const [emiOpen, setEmiOpen] = useState(false)
+  const [detailTxn, setDetailTxn] = useState(null)
+  const cardTxns = useLiveQuery(() => db.transactions.filter(t => t.cardId != null).toArray()) || []
 
   const recent = [...cur].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6)
   const name = getUserName()
@@ -83,6 +90,7 @@ export default function Dashboard() {
       <TopBar title="FinPing" />
 
       <div style={{ padding: '0 16px' }}>
+        <SmsPermissionCard state={smsSync.state} enable={smsSync.enable} />
         <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{greeting(now)}{name ? `, ${name}` : ''}</div>
 
         <div style={{ display: 'flex', gap: 8, margin: '12px 0 10px', overflowX: 'auto' }}>
@@ -118,7 +126,7 @@ export default function Dashboard() {
           <Tile Icon={PiggyBank} tone="blue" label={`${mon} Invest`} value={formatINR(invested)} onClick={() => setActiveTab('wealth')} />
           <Tile Icon={Receipt} tone="gold" label={`${mon} Bills`} value={formatINR(bills)} extra={<Delta cur={bills} prev={prevBills} goodWhenUp={false} />} />
           <Tile Icon={CreditCard} tone="red" label="Card Dues" value={formatINR(cardDue)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{cards.length} card{cards.length === 1 ? '' : 's'}</span>} onClick={() => setActiveTab('cards')} />
-          <Tile Icon={Landmark} tone="orange" label="Monthly EMI" value={formatINR(emi)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{activeDebts.length} active</span>} onClick={() => setActiveTab('debt')} />
+          <Tile Icon={Landmark} tone="orange" label="Monthly EMI" value={formatINR(emi)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{emiLoans.length} loan{emiLoans.length === 1 ? '' : 's'} · {emiPolicies.length} polic{emiPolicies.length === 1 ? 'y' : 'ies'} · tap for list</span>} onClick={() => setEmiOpen(true)} />
         </div>
 
         {/* Accounts & cards */}
@@ -127,19 +135,29 @@ export default function Dashboard() {
             <div className="section-title">Accounts &amp; Wallets</div>
             <div style={{ fontSize: 12, color: 'var(--gold-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => setActiveTab('cards')}>View all</div>
           </div>
-          {cards.length ? cards.slice(0, 4).map(c => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
-              <div className="stat-icon" style={{ width: 34, height: 34, background: 'var(--bg2)', color: 'var(--gold-dim)' }}><CreditCard size={17} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{c.bank} •• {c.cardLast4}</div>
+          {cards.length ? cards.slice(0, 4).map(c => {
+            // What each row shows depends on what it is: a bank balance, a card's outstanding, or just the type.
+            const credit = !c.cardType || c.cardType === 'credit'
+            const out = credit ? cardStats(c, cardTxns.filter(t => t.cardId === c.id)).outstanding : 0
+            const [amount, label, color] = c.cardType === 'account'
+              ? [c.accountBalance != null ? formatINR(c.accountBalance) : '—', 'balance', 'var(--txt)']
+              : credit ? [formatINR(out), out > 0 ? 'outstanding' : 'no dues', out > 0 ? 'var(--red-dim)' : 'var(--mint-dim)']
+              : ['', c.cardType === 'debit' ? 'debit card' : 'choose type', 'var(--txt2)']
+            return (
+              <div key={c.id} onClick={() => openCard(c.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
+                <div className="stat-icon" style={{ width: 34, height: 34, background: 'var(--bg2)', color: 'var(--gold-dim)' }}>{c.cardType === 'account' ? <Landmark size={17} /> : <CreditCard size={17} />}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{c.bank} •• {c.cardLast4}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {amount && <div style={{ fontSize: 13, fontWeight: 700, color }}>{amount}</div>}
+                  <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{label}</div>
+                </div>
+                <ChevronRight size={15} color="var(--txt3)" />
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: c.currentBalance > 0 ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{formatINR(c.currentBalance || 0)}</div>
-                <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{c.currentBalance > 0 ? 'due' : 'no dues'}</div>
-              </div>
-            </div>
-          )) : (
+            )
+          }) : (
             <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--txt2)', fontSize: 12 }}>No cards yet — they appear once bank SMS are synced.</div>
           )}
         </div>
@@ -156,6 +174,7 @@ export default function Dashboard() {
               amount={t.amount}
               isCredit={t.type === 'credit'}
               tags={t.tags}
+              onClick={() => setDetailTxn(t)}
             />
           ))}
           {!recent.length && (
@@ -163,6 +182,8 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      {emiOpen && <EmiSheet onClose={() => setEmiOpen(false)} />}
+      {detailTxn && <TxnDetailSheet txn={detailTxn} onClose={() => setDetailTxn(null)} />}
     </div>
   )
 }

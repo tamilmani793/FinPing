@@ -42,3 +42,8 @@ db.version(5).stores({}).upgrade(async tx => {
   await tx.table('creditCards').filter(c => String(c.name).includes('••')).delete()
   try { localStorage.removeItem('finping_last_sms_sync') } catch (e) {}
 })
+
+// v6: insurance policies (term, LIC savings plans, health, vehicle...) whose premiums count as a monthly outgo.
+db.version(6).stores({
+  policies: '++id, insurer, type, status',
+})

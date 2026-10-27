@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format, startOfMonth } from 'date-fns'
 import { ChevronLeft, ChevronRight, CreditCard, Gift, Pencil } from 'lucide-react'
@@ -10,7 +10,8 @@ import { cardStats, rewardStatus, isCardPayment } from '../lib/cardStats'
 import { ordinal } from '../lib/cycle'
 import { typeLabel, networkLabel, excludedFor } from '../lib/cardCatalog'
 import CardEditSheet from '../components/CardEditSheet'
-import TxnEditSheet from '../components/TxnEditSheet'
+import TxnDetailSheet from '../components/TxnDetailSheet'
+import { entityIdFor } from '../lib/relink'
 
 const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 const fmtS = d => (d ? format(new Date(d), 'd MMM') : '—')
@@ -186,7 +187,7 @@ function TxnList({ card, list, emptyText, cards = [] }) {
         )
       })}
       {!sorted.length && <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--txt2)', fontSize: 12 }}>{emptyText}</div>}
-      {edit && <TxnEditSheet txn={edit} onClose={() => setEdit(null)} />}
+      {edit && <TxnDetailSheet txn={edit} onClose={() => setEdit(null)} />}
     </>
   )
 }
@@ -413,12 +414,24 @@ export default function Accounts() {
   const [openId, setOpenId] = useState(null)
   const [newId, setNewId] = useState(null)
   const cards = useLiveQuery(() => db.creditCards.toArray())
-  const allTxns = useLiveQuery(() => db.transactions.filter(t => t.cardId != null).toArray())
+  const allTxns = useLiveQuery(() => db.transactions.toArray())
+  const { openCardId, clearOpenCard } = useStore()
+
+  // Another screen asked for a particular card / account (Home list, a transaction's detail).
+  useEffect(() => {
+    if (openCardId != null) { setOpenId(openCardId); clearOpenCard() }
+  }, [openCardId])
+
   if (!cards || !allTxns) return <div style={{ padding: 20, color: 'var(--txt2)' }}>Loading...</div>
 
-  const byCard = {}
-  for (const t of allTxns) (byCard[t.cardId] ||= []).push(t)
   const visible = cards.filter(c => !c.draft)
+  // A transaction counts for a card / account when it is linked to it, or is tagged with that
+  // account's bank + last 4 digits (older entries that were never formally linked).
+  const byCard = {}
+  for (const t of allTxns) {
+    const id = entityIdFor(t, visible)
+    if (id != null) (byCard[id] ||= []).push(t)
+  }
   const card = visible.find(c => c.id === openId)
   const draft = cards.find(c => c.id === newId)
 

@@ -1,9 +1,10 @@
 import { format } from 'date-fns'
 import { ChevronLeft } from 'lucide-react'
 import { useStore } from '../store'
+import { SyncPill } from './SmsSync'
 
 export function TopBar({ title, sub, right }) {
-  const { activeTab, setActiveTab } = useStore()
+  const { activeTab, setActiveTab, smsSync } = useStore()
   const isSub = activeTab === 'wealth' || activeTab === 'charts'
   return (
     <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)' }}>
@@ -20,7 +21,7 @@ export function TopBar({ title, sub, right }) {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {right || <Avatar />}
+        {right || <><SyncPill state={smsSync.state} /><Avatar /></>}
       </div>
     </div>
   )

@@ -5,6 +5,7 @@ import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCaps, MonoLg, MonoMd, BtnPrimary, BtnSecondary, formatINR, formatDate } from '../components/UI'
 import { useStore } from '../store'
 import { parseSMS } from '../lib/smsParser'
+import PoliciesView from '../components/PoliciesView'
 import { exportDebtsToFile, buildDebtBackup, importDebts, addManualRepayment, undoRepayment } from '../lib/debtBackup'
 
 const EMPTY_DEBT = {
@@ -13,7 +14,28 @@ const EMPTY_DEBT = {
 }
 const EMPTY_REPAY = { amount: '', principal: '', interest: '', date: format(new Date(), 'yyyy-MM-dd'), notes: '' }
 
-const DEBT_ICONS = { HomeLoan: '🏠', CarLoan: '🚗', PersonalLoan: '💼', FriendBorrowed: '🤝', FriendLent: '🤲', CreditLine: '💳' }
+// id (kept stable for saved debts) · label shown in the dropdown · icon
+const DEBT_TYPES = [
+  ['HomeLoan', 'Home loan', '🏠'],
+  ['MortgageLoan', 'Mortgage / loan against property', '🏘'],
+  ['GoldLoan', 'Gold loan', '🪙'],
+  ['CarLoan', 'Car loan', '🚗'],
+  ['TwoWheelerLoan', 'Two-wheeler loan', '🏍'],
+  ['PersonalLoan', 'Personal loan', '💼'],
+  ['EducationLoan', 'Education loan', '🎓'],
+  ['BusinessLoan', 'Business loan', '🏢'],
+  ['LoanAgainstSecurities', 'Loan against shares / mutual funds', '📈'],
+  ['CreditCardEMI', 'Credit card EMI', '💳'],
+  ['DebitCardEMI', 'Debit card EMI', '💳'],
+  ['ConsumerEMI', 'No-cost / consumer durable EMI', '📱'],
+  ['Overdraft', 'Overdraft', '🏦'],
+  ['CreditLine', 'Credit line / Buy-now-pay-later', '🧾'],
+  ['FriendBorrowed', 'Borrowed from friend / family', '🤝'],
+  ['FriendLent', 'Lent to friend / family', '🤲'],
+  ['Other', 'Other', '📄'],
+]
+const DEBT_ICONS = Object.fromEntries(DEBT_TYPES.map(([id, , icon]) => [id, icon]))
+const DEBT_LABELS = Object.fromEntries(DEBT_TYPES.map(([id, label]) => [id, label]))
 
 const MONTHS_LEFT = (d) => {
   if (!d.endDate) return '∞'
@@ -31,7 +53,7 @@ export default function Debt() {
   const [repayForm, setRepayForm] = useState(EMPTY_REPAY)
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
-  const { showNotification } = useStore()
+  const { showNotification, debtSegment, setDebtSegment } = useStore()
 
   const [editId, setEditId] = useState(null) // set while the form below is editing an existing debt
   const [form, setForm] = useState(EMPTY_DEBT)
@@ -153,6 +175,16 @@ export default function Debt() {
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
       <TopBar title="Debt" />
 
+      {/* Loans | Insurance policies */}
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px' }}>
+        {[['loans', 'Loans'], ['insurance', 'Insurance']].map(([id, label]) => (
+          <div key={id} className={`chip${debtSegment === id ? ' active' : ''}`} style={{ flex: 1, textAlign: 'center' }} onClick={() => setDebtSegment(id)}>{label}</div>
+        ))}
+      </div>
+      {debtSegment === 'insurance' && <PoliciesView />}
+      {debtSegment !== 'insurance' && (
+        <>
+
       <div style={{ padding: '10px 16px 0' }}>
         {/* Header Telemetry */}
         <Card style={{ marginBottom: 10 }}>
@@ -213,7 +245,7 @@ export default function Debt() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input className="input" placeholder="Debt name (e.g. HDFC Home Loan)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
               <select className="input" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                {Object.keys(DEBT_ICONS).map(t => <option key={t} value={t}>{t}</option>)}
+                {DEBT_TYPES.map(([id, label, icon]) => <option key={id} value={id}>{icon} {label}</option>)}
               </select>
               <input className="input" placeholder="Lender name" value={form.lender} onChange={e => setForm({ ...form, lender: e.target.value })} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -284,6 +316,7 @@ export default function Debt() {
                     {d.accountRef && <span className="mono-xs" style={{ color: 'var(--txt2)' }}>{d.accountRef}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+                    <Badge variant="grey" style={{ fontSize: 9 }}>{DEBT_LABELS[d.type] || d.type}</Badge>
                     {d.emiAmount > 0 && <Badge variant="mint" style={{ fontSize: 9 }}>SMS Auto-Tracked</Badge>}
                     {d.interestRate > 0 && <span className="mono-xs" style={{ color: 'var(--txt2)' }}>{d.interestRate}% p.a.</span>}
                     {d.interestRate === 0 && <span style={{ fontSize: 10, color: 'var(--txt2)' }}>0% Interest</span>}
@@ -370,6 +403,8 @@ export default function Debt() {
         </Card>
 
       </div>
+        </>
+      )}
     </div>
   )
 }

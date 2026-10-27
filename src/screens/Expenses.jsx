@@ -4,7 +4,7 @@ import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
 import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, TxnRow, Divider, LabelCaps, BtnPrimary, BtnSecondary, SmsParsedCard, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { parseSMS } from '../lib/smsParser'
-import TxnEditSheet from '../components/TxnEditSheet'
+import TxnDetailSheet from '../components/TxnDetailSheet'
 import { applyTxnToCard } from '../lib/ingestSMS'
 import { useStore } from '../store'
 
@@ -247,7 +247,7 @@ export default function Expenses() {
           </div>
         )}
       </div>
-      {editTxn && <TxnEditSheet txn={editTxn} onClose={() => setEditTxn(null)} />}
+      {editTxn && <TxnDetailSheet txn={editTxn} onClose={() => setEditTxn(null)} />}
     </div>
   )
 }

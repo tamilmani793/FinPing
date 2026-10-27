@@ -6,7 +6,7 @@ import { cycleDates } from './cycle'
 // Finds the card by its last four digits (preferring the same bank), or creates it.
 // kind = what the SMS says: 'credit' | 'debit' | 'unknown'. Once a card exists, the type the
 // user (or an earlier SMS) set on it wins over the wording of later SMS.
-export async function findOrCreateCard(parsed, kind) {
+export async function findOrCreateCard(parsed, kind, create = true) {
   if (!parsed.cardLast4) return null
   // Bank accounts and cards live in the same list but never match each other, even with the same last four digits.
   const isAccount = kind === 'account'
@@ -20,6 +20,7 @@ export async function findOrCreateCard(parsed, kind) {
     }
     return existing
   }
+  if (!create) return null // only link to what already exists
   const bank = parsed.bank || 'Bank'
   const id = await db.creditCards.add({
     name: isAccount ? `${bank} account ••${parsed.cardLast4}` : `${bank} ••${parsed.cardLast4}`, bank, cardLast4: parsed.cardLast4,
