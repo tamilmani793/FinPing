@@ -1,5 +1,6 @@
 import { db } from '../db/schema'
 import { parseSMS, isCreditCardSMS } from './smsParser'
+import { shiftAvailable, setLimitFields, groupOf } from './cards'
 
 async function findOrCreateCard(parsed) {
   if (!parsed.cardLast4) return null
@@ -17,11 +18,20 @@ async function findOrCreateCard(parsed) {
   return db.creditCards.get(id)
 }
 
-async function adjustCard(card, delta) {
-  const currentBalance = Math.max(0, (card.currentBalance || 0) + delta)
-  const patch = { currentBalance }
-  if (card.creditLimit > 0) patch.availableCredit = Math.max(0, card.creditLimit - currentBalance)
+// kind: 'spend' (also refunds, via a negative delta) raises/lowers unbilled spends;
+//       'payment' pays down the pending statement due.
+async function adjustCard(card, delta, kind = 'spend') {
+  const fresh = await db.creditCards.get(card.id)
+  const patch = { currentBalance: Math.max(0, (fresh.currentBalance || 0) + delta) }
+  if (kind === 'spend') patch.unbilled = Math.max(0, (fresh.unbilled || 0) + delta)
+  else patch.pendingDue = Math.max(0, (fresh.pendingDue ?? fresh.statementBalance ?? 0) + delta)
   await db.creditCards.update(card.id, patch)
+  if (kind === 'payment' && patch.pendingDue === 0) {
+    const stmts = await db.creditCardStatements.where('cardId').equals(card.id).toArray()
+    stmts.sort((x, y) => new Date(y.statementDate || 0) - new Date(x.statementDate || 0))
+    if (stmts[0]) await db.creditCardStatements.update(stmts[0].id, { isPaid: true })
+  }
+  await shiftAvailable(card.id, -delta) // a spend lowers the (possibly shared) available credit
 }
 
 // Parse one SMS and apply it to local data. Returns { status, message }.
@@ -59,9 +69,10 @@ export async function ingestSMS(rawText, meta = {}) {
         // The bank's own "Avl Limit" is the source of truth for what is still available.
         if (parsed.availableLimit != null) {
           const fresh = await db.creditCards.get(card.id)
-          const patch = { availableCredit: parsed.availableLimit }
-          if (fresh.creditLimit > 0) patch.currentBalance = Math.max(0, fresh.creditLimit - parsed.availableLimit)
-          await db.creditCards.update(card.id, patch)
+          await setLimitFields(fresh, { availableCredit: parsed.availableLimit })
+          const shared = groupOf(fresh, await db.creditCards.toArray()).length > 1
+          // A single card's balance can be derived from limit - available; a shared pool's cannot.
+          if (!shared && fresh.creditLimit > 0) await db.creditCards.update(card.id, { currentBalance: Math.max(0, fresh.creditLimit - parsed.availableLimit) })
         }
       }
       await log('saved', 'transaction')
@@ -69,16 +80,14 @@ export async function ingestSMS(rawText, meta = {}) {
     }
     case 'payment_received': {
       const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed) : null
-      if (card) await adjustCard(card, -(parsed.amount || 0))
+      if (card) await adjustCard(card, -(parsed.amount || 0), 'payment')
       await log('saved', 'payment_received')
       return { status: 'success', message: `Card payment of ₹${parsed.amount} recorded` }
     }
     case 'statement': {
       const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed) : null
       if (card) {
-        const patch = { statementBalance: parsed.totalDue || 0, currentBalance: parsed.totalDue || 0, minimumDue: parsed.minimumDue || 0 }
-        if (card.creditLimit > 0) patch.availableCredit = Math.max(0, card.creditLimit - (parsed.totalDue || 0))
-        await db.creditCards.update(card.id, patch)
+        await db.creditCards.update(card.id, { statementBalance: parsed.totalDue || 0, pendingDue: parsed.totalDue || 0, unbilled: 0, currentBalance: parsed.totalDue || 0, minimumDue: parsed.minimumDue || 0 })
       }
       await log('saved', 'statement')
       return { status: 'success', message: `Statement: ₹${parsed.totalDue} due` }

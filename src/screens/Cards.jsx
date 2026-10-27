@@ -4,6 +4,8 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 
 import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCaps, MonoLg, MonoMd, BtnPrimary, BtnSecondary, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
+import { groupOf } from '../lib/cards'
+import CardEditSheet from '../components/CardEditSheet'
 import { format, startOfMonth } from 'date-fns'
 import { Gift, CreditCard } from 'lucide-react'
 
@@ -14,6 +16,7 @@ export default function Cards() {
   const [activeCard, setActiveCard] = useState(0)
   const [activeTab, setActiveTab] = useState(0)
   const [rewardPeriod, setRewardPeriod] = useState(0)
+  const [editOpen, setEditOpen] = useState(false)
 
   const cards = useLiveQuery(() => db.creditCards.toArray())
   const { showNotification } = useStore()
@@ -41,6 +44,7 @@ export default function Cards() {
 
   const rewardChartData = []
 
+  const sharedCards = groupOf(card, cards)
   const limit = card?.creditLimit || 0
   const used = limit ? Math.max(0, limit - (card?.availableCredit || 0)) : 0
   const utilPct = limit ? Math.round((used / limit) * 100) : 0
@@ -136,6 +140,9 @@ export default function Cards() {
               </>
             )}
             <Row k="Credit limit" v={formatINR(limit)} />
+            {sharedCards.length > 1 && (
+              <Row k="Shared with" v={sharedCards.filter(c => c.id !== card.id).map(c => `${c.name.split(' ')[0]} ••${c.cardLast4}`).join(', ')} />
+            )}
             <Row k="Available credit" v={formatINR(card.availableCredit || 0)} color="var(--mint-dim)" />
           </div>
         )}
@@ -147,10 +154,13 @@ export default function Cards() {
             <Row k="Statement date" v={fmtD(stmt?.statementDate)} />
             <Row k="Payment due date" v={fmtD(stmt?.dueDate)} />
             <Row k="Status" v={isPaid ? 'Paid ✓' : 'Unpaid'} color={isPaid ? 'var(--mint-dim)' : 'var(--red-dim)'} />
+            <Row k="Statement amount" v={formatINR(card.statementBalance || 0)} />
+            <Row k="Pending due" v={formatINR(isPaid ? 0 : (card.pendingDue ?? card.statementBalance ?? 0))} color={isPaid ? undefined : 'var(--red-dim)'} />
             <Row k="Minimum due" v={formatINR(card.minimumDue || 0)} />
+            <Row k="Pending (unbilled) spends" v={formatINR(card.unbilled || 0)} />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button className="btn-secondary" style={{ flex: 1, height: 38 }} onClick={() => setActiveTab(1)}>Details &amp; Limits</button>
-              <button className="btn-secondary" style={{ height: 38 }} onClick={() => showNotification('Editing cards is coming soon', 'info')}>Edit</button>
+              <button className="btn-secondary" style={{ height: 38 }} onClick={() => setEditOpen(true)}>Edit</button>
             </div>
             {card.currentBalance > 0 && (
               <button className="btn-primary" style={{ width: '100%', marginTop: 8, height: 42, fontSize: 13 }}
@@ -303,6 +313,8 @@ export default function Cards() {
           + Link Card via SMS Parser
         </button>
       </div>
+
+      {editOpen && card && <CardEditSheet card={card} cards={cards} statement={stmt} onClose={() => setEditOpen(false)} />}
     </div>
   )
 }

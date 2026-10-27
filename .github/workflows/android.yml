@@ -4,19 +4,28 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to build the APK from
+        type: string
+        default: main
 
 permissions:
   contents: write
 
 concurrency:
-  group: android
+  group: android-${{ inputs.branch || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   apk:
     runs-on: ubuntu-latest
+    env:
+      BUILD_BRANCH: ${{ inputs.branch || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BUILD_BRANCH }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -32,10 +41,21 @@ jobs:
       - run: npx cap sync android
       - run: chmod +x gradlew && ./gradlew assembleDebug
         working-directory: android
-      - name: Publish APK to the "latest" release
+      - name: Publish APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk FinPing.apk
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest FinPing.apk --title "FinPing (latest)" --notes "Debug APK built from ${{ github.sha }}. Enable 'Install unknown apps' to install."
+          SHA=$(git rev-parse --short HEAD)
+          if [ "$BUILD_BRANCH" = "main" ]; then
+            TAG=latest
+            TITLE="FinPing (latest)"
+            PRE=""
+          else
+            # Branch builds get their own pre-release so they never replace the main APK.
+            TAG="apk-$(echo "$BUILD_BRANCH" | tr -c 'A-Za-z0-9._-' '-')"
+            TITLE="FinPing ($BUILD_BRANCH)"
+            PRE="--prerelease"
+          fi
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" FinPing.apk $PRE --target "$(git rev-parse HEAD)" --title "$TITLE" --notes "Debug APK built from branch '$BUILD_BRANCH' at $SHA. Enable 'Install unknown apps' to install."
