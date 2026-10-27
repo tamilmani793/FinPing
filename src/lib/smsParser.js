@@ -33,14 +33,20 @@ function extractAmount(text) {
 
 function extractType(text) {
   const lower = text.toLowerCase()
-  if (/cashback|refund|credited|received|reward|points credited/.test(lower)) return 'credit'
-  if (/debited|spent|paid|withdrawn|deducted|purchase/.test(lower)) return 'debit'
+  // Spend verbs win: "spent Rs.500 ... reward points will be credited" is still a spend.
+  const isRefund = /refund|reversal|reversed/.test(lower)
+  if (!isRefund && /\b(?:spent|debited|withdrawn|deducted|purchase|txn of|transaction of)\b/.test(lower)) return 'debit'
+  if (/cashback|refund|credited|received|reward|points credited|reversal|reversed/.test(lower)) return 'credit'
+  if (/paid/.test(lower)) return 'debit'
   return 'debit'
 }
 
 function extractMerchant(text) {
+  // Axis style: "Spent Card no. XX1234 INR 500 22-10-26 12:00:00 AMAZON Avl Lmt ..."
+  const axis = text.match(/\d{1,2}:\d{2}:\d{2}\s+([A-Z][A-Z0-9 &.\-']{2,30}?)\s+(?:Avl|Available)/i)
+  if (axis) return axis[1].trim().replace(/\s+/g, ' ')
   const patterns = [
-    /(?:at|to|for|merchant[:\s])\s+([A-Z][A-Z0-9\s&.\-']{2,30}?)(?:\s+on\s+|\s+Ref|\s+UPI|\s+Avl|\.|$)/i,
+    /(?:\bat|\bto|\bfor|merchant[:\s])\s+([A-Z][A-Z0-9\s&.\-']{2,30}?)(?:\s+on\s+|\s+Ref|\s+UPI|\s+Avl|\.|$)/i,
     /(?:transfer\s+to|payment\s+to)\s+([A-Z][A-Z0-9\s&.\-']{2,30}?)(?:\s+Ref|\.|$)/i,
     /(?:towards)\s+([A-Z][A-Z0-9\s&.\-']{2,30}?)(?:\s+a\/c|\s+Ref|\.|$)/i,
   ]
@@ -52,8 +58,22 @@ function extractMerchant(text) {
 }
 
 function extractCardLast4(text) {
-  const m = text.match(/(?:XX|x{2}|\.{2}|card[:\s]+)(\d{4})/i)
-  return m ? m[1] : null
+  const patterns = [
+    /\bcard\s*(?:no\.?|number|ending(?:\s+with|\s+in)?)?\s*[:\-]?\s*[xX*.•]*\s*(\d{4})\b/i, // Card x4092, Card no. XX1234, card ending 0123
+    /\bending\s+(?:with\s+|in\s+)?(\d{4})\b/i,
+    /(?:XX|x{2}|\.{2})(\d{4})/i,
+  ]
+  for (const p of patterns) {
+    const m = text.match(p)
+    if (m) return m[1]
+  }
+  return null
+}
+
+// "Avl Limit Rs.48,701.00" -> 48701
+export function extractAvailableLimit(text) {
+  const m = text.match(/(?:avl|avail(?:able)?)\.?\s*(?:credit\s*)?(?:limit|lmt|bal(?:ance)?)\s*[:\-]?\s*(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i)
+  return m ? parseFloat(m[1].replace(/,/g, '')) : null
 }
 
 function extractAccountLast4(text) {
@@ -102,8 +122,10 @@ function detectPaymentMode(text) {
 // True only when the SMS is about a credit card, not a savings account or debit card.
 export function isCreditCardSMS(text) {
   const t = text.toLowerCase()
-  if (/debit card|a\/c|\bac\b|account|upi/.test(t) && !/credit card/.test(t)) return false
-  return /credit card|\bcc\b|sbi card|card\s*(?:no\.?)?\s*x{2,}\d{4}|card\s*ending/.test(t)
+  if (/credit card|\bcc\b|sbi card/.test(t)) return true
+  if (/debit card|atm|a\/c|\bac\b|account|upi/.test(t)) return false
+  // "Card x4092 / Card ending 1234" with a spend verb and no debit/account wording
+  return /\bcard\b/.test(t) && /spent|purchase|used|transaction of|txn|paid|due|limit/.test(t)
 }
 
 function detectStatementSMS(text) {
@@ -244,6 +266,7 @@ export function parseSMS(rawText, sender = '', receivedAt = new Date()) {
     bank,
     cardLast4,
     accountLast4,
+    availableLimit: extractAvailableLimit(rawText),
     rawText,
     sender,
     receivedAt,
