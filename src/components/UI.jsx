@@ -4,7 +4,7 @@ import { useStore } from '../store'
 
 export function TopBar({ title, sub, right }) {
   const { activeTab, setActiveTab } = useStore()
-  const isSub = activeTab === 'debt' || activeTab === 'wealth'
+  const isSub = activeTab === 'wealth' || activeTab === 'charts'
   return (
     <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -99,7 +99,7 @@ export function TxnRow({ icon, merchant, meta, amount, isCredit, badge, tags, on
       </div>
       <div className="txn-amt">
         <div className={isCredit ? 'amt-credit' : 'amt-debit'}>
-          {isCredit ? '+' : ''}₹{Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+          {isCredit ? '+' : '−'}₹{Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
         </div>
         {badge}
       </div>

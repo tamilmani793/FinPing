@@ -39,6 +39,13 @@ export async function shiftAvailable(cardId, delta) {
   for (const c of members) await db.creditCards.update(c.id, { availableCredit })
 }
 
+export const GST_RATE = 0.18
+const money = n => Math.round(n * 100) / 100
+// Annual fee is entered before GST; GST at 18% is added on top.
+export const annualFeeFields = base => ({
+  annualFee: money(base), annualFeeGST: money(base * GST_RATE), totalAnnualFee: money(base * (1 + GST_RATE)), isLTF: !(base > 0),
+})
+
 const num = v => (v === '' || v == null ? 0 : Number(v) || 0)
 const toDate = v => (v ? new Date(v) : null)
 
@@ -46,19 +53,20 @@ const toDate = v => (v ? new Date(v) : null)
 //   sharedWith: ids of the other cards that share this card's limit (empty = not shared)
 //   sameStatement: copy statement dates / status / amounts to every card in the group
 export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatement = false } = {}) {
-  const cardType = form.cardType === 'debit' ? 'debit' : 'credit'
+  const cardType = form.cardType === 'debit' ? 'debit' : form.cardType === 'account' ? 'account' : 'credit'
   const identity = {
     name: (form.name || '').trim(), bank: (form.bank || '').trim(), cardType,
     network: form.network || '', variant: (form.variant || '').trim(), partner: (form.partner || '').trim(),
   }
 
-  // Debit cards have no limit, statement, fee or shared pool: save the identity and leave the pool.
-  if (cardType === 'debit') {
+  // Debit cards and bank accounts have no limit, statement, fee or shared pool: save the identity and leave the pool.
+  if (cardType !== 'credit') {
     const me = await db.creditCards.get(cardId)
     if (!me) throw new Error('Card not found')
     await db.creditCards.update(cardId, {
       ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
       cardLast4: (form.cardLast4 || '').replace(/\D/g, '').slice(-4) || me.cardLast4, notes: form.notes || '',
+      ...(cardType === 'account' ? { accountBalance: form.accountBalance === '' || form.accountBalance == null ? null : Number(form.accountBalance) || 0, network: '', variant: (form.variant || '').trim(), partner: '' } : {}),
       limitGroup: null, creditLimit: 0, availableCredit: 0, currentBalance: 0, statementBalance: 0, pendingDue: 0, minimumDue: 0, unbilled: 0,
       totalAnnualFee: 0, isLTF: true, feeWaiverThreshold: 0,
     })
@@ -117,8 +125,7 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
   await db.creditCards.update(cardId, {
     ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
     cardLast4: (form.cardLast4 || '').replace(/\D/g, '').slice(-4) || me.cardLast4,
-    totalAnnualFee: num(form.totalAnnualFee),
-    isLTF: num(form.totalAnnualFee) === 0,
+    ...annualFeeFields(num(form.annualFee)),
     feeWaiverThreshold: num(form.feeWaiverThreshold),
     annualFeeDate: toDate(form.annualFeeDate),
     interestRate: num(form.interestRate),

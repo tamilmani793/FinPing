@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { startOfMonth, subMonths, format } from 'date-fns'
-import { ArrowUpRight, ArrowDownLeft, PiggyBank, Receipt, CreditCard, Landmark, TrendingUp } from 'lucide-react'
+import { ArrowUpRight, ArrowDownLeft, PiggyBank, Receipt, CreditCard, Landmark, TrendingUp, PieChart } from 'lucide-react'
 import { db } from '../db/schema'
 import { TopBar, TxnRow, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
@@ -89,6 +89,7 @@ export default function Dashboard() {
           <div className="pill-chip" onClick={() => setActiveTab('debt')}><Landmark size={14} color="var(--gold)" /> Debt</div>
           <div className="pill-chip" onClick={() => setActiveTab('wealth')}><TrendingUp size={14} color="var(--gold)" /> Wealth</div>
           <div className="pill-chip" onClick={() => setActiveTab('cards')}><CreditCard size={14} color="var(--gold)" /> Cards</div>
+          <div className="pill-chip" onClick={() => setActiveTab('charts')}><PieChart size={14} color="var(--gold)" /> Charts</div>
         </div>
 
         <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>Today is <b style={{ color: 'var(--txt)' }}>{format(now, 'EEE, d MMM')}</b></div>

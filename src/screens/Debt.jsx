@@ -121,7 +121,7 @@ export default function Debt() {
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
-      <TopBar sub="Debt" />
+      <TopBar title="Debt" />
 
       <div style={{ padding: '10px 16px 0' }}>
         {/* Header Telemetry */}

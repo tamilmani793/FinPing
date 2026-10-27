@@ -35,23 +35,35 @@ export function cardStats(card, txns, now = new Date()) {
   const unbilled = dates.statementDate ? Math.max(0, sum(unbilledTxns)) : (card.unbilled || 0)
   const billedSpends = Math.max(0, sum(billedTxns))
   const hasStatement = !!dates.key && card.statementCycleKey === dates.key
-  const billed = hasStatement ? (card.statementBalance || 0) : billedSpends
   const paymentsThisCycle = dates.statementDate ? payments.filter(p => new Date(p.date) >= dates.statementDate) : []
-  const paidThisCycle = paymentsThisCycle.reduce((s, p) => s + p.amount, 0)
-
   const override = dates.key && card.statusCycle === dates.key && typeof card.statusPaid === 'boolean' ? card.statusPaid : null
-  let pendingBilled = Math.max(0, billed - paidThisCycle)
+
+  // Total amount due = the billed amount still unpaid. Without a billing cycle there are no dates to
+  // split spends by, so fall back to what was entered / read from the last statement SMS.
+  let billed, paidThisCycle, pendingBilled
+  if (dates.key) {
+    billed = hasStatement ? (card.statementBalance || 0) : billedSpends
+    paidThisCycle = paymentsThisCycle.reduce((s, p) => s + p.amount, 0)
+    pendingBilled = Math.max(0, billed - paidThisCycle)
+  } else {
+    billed = card.statementBalance || 0
+    pendingBilled = Math.max(0, card.pendingDue ?? billed)
+    paidThisCycle = Math.max(0, billed - pendingBilled)
+  }
   if (override === true) pendingBilled = 0
   const status = billed <= 0 ? 'none' : pendingBilled <= 0 ? 'paid' : paidThisCycle > 0 ? 'partial' : 'pending'
 
-  const outstanding = card.currentBalance || 0
+  // Current outstanding = what is still due on the bill + everything spent after it.
+  const totalDue = pendingBilled
+  const outstanding = pendingBilled + unbilled
   const limit = card.creditLimit || 0
   const available = card.availableCredit || 0
   return {
-    dates, prevStatement, unbilled, billed, billedIsEstimate: !hasStatement, billedSpends,
+    dates, prevStatement, unbilled, billed, billedIsEstimate: !hasStatement && !!dates.key, billedSpends,
     paidThisCycle, pendingBilled, status, payments, paymentsThisCycle,
     unbilledTxns, billedTxns,
-    outstanding, other: outstanding - pendingBilled - unbilled,
+    totalDue, outstanding,
+    bankUsed: limit > 0 ? Math.max(0, limit - available) : null, // what the bank's available limit implies is in use
     limit, available, utilPct: limit ? Math.min(100, Math.round(((limit - available) / limit) * 100)) : 0,
   }
 }

@@ -67,13 +67,17 @@ function CardTile({ card, txns, onOpen }) {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '10px 0 6px' }}>
             <div>
-              <div className="label-caps">Outstanding</div>
+              <div className="label-caps">Current outstanding</div>
               <div style={{ fontSize: 17, fontWeight: 800 }}>{formatINR(s.outstanding)}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="label-caps">{s.dates.dueDate ? `Due ${fmtS(s.dates.dueDate)}` : 'Due date'}</div>
-              <span className={`badge ${st.badge}`}>{st.label}</span>
+              <div className="label-caps">Total amount due</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: s.totalDue > 0 ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{formatINR(s.totalDue)}</div>
             </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--txt2)' }}>{s.dates.dueDate ? `Due ${fmtS(s.dates.dueDate)}` : 'Due date not set'}</span>
+            <span className={`badge ${st.badge}`}>{st.label}</span>
           </div>
           {s.limit > 0 && (
             <>
@@ -88,9 +92,11 @@ function CardTile({ card, txns, onOpen }) {
       )}
 
       {!credit && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 12 }}>
-          <span className={`badge ${card.cardType === 'unknown' ? 'badge-amber' : 'badge-grey'}`}>{card.cardType === 'unknown' ? 'Choose card type' : 'Debit card'}</span>
-          <span style={{ color: 'var(--txt2)' }}>Spent this month <b style={{ color: 'var(--txt)' }}>{formatINR(spentMonth)}</b></span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 12 }}>
+          <span className={`badge ${card.cardType === 'unknown' ? 'badge-amber' : 'badge-grey'}`}>{card.cardType === 'unknown' ? 'Choose type' : typeLabel(card)}</span>
+          {card.cardType === 'account' && card.accountBalance != null
+            ? <span style={{ color: 'var(--txt2)' }}>Balance <b style={{ color: 'var(--txt)' }}>{formatINR(card.accountBalance)}</b></span>
+            : <span style={{ color: 'var(--txt2)' }}>Spent this month <b style={{ color: 'var(--txt)' }}>{formatINR(spentMonth)}</b></span>}
         </div>
       )}
     </div>
@@ -99,19 +105,29 @@ function CardTile({ card, txns, onOpen }) {
 
 function Portfolio({ cards, byCard, onOpen }) {
   const credit = cards.filter(isCredit)
-  const other = cards.filter(c => !isCredit(c))
-  const totalOut = credit.reduce((s, c) => s + (c.currentBalance || 0), 0)
-  const groups = [['Credit cards', credit], ['Debit cards & others', other]]
+  const debit = cards.filter(c => c.cardType === 'debit')
+  const accounts = cards.filter(c => c.cardType === 'account')
+  const unknown = cards.filter(c => c.cardType === 'unknown')
+  const stats = credit.map(c => cardStats(c, byCard[c.id] || []))
+  const totalOut = stats.reduce((s, x) => s + x.outstanding, 0)
+  const totalDue = stats.reduce((s, x) => s + x.totalDue, 0)
+  const groups = [['Credit cards', credit], ['Debit cards', debit], ['Bank accounts', accounts], ['Type not set', unknown]]
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
       <TopBar title="Card Portfolio" />
       <div style={{ padding: '0 16px' }}>
         {credit.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-            <div className="stat-tile"><div className="label-caps">Total outstanding</div><div style={{ fontSize: 19, fontWeight: 800, color: 'var(--red-dim)' }}>{formatINR(totalOut)}</div><div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{credit.length} credit card{credit.length === 1 ? '' : 's'}</div></div>
-            <div className="stat-tile"><div className="label-caps">Available credit</div><div style={{ fontSize: 19, fontWeight: 800, color: 'var(--mint-dim)' }}>{formatINR(totalAvailableCredit(credit))}</div><div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>shared limits counted once</div></div>
-          </div>
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div className="stat-tile"><div className="label-caps">Current outstanding</div><div style={{ fontSize: 19, fontWeight: 800 }}>{formatINR(totalOut)}</div><div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{credit.length} credit card{credit.length === 1 ? '' : 's'}</div></div>
+              <div className="stat-tile"><div className="label-caps">Total amount due</div><div style={{ fontSize: 19, fontWeight: 800, color: totalDue > 0 ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{formatINR(totalDue)}</div><div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>billed, still unpaid</div></div>
+            </div>
+            <div className="stat-tile" style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="label-caps">Available credit</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--mint-dim)' }}>{formatINR(totalAvailableCredit(credit))} <span style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--txt2)' }}>shared limits once</span></div>
+            </div>
+          </>
         )}
 
         {groups.map(([title, list]) => list.length > 0 && (
@@ -231,7 +247,7 @@ function Detail({ card, cards, txns, onBack }) {
       <div style={{ padding: '0 16px' }}>
         {card.cardType === 'unknown' && (
           <div className="card" style={{ marginBottom: 12, padding: '10px 14px', borderColor: 'var(--amber-border)', background: 'var(--amber-bg)' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber-dim)' }}>Is this a credit or a debit card?</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber-dim)' }}>Is this a credit card, a debit card or a bank account?</div>
             <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 8px' }}>The SMS didn't say. Until you choose, its spends are listed but no balance is tracked.</div>
             <button className="btn-secondary" style={{ height: 34 }} onClick={() => setEditOpen(true)}>Choose card type</button>
           </div>
@@ -253,15 +269,19 @@ function Detail({ card, cards, txns, onBack }) {
 
           {credit ? (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 6 }}>
                 <div>
-                  <div className="label-caps">Total outstanding</div>
+                  <div className="label-caps">Current outstanding</div>
                   <div style={{ fontSize: 24, fontWeight: 800 }}>{formatINR(s.outstanding)}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div className="label-caps">Due date</div>
-                  <div style={{ fontSize: 15, fontWeight: 700 }}>{s.dates.dueDate ? fmtD(s.dates.dueDate) : '—'}</div>
+                  <div className="label-caps">Total amount due</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: s.totalDue > 0 ? '#FFB4B4' : '#7FE0B0' }}>{formatINR(s.totalDue)}</div>
                 </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>
+                <span>Due date <b style={{ color: 'var(--txt)' }}>{s.dates.dueDate ? fmtD(s.dates.dueDate) : '—'}</b></span>
+                <span>{st.label}</span>
               </div>
               {s.limit > 0 ? (
                 <>
@@ -278,8 +298,14 @@ function Detail({ card, cards, txns, onBack }) {
             </>
           ) : (
             <>
+              {card.cardType === 'account' && (
+                <>
+                  <div className="label-caps">Balance (as last reported by the bank)</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 10 }}>{card.accountBalance != null ? formatINR(card.accountBalance) : '—'}</div>
+                </>
+              )}
               <div className="label-caps">Spent this month</div>
-              <div style={{ fontSize: 24, fontWeight: 800 }}>{formatINR(spentMonth)}</div>
+              <div style={{ fontSize: card.cardType === 'account' ? 17 : 24, fontWeight: 800 }}>{formatINR(spentMonth)}</div>
             </>
           )}
         </div>
@@ -288,11 +314,13 @@ function Detail({ card, cards, txns, onBack }) {
           <>
             {/* Outstanding */}
             <Section title="Outstanding details" right={<span className={`badge ${st.badge}`}>{st.label}</span>}>
-              <Row k="Billed amount still to pay" sub={s.billedIsEstimate && s.billed > 0 ? 'estimated from billed spends' : undefined} v={formatINR(s.pendingBilled)} color={s.pendingBilled > 0 ? 'var(--red-dim)' : 'var(--mint-dim)'} />
-              <Row k="Unbilled spends" sub={s.dates.statementDate ? `after ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} />
-              {Math.abs(s.other) >= 1 && <Row k="Other / adjustments" sub="interest, fees, older dues" v={formatINR(s.other)} />}
+              <Row k="Total amount due" sub={s.billed > 0 ? `${formatINR(s.billed)} billed − ${formatINR(s.paidThisCycle)} paid${s.billedIsEstimate ? ' · estimated' : ''}` : 'nothing billed yet'} v={formatINR(s.totalDue)} color={s.totalDue > 0 ? 'var(--red-dim)' : 'var(--mint-dim)'} />
+              <Row k="+ Spends after the statement" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} />
               <div className="divider" />
-              <Row k="Total outstanding" v={formatINR(s.outstanding)} bold />
+              <Row k="Current outstanding" v={formatINR(s.outstanding)} bold />
+              {s.bankUsed != null && Math.abs(s.bankUsed - s.outstanding) >= 1 && (
+                <Row k="Limit in use per bank" sub="limit − available limit; may include interest, fees or spends the SMS did not show" v={formatINR(s.bankUsed)} color="var(--txt2)" />
+              )}
             </Section>
 
             {/* Billed */}
@@ -331,7 +359,7 @@ function Detail({ card, cards, txns, onBack }) {
               {card.rewardPoints > 0 && <Row k="Reward points" v={card.rewardPoints.toLocaleString('en-IN')} />}
               <Row k="No rewards on" v={exclusions.length ? exclusions.join(', ') : 'nothing excluded'} />
               <div className="divider" />
-              <Row k="Annual fee" v={card.isLTF ? 'Lifetime free' : `${formatINR(card.totalAnnualFee || 0)} / yr`} />
+              <Row k="Annual fee" sub={!card.isLTF && card.annualFee > 0 ? `${formatINR(card.annualFee)} + 18% GST ${formatINR(card.annualFeeGST || 0)}` : undefined} v={card.isLTF ? 'Lifetime free' : `${formatINR(card.totalAnnualFee || 0)} / yr`} />
               {!card.isLTF && card.feeWaiverThreshold > 0 && <Row k="Fee waiver spend" v={`${formatINR(card.totalPaidThisYear || 0)} / ${formatINR(card.feeWaiverThreshold)}`} />}
               {card.annualFeeDate && <Row k="Annual fee date" v={fmtD(card.annualFeeDate)} />}
               {card.interestRate > 0 && <Row k="Interest rate" v={`${card.interestRate}% / month`} />}
@@ -341,7 +369,7 @@ function Detail({ card, cards, txns, onBack }) {
         )}
 
         {!credit && (
-          <Section title="Transactions">
+          <Section title={card.cardType === 'account' ? 'Account transactions' : 'Transactions'}>
             <TxnList card={card} list={spends} emptyText="No transactions yet for this card" />
           </Section>
         )}

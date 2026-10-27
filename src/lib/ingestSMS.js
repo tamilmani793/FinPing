@@ -8,7 +8,9 @@ import { cycleDates } from './cycle'
 // user (or an earlier SMS) set on it wins over the wording of later SMS.
 async function findOrCreateCard(parsed, kind) {
   if (!parsed.cardLast4) return null
-  const matches = await db.creditCards.where('cardLast4').equals(parsed.cardLast4).toArray()
+  // Bank accounts and cards live in the same list but never match each other, even with the same last four digits.
+  const isAccount = kind === 'account'
+  const matches = (await db.creditCards.where('cardLast4').equals(parsed.cardLast4).toArray()).filter(c => (c.cardType === 'account') === isAccount)
   const existing = matches.find(c => c.bank === parsed.bank) || matches[0]
   if (existing) {
     // A card created from an ambiguous SMS becomes credit/debit as soon as an SMS says so.
@@ -20,8 +22,8 @@ async function findOrCreateCard(parsed, kind) {
   }
   const bank = parsed.bank || 'Bank'
   const id = await db.creditCards.add({
-    name: `${bank} ••${parsed.cardLast4}`, bank, cardLast4: parsed.cardLast4,
-    cardType: kind === 'credit' || kind === 'debit' ? kind : 'unknown',
+    name: isAccount ? `${bank} account ••${parsed.cardLast4}` : `${bank} ••${parsed.cardLast4}`, bank, cardLast4: parsed.cardLast4,
+    cardType: kind === 'credit' || kind === 'debit' || kind === 'account' ? kind : 'unknown',
     network: '', variant: '', partner: '', rewardMode: 'cashback', pointValue: 1,
     annualFee: 0, annualFeeGST: 0, totalAnnualFee: 0, feeWaiverThreshold: 0, isLTF: true,
     billingCycleDate: 1, paymentDueDays: 20,
@@ -77,16 +79,20 @@ export async function ingestSMS(rawText, meta = {}) {
     case 'cashback_credited': {
       const isCashback = parsed.type === 'cashback_credited'
       const kind = detectCardKind(text)
-      const card = kind ? await findOrCreateCard(parsed, kind) : null
+      let card = kind ? await findOrCreateCard(parsed, kind) : null
+      // No card mentioned, only an account number: it is a bank account (savings / current), not a card.
+      if (!card && parsed.accountLast4) card = await findOrCreateCard({ ...parsed, cardLast4: parsed.accountLast4 }, 'account')
       const type = isCashback ? 'credit' : (parsed.transactionType || 'debit')
       await db.transactions.add({
         date: receivedAt, amount: parsed.amount || 0, type,
         merchant: isCashback ? 'Cashback Credit' : (parsed.merchant || 'Unknown'),
         category: isCashback ? 'Cashback' : (parsed.category || 'General'),
-        paymentMode: card ? (card.cardType === 'debit' ? 'Debit Card' : card.cardType === 'unknown' ? 'Card' : 'Credit Card') : (parsed.paymentMode || 'Other'), bank: parsed.bank || '', accountLast4: parsed.accountLast4 || parsed.cardLast4 || null,
+        paymentMode: card && card.cardType !== 'account' ? (card.cardType === 'debit' ? 'Debit Card' : card.cardType === 'unknown' ? 'Card' : 'Credit Card') : (parsed.paymentMode || 'Other'), bank: parsed.bank || '', accountLast4: parsed.accountLast4 || parsed.cardLast4 || null,
         cardId: card ? card.id : null, rawSMS: text, parsedBy: 'auto',
         tags: [], notes: '', isExcluded: false, createdAt: new Date(),
       })
+      // A bank account keeps the balance the bank reports ("Avl Bal").
+      if (card && card.cardType === 'account' && parsed.availableLimit != null) await db.creditCards.update(card.id, { accountBalance: parsed.availableLimit })
       // Only credit cards carry a balance / limit. Debit and not-yet-typed cards just collect their spends.
       if (card && isCredit(card) && !isCashback) {
         await adjustCard(card, type === 'debit' ? parsed.amount : -parsed.amount)

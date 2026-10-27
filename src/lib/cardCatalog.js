@@ -1,8 +1,9 @@
 // Suggestions for the card edit form. Every field also accepts free text.
 
 export const CARD_TYPES = [
-  { id: 'credit', label: 'Credit' },
-  { id: 'debit', label: 'Debit' },
+  { id: 'credit', label: 'Credit card' },
+  { id: 'debit', label: 'Debit card' },
+  { id: 'account', label: 'Bank account' },
 ]
 
 export const BANKS = [
@@ -56,7 +57,7 @@ export const PARTNERS = [
   'MakeMyTrip', 'IndianOil', 'BPCL', 'HPCL', 'IRCTC', 'Marriott', 'Vistara', 'Air India', 'Zomato', 'OneCard', 'Jupiter', 'CRED',
 ]
 
-export const typeLabel = c => (c?.cardType === 'debit' ? 'Debit' : c?.cardType === 'unknown' ? 'Type not set' : 'Credit')
+export const typeLabel = c => (c?.cardType === 'debit' ? 'Debit' : c?.cardType === 'account' ? 'Bank account' : c?.cardType === 'unknown' ? 'Type not set' : 'Credit')
 
 // "Visa Signature" / "Mastercard" / ""
 export const networkLabel = c => [c?.network, c?.variant].filter(Boolean).join(' ')
