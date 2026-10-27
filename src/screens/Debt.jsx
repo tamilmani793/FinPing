@@ -7,6 +7,10 @@ import { useStore } from '../store'
 import { parseSMS } from '../lib/smsParser'
 import { exportDebtsToFile, buildDebtBackup, importDebts, addManualRepayment, undoRepayment } from '../lib/debtBackup'
 
+const EMPTY_DEBT = {
+  name: '', type: 'PersonalLoan', lender: '', principal: '', currentOutstanding: '',
+  interestRate: '', emiAmount: '', emiDate: '', startDate: '', endDate: '', notes: '',
+}
 const EMPTY_REPAY = { amount: '', principal: '', interest: '', date: format(new Date(), 'yyyy-MM-dd'), notes: '' }
 
 const DEBT_ICONS = { HomeLoan: '🏠', CarLoan: '🚗', PersonalLoan: '💼', FriendBorrowed: '🤝', FriendLent: '🤲', CreditLine: '💳' }
@@ -29,11 +33,8 @@ export default function Debt() {
   const [importText, setImportText] = useState('')
   const { showNotification } = useStore()
 
-  const [form, setForm] = useState({
-    name: '', type: 'PersonalLoan', lender: '', principal: '',
-    currentOutstanding: '', interestRate: '', emiAmount: '', emiDate: '',
-    notes: ''
-  })
+  const [editId, setEditId] = useState(null) // set while the form below is editing an existing debt
+  const [form, setForm] = useState(EMPTY_DEBT)
 
   const debts = useLiveQuery(() => db.debts.toArray())
   const repayments = useLiveQuery(() => db.debtRepayments.orderBy('date').reverse().limit(20).toArray())
@@ -44,18 +45,47 @@ export default function Debt() {
   const pctCleared = totalPrincipal > 0 ? Math.round((1 - totalOutstanding / totalPrincipal) * 100) : 0
   const totalEMI = active.filter(d => d.emiAmount > 0).reduce((s, d) => s + d.emiAmount, 0)
 
-  const handleAddDebt = async () => {
-    if (!form.name || !form.principal) { showNotification('Name and principal amount required', 'error'); return }
-    await db.debts.add({
-      name: form.name, type: form.type, lender: form.lender,
-      principal: parseFloat(form.principal), currentOutstanding: parseFloat(form.currentOutstanding || form.principal),
-      interestRate: parseFloat(form.interestRate || 0), emiAmount: parseFloat(form.emiAmount || 0),
-      emiDate: parseInt(form.emiDate || 0), startDate: new Date(),
-      totalPaid: 0, totalInterestPaid: 0, status: 'active', notes: form.notes,
+  const closeForm = () => { setAddOpen(false); setEditId(null); setForm(EMPTY_DEBT) }
+
+  const openEdit = d => {
+    const day = v => (v ? format(new Date(v), 'yyyy-MM-dd') : '')
+    setForm({
+      name: d.name || '', type: d.type || 'PersonalLoan', lender: d.lender || '',
+      principal: String(d.principal ?? ''), currentOutstanding: String(d.currentOutstanding ?? ''),
+      interestRate: d.interestRate ? String(d.interestRate) : '', emiAmount: d.emiAmount ? String(d.emiAmount) : '',
+      emiDate: d.emiDate ? String(d.emiDate) : '', startDate: day(d.startDate), endDate: day(d.endDate), notes: d.notes || '',
     })
-    setForm({ name: '', type: 'PersonalLoan', lender: '', principal: '', currentOutstanding: '', interestRate: '', emiAmount: '', emiDate: '', notes: '' })
-    setAddOpen(false)
-    showNotification('Debt added!', 'success')
+    setEditId(d.id)
+    setAddOpen(true)
+    document.querySelector('.screen')?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleSaveDebt = async () => {
+    if (!form.name || !form.principal) { showNotification('Name and principal amount required', 'error'); return }
+    const principal = parseFloat(form.principal)
+    const outstanding = form.currentOutstanding === '' ? principal : parseFloat(form.currentOutstanding)
+    if (!(principal > 0) || !(outstanding >= 0)) { showNotification('Enter valid amounts', 'error'); return }
+    const fields = {
+      name: form.name, type: form.type, lender: form.lender, principal, currentOutstanding: outstanding,
+      interestRate: parseFloat(form.interestRate || 0), emiAmount: parseFloat(form.emiAmount || 0), emiDate: parseInt(form.emiDate || 0),
+      startDate: form.startDate ? new Date(form.startDate) : new Date(), endDate: form.endDate ? new Date(form.endDate) : null, notes: form.notes,
+    }
+    if (editId) {
+      await db.debts.update(editId, fields)
+      showNotification('Debt updated', 'success')
+    } else {
+      // Anything already paid off before you started tracking counts as principal paid.
+      await db.debts.add({ ...fields, totalPaid: Math.max(0, principal - outstanding), totalInterestPaid: 0, status: 'active' })
+      showNotification('Debt added!', 'success')
+    }
+    closeForm()
+  }
+
+  const handleDeleteDebt = async d => {
+    if (!window.confirm(`Delete "${d.name}" and its payment history? This cannot be undone.`)) return
+    await db.debtRepayments.where('debtId').equals(d.id).delete()
+    await db.debts.delete(d.id)
+    showNotification('Debt deleted', 'success')
   }
 
   const handleMatchSMS = () => {
@@ -152,7 +182,7 @@ export default function Debt() {
 
         {/* Actions */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-          <button className="btn-primary" style={{ height: 40, fontSize: 12 }} onClick={() => setAddOpen(!addOpen)}>+ Add New Debt</button>
+          <button className="btn-primary" style={{ height: 40, fontSize: 12 }} onClick={() => (addOpen && !editId ? closeForm() : (setEditId(null), setForm(EMPTY_DEBT), setAddOpen(true)))}>+ Add New Debt</button>
           <button className="btn-secondary" style={{ height: 40, fontSize: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setMatchSMSOpen(!matchSMSOpen)}>📲 Match SMS Repay</button>
         </div>
 
@@ -179,7 +209,7 @@ export default function Debt() {
         {/* Add Debt Form */}
         {addOpen && (
           <Card style={{ marginBottom: 10 }}>
-            <LabelCaps style={{ marginBottom: 8 }}>Add New Debt</LabelCaps>
+            <LabelCaps style={{ marginBottom: 8 }}>{editId ? 'Edit debt' : 'Add New Debt'}</LabelCaps>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input className="input" placeholder="Debt name (e.g. HDFC Home Loan)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
               <select className="input" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
@@ -193,10 +223,19 @@ export default function Debt() {
                 <input className="input" type="number" placeholder="EMI amount (₹)" value={form.emiAmount} onChange={e => setForm({ ...form, emiAmount: e.target.value })} />
               </div>
               <input className="input" type="number" placeholder="EMI date (day of month, e.g. 5)" value={form.emiDate} onChange={e => setForm({ ...form, emiDate: e.target.value })} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div><LabelCaps style={{ marginBottom: 4 }}>Start date</LabelCaps><input className="input" type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></div>
+                <div><LabelCaps style={{ marginBottom: 4 }}>End date</LabelCaps><input className="input" type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} /></div>
+              </div>
+              {Number(form.principal) > 0 && form.currentOutstanding !== '' && (
+                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                  Principal paid so far: <b style={{ color: 'var(--mint-dim)' }}>{formatINR(Math.max(0, Number(form.principal) - Number(form.currentOutstanding)))}</b> ({Math.max(0, Math.min(100, Math.round((1 - Number(form.currentOutstanding) / Number(form.principal)) * 100)))}%)
+                </div>
+              )}
               <input className="input" placeholder="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
               <div style={{ display: 'flex', gap: 6 }}>
-                <BtnPrimary onClick={handleAddDebt} style={{ flex: 1, height: 36, fontSize: 12 }}>Save Debt</BtnPrimary>
-                <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => setAddOpen(false)}>Cancel</button>
+                <BtnPrimary onClick={handleSaveDebt} style={{ flex: 1, height: 36, fontSize: 12 }}>{editId ? 'Save changes' : 'Save Debt'}</BtnPrimary>
+                <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={closeForm}>Cancel</button>
               </div>
             </div>
           </Card>
@@ -229,7 +268,9 @@ export default function Debt() {
         <SectionHdr title="Active Liabilities" right={<Badge variant="indigo">HYBRID TELEMETRY</Badge>} />
 
         {active.map(d => {
-          const paidPct = d.principal > 0 ? Math.min(100, Math.round((d.totalPaid || 0) / d.principal * 100)) : 0
+          // Principal paid = what has come off the original principal, however it got there.
+          const principalPaid = Math.max(0, (d.principal || 0) - (d.currentOutstanding || 0))
+          const paidPct = d.principal > 0 ? Math.min(100, Math.round(principalPaid / d.principal * 100)) : 0
           const isExpanded = expandedId === d.id
           return (
             <div key={d.id} style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, marginBottom: 10 }}>
@@ -257,7 +298,7 @@ export default function Debt() {
               <LabelCaps style={{ marginBottom: 4 }}>Principal Cleared</LabelCaps>
               <ProgressBar pct={paidPct} variant="mint" />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11 }}>
-                <span style={{ color: 'var(--mint)' }}>{paidPct}% Paid off</span>
+                <span style={{ color: 'var(--mint)' }}>{paidPct}% paid off · {formatINR(principalPaid)} of principal</span>
                 {d.emiDate > 0 && <span style={{ color: 'var(--txt2)' }}>EMI due {d.emiDate}th</span>}
               </div>
 
@@ -289,7 +330,9 @@ export default function Debt() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setRepayFor(repayFor === d.id ? null : d.id); setRepayForm({ ...EMPTY_REPAY, amount: d.emiAmount > 0 ? String(d.emiAmount) : '' }) }}>＋ Add Payment</button>
                     <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setSmsText(''); setMatchSMSOpen(true) }}>📲 Link SMS Debit</button>
-                    <button className="btn-ghost" style={{ height: 32, fontSize: 11, gridColumn: '1 / -1' }} onClick={() => handleMarkClosed(d.id)}>Mark as Closed</button>
+                    <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => openEdit(d)}>✎ Edit debt</button>
+                    <button className="btn-ghost" style={{ height: 32, fontSize: 11 }} onClick={() => handleMarkClosed(d.id)}>Mark as Closed</button>
+                    <button className="btn-ghost" style={{ height: 32, fontSize: 11, gridColumn: '1 / -1', color: 'var(--red-dim)', borderColor: 'var(--red-border)' }} onClick={() => handleDeleteDebt(d)}>Delete debt</button>
                   </div>
                 </>
               )}
