@@ -1,351 +1,369 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts'
-import { db } from '../db/schema'
-import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCaps, MonoLg, MonoMd, BtnPrimary, BtnSecondary, formatINR, getMerchantIcon, formatDate } from '../components/UI'
-import { useStore } from '../store'
-import { groupOf } from '../lib/cards'
-import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
-import CardEditSheet from '../components/CardEditSheet'
 import { format, startOfMonth } from 'date-fns'
-import { Gift, CreditCard } from 'lucide-react'
-import { typeLabel, networkLabel } from '../lib/cardCatalog'
+import { ChevronLeft, ChevronRight, CreditCard, Gift, Pencil } from 'lucide-react'
+import { db } from '../db/schema'
+import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../components/UI'
+import { useStore } from '../store'
+import { groupOf, totalAvailableCredit, recordPayment, removePayment } from '../lib/cards'
+import { cardStats, rewardStatus, isCardPayment } from '../lib/cardStats'
+import { ordinal } from '../lib/cycle'
+import { typeLabel, networkLabel, excludedFor } from '../lib/cardCatalog'
+import CardEditSheet from '../components/CardEditSheet'
+import TxnEditSheet from '../components/TxnEditSheet'
 
-const TABS = ['Transactions', 'Statement', 'Rewards', 'Analysis']
-const REWARD_PERIODS = ['Monthly', 'Quarterly', 'Annual']
+const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
+const fmtS = d => (d ? format(new Date(d), 'd MMM') : '—')
+const isCredit = c => !c.cardType || c.cardType === 'credit'
+const cardLabel = c => `${c.name}${c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''}`
 
-export default function Cards() {
-  const [activeCard, setActiveCard] = useState(0)
-  const [activeTab, setActiveTab] = useState(0)
-  const [rewardPeriod, setRewardPeriod] = useState(0)
-  const [editOpen, setEditOpen] = useState(false)
+const STATUS = {
+  paid: { label: 'Paid ✓', badge: 'badge-mint' },
+  partial: { label: 'Partly paid', badge: 'badge-amber' },
+  pending: { label: 'Payment pending', badge: 'badge-red' },
+  none: { label: 'No bill yet', badge: 'badge-grey' },
+}
 
-  const cards = useLiveQuery(() => db.creditCards.toArray())
-  const { showNotification } = useStore()
-
-  const card = cards?.[activeCard]
-
-  const ccTxns = useLiveQuery(() => {
-    if (!card) return []
-    return db.creditCardTransactions.where('cardId').equals(card.id).reverse().sortBy('date')
-  }, [card?.id])
-
-  const statements = useLiveQuery(() => {
-    if (!card) return []
-    return db.creditCardStatements.where('cardId').equals(card.id).reverse().sortBy('statementDate')
-  }, [card?.id])
-
-  const allTxns = useLiveQuery(() => {
-    if (!card) return []
-    return db.transactions.where('cardId').equals(card.id).reverse().sortBy('date')
-  }, [card?.id])
-
-  if (!cards) return <div style={{ padding: 20, color: 'var(--txt2)' }}>Loading...</div>
-
-  const totalDue = (cards || []).filter(c => !c.cardType || c.cardType === 'credit').reduce((s, c) => s + (c.currentBalance || 0), 0)
-
-  const rewardChartData = []
-
-  const isCreditCard = !card?.cardType || card.cardType === 'credit'
-  const sharedCards = groupOf(card, cards)
-  const spendThisMonth = (allTxns || []).filter(t => t.type === 'debit' && !t.isExcluded && new Date(t.date) >= startOfMonth(new Date())).reduce((s, t) => s + t.amount, 0)
-  const limit = card?.creditLimit || 0
-  const used = limit ? Math.max(0, limit - (card?.availableCredit || 0)) : 0
-  const utilPct = limit ? Math.round((used / limit) * 100) : 0
-  const dates = card ? cycleDates(card) : {}
-  const monthStart = startOfMonth(new Date())
-  const cashbackTxns = (allTxns || []).filter(t => t.type === 'credit' && t.category === 'Cashback')
-  const cbMonth = cashbackTxns.filter(t => new Date(t.date) >= monthStart).reduce((s, t) => s + t.amount, 0)
-  const cbAll = cashbackTxns.reduce((s, t) => s + t.amount, 0)
-  const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
-  const spentThisYear = card?.totalPaidThisYear || 0
-  const isPaid = card ? isStatementPaid(card, dates) : true
-
-  const Row = ({ k, v, color }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12 }}>
-      <span style={{ color: 'var(--txt2)' }}>{k}</span>
-      <span style={{ fontWeight: 600, color: color || 'var(--txt)' }}>{v}</span>
+function Row({ k, v, color, bold, sub }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 0', fontSize: 12.5 }}>
+      <span style={{ color: 'var(--txt2)' }}>{k}{sub && <div style={{ fontSize: 10.5, color: 'var(--txt3)' }}>{sub}</div>}</span>
+      <span style={{ fontWeight: bold ? 800 : 600, color: color || 'var(--txt)', textAlign: 'right' }}>{v}</span>
     </div>
   )
+}
+
+function Section({ title, right, children }) {
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div className="section-hdr" style={{ marginBottom: 6 }}>
+        <div className="label-caps" style={{ color: 'var(--gold-dim)' }}>{title}</div>
+        {right}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ───────────────────────────── list ─────────────────────────────
+
+function CardTile({ card, txns, onOpen }) {
+  const credit = isCredit(card)
+  const s = credit ? cardStats(card, txns) : null
+  const spentMonth = txns.filter(t => t.type === 'debit' && new Date(t.date) >= startOfMonth(new Date())).reduce((a, t) => a + t.amount, 0)
+  const st = s && STATUS[s.status]
+  return (
+    <div className="card" onClick={onOpen} style={{ marginBottom: 10, cursor: 'pointer', padding: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(145deg,#2D2A28,#1A1918)', color: '#E8D29A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={18} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardLabel(card)}</div>
+          <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[card.bank, networkLabel(card), card.partner].filter(Boolean).join(' · ')}</div>
+        </div>
+        <ChevronRight size={18} color="var(--txt3)" />
+      </div>
+
+      {credit && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '10px 0 6px' }}>
+            <div>
+              <div className="label-caps">Outstanding</div>
+              <div style={{ fontSize: 17, fontWeight: 800 }}>{formatINR(s.outstanding)}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div className="label-caps">{s.dates.dueDate ? `Due ${fmtS(s.dates.dueDate)}` : 'Due date'}</div>
+              <span className={`badge ${st.badge}`}>{st.label}</span>
+            </div>
+          </div>
+          {s.limit > 0 && (
+            <>
+              <ProgressBar pct={s.utilPct} variant={s.utilPct >= 70 ? 'red' : s.utilPct >= 40 ? 'amber' : 'mint'} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--txt2)', marginTop: 4 }}>
+                <span>{formatINR(s.available)} available</span>
+                <span>{card.limitGroup ? 'shared · ' : ''}limit {formatINR(s.limit)}</span>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {!credit && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 12 }}>
+          <span className={`badge ${card.cardType === 'unknown' ? 'badge-amber' : 'badge-grey'}`}>{card.cardType === 'unknown' ? 'Choose card type' : 'Debit card'}</span>
+          <span style={{ color: 'var(--txt2)' }}>Spent this month <b style={{ color: 'var(--txt)' }}>{formatINR(spentMonth)}</b></span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Portfolio({ cards, byCard, onOpen }) {
+  const credit = cards.filter(isCredit)
+  const other = cards.filter(c => !isCredit(c))
+  const totalOut = credit.reduce((s, c) => s + (c.currentBalance || 0), 0)
+  const groups = [['Credit cards', credit], ['Debit cards & others', other]]
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
       <TopBar title="Card Portfolio" />
+      <div style={{ padding: '0 16px' }}>
+        {credit.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            <div className="stat-tile"><div className="label-caps">Total outstanding</div><div style={{ fontSize: 19, fontWeight: 800, color: 'var(--red-dim)' }}>{formatINR(totalOut)}</div><div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{credit.length} credit card{credit.length === 1 ? '' : 's'}</div></div>
+            <div className="stat-tile"><div className="label-caps">Available credit</div><div style={{ fontSize: 19, fontWeight: 800, color: 'var(--mint-dim)' }}>{formatINR(totalAvailableCredit(credit))}</div><div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>shared limits counted once</div></div>
+          </div>
+        )}
 
-      {/* Card selector chips */}
-      <div className="chip-scroll" style={{ paddingTop: 0 }}>
-        {cards.map((c, i) => (
-          <div key={c.id} className={`chip${i === activeCard ? ' active' : ''}`} onClick={() => { setActiveCard(i); setActiveTab(0) }}>
-            {c.name}{c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''}{c.cardType === 'debit' ? ' · Debit' : c.cardType === 'unknown' ? ' · ?' : ''}
+        {groups.map(([title, list]) => list.length > 0 && (
+          <div key={title}>
+            <div className="label-caps" style={{ margin: '4px 2px 8px' }}>{title} · {list.length}</div>
+            {list.map(c => <CardTile key={c.id} card={c} txns={byCard[c.id] || []} onOpen={() => onOpen(c.id)} />)}
           </div>
         ))}
-        {!cards.length && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>No cards linked yet</div>}
+
+        {!cards.length && (
+          <div className="card" style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--txt2)', fontSize: 13 }}>
+            No cards yet. They appear automatically when bank SMS about a card arrive.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ───────────────────────────── detail ─────────────────────────────
+
+function TxnList({ card, list, emptyText }) {
+  const [edit, setEdit] = useState(null)
+  const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date))
+  return (
+    <>
+      {sorted.map(t => {
+        const r = rewardStatus(card, t)
+        return (
+          <TxnRow
+            key={t.id}
+            icon={getMerchantIcon(t.merchant)}
+            merchant={t.merchant}
+            meta={`${fmtS(t.date)} · ${t.category}`}
+            amount={t.amount}
+            isCredit={t.type === 'credit'}
+            onClick={() => setEdit(t)}
+            badge={t.type === 'debit'
+              ? (r.eligible
+                ? <span className="badge badge-mint" style={{ fontSize: 9 }}>✅ Rewards</span>
+                : <span className="badge badge-red" style={{ fontSize: 9 }}>⛔ {r.reason}</span>)
+              : <span className="badge badge-indigo" style={{ fontSize: 9 }}>Refund / credit</span>}
+          />
+        )
+      })}
+      {!sorted.length && <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--txt2)', fontSize: 12 }}>{emptyText}</div>}
+      {edit && <TxnEditSheet txn={edit} onClose={() => setEdit(null)} />}
+    </>
+  )
+}
+
+function PaymentDetails({ card, s }) {
+  const { showNotification } = useStore()
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({ amount: '', date: format(new Date(), 'yyyy-MM-dd') })
+  const save = async () => {
+    try {
+      await recordPayment(card.id, form)
+      showNotification(`Payment of ${formatINR(form.amount)} recorded`, 'success')
+      setOpen(false); setForm({ amount: '', date: format(new Date(), 'yyyy-MM-dd') })
+    } catch (e) { showNotification(e.message, 'error') }
+  }
+  return (
+    <Section title="Payment details" right={<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }} onClick={() => setOpen(!open)}>{open ? 'Cancel' : '＋ Record payment'}</span>}>
+      <Row k="Paid this cycle" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.paidThisCycle)} color="var(--mint-dim)" bold />
+      {open && (
+        <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, margin: '6px 0 8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <input className="input" type="number" inputMode="decimal" placeholder="Amount paid (₹)" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+            <input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+          </div>
+          <button className="btn-primary" style={{ width: '100%', height: 38, fontSize: 13 }} onClick={save}>Save payment</button>
+        </div>
+      )}
+      <div className="divider" />
+      {s.payments.map(p => (
+        <div key={p.id} className="txn-row">
+          <div className="txn-icon" style={{ background: 'var(--mint-bg)', color: 'var(--mint-dim)' }}>✓</div>
+          <div className="txn-mid">
+            <div className="txn-merchant">Payment received</div>
+            <div className="txn-meta">{fmtD(p.date)} · {p.parsedBy === 'manual' ? 'Added by you' : 'From SMS'}</div>
+          </div>
+          <div className="txn-amt"><div className="amt-credit">{formatINR(p.amount)}</div></div>
+          {p.parsedBy === 'manual' && (
+            <div title="Remove" style={{ cursor: 'pointer', color: 'var(--txt3)', padding: 6 }} onClick={async () => { await removePayment(p.id); showNotification('Payment removed', 'success') }}>✕</div>
+          )}
+        </div>
+      ))}
+      {!s.payments.length && <div style={{ textAlign: 'center', padding: '10px 0', color: 'var(--txt2)', fontSize: 12 }}>No payments recorded yet. Payment SMS from your bank are added automatically.</div>}
+    </Section>
+  )
+}
+
+function Detail({ card, cards, txns, onBack }) {
+  const [editOpen, setEditOpen] = useState(false)
+  const credit = isCredit(card)
+  const s = cardStats(card, txns)
+  const st = STATUS[s.status]
+  const shared = groupOf(card, cards).filter(c => c.id !== card.id)
+  const monthStart = startOfMonth(new Date())
+  const spends = txns.filter(t => !isCardPayment(t))
+  const spentMonth = spends.filter(t => t.type === 'debit' && new Date(t.date) >= monthStart).reduce((a, t) => a + t.amount, 0)
+  const cb = txns.filter(t => t.type === 'credit' && t.category === 'Cashback')
+  const cbMonth = cb.filter(t => new Date(t.date) >= monthStart).reduce((a, t) => a + t.amount, 0)
+  const cbAll = cb.reduce((a, t) => a + t.amount, 0)
+  const cycleLine = s.dates.statementDate ? `monthly on the ${ordinal(Number(card.billingCycleDate))}` : undefined
+  const exclusions = excludedFor(card)
+
+  return (
+    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
+      <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div onClick={onBack} style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={19} /></div>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</div>
+        <button className="btn-secondary" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setEditOpen(true)}><Pencil size={13} /> Edit</button>
       </div>
 
-      <div style={{ padding: '4px 16px 0' }}>
-        {card?.cardType === 'unknown' && (
+      <div style={{ padding: '0 16px' }}>
+        {card.cardType === 'unknown' && (
           <div className="card" style={{ marginBottom: 12, padding: '10px 14px', borderColor: 'var(--amber-border)', background: 'var(--amber-bg)' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber-dim)' }}>Is this a credit or debit card?</div>
-            <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 8px' }}>The SMS didn't say. Until you choose, its spends are listed but no credit balance is tracked.</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber-dim)' }}>Is this a credit or a debit card?</div>
+            <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 8px' }}>The SMS didn't say. Until you choose, its spends are listed but no balance is tracked.</div>
             <button className="btn-secondary" style={{ height: 34 }} onClick={() => setEditOpen(true)}>Choose card type</button>
           </div>
         )}
 
-        {/* Cashback & rewards panel */}
-        {card && isCreditCard && (
-          <div className="card" style={{ marginBottom: 12, padding: '10px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="stat-icon" style={{ background: 'var(--pink-bg)', color: 'var(--pink)' }}><Gift size={15} /></div>
-              <div style={{ flex: 1, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>Cashback &amp; Rewards</div>
-              <div style={{ textAlign: 'right' }}>
-                <div className="label-caps">This month</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--mint-dim)' }}>{formatINR(cbMonth)}</div>
-              </div>
-              <div style={{ textAlign: 'right', marginLeft: 8 }}>
-                <div className="label-caps">All-time</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--mint-dim)' }}>{formatINR(cbAll)}</div>
-              </div>
+        {/* Card */}
+        <div className="cc-visual" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 17, background: 'rgba(232,210,154,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8D29A' }}><CreditCard size={18} /></div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{card.name}</div>
+              <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.bank} •• {card.cardLast4}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#E8D29A' }}>{networkLabel(card) || typeLabel(card)}</div>
+              <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{[networkLabel(card) ? typeLabel(card) : '', card.partner].filter(Boolean).join(' · ')}</div>
             </div>
           </div>
-        )}
 
-        {/* Active card */}
-        {card && (
-          <div className="cc-visual" style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 17, background: 'rgba(232,210,154,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8D29A' }}><CreditCard size={18} /></div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{card.name}</div>
-                <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.bank} •• {card.cardLast4}</div>
+          {credit ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                <div>
+                  <div className="label-caps">Total outstanding</div>
+                  <div style={{ fontSize: 24, fontWeight: 800 }}>{formatINR(s.outstanding)}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="label-caps">Due date</div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{s.dates.dueDate ? fmtD(s.dates.dueDate) : '—'}</div>
+                </div>
               </div>
-              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#E8D29A' }}>{networkLabel(card) || typeLabel(card)}</div>
-                <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{[networkLabel(card) ? typeLabel(card) : '', card.partner].filter(Boolean).join(' · ')}</div>
-              </div>
-            </div>
-
-            {!isCreditCard && (
-              <>
-                <div className="label-caps">Spent this month</div>
-                <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 10 }}>{formatINR(spendThisMonth)}</div>
-                <button className="btn-secondary" style={{ height: 34 }} onClick={() => setEditOpen(true)}>Edit card</button>
-              </>
-            )}
-
-            {isCreditCard && (
-              <>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-              <div>
-                <div className="label-caps">Outstanding</div>
-                <div style={{ fontSize: 22, fontWeight: 800 }}>{formatINR(card.currentBalance || 0)}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div className="label-caps">Due date</div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{dates.dueDate ? fmtD(dates.dueDate) : '—'}</div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--txt2)', marginBottom: 4 }}>
-              <span className="label-caps">Utilization</span><span style={{ fontWeight: 700 }}>{utilPct}% of {formatINR(limit)}</span>
-            </div>
-            <ProgressBar pct={utilPct} variant={utilPct >= 70 ? 'red' : utilPct >= 40 ? 'amber' : 'mint'} />
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Fee structure */}
-        {card && isCreditCard && (
-          <div className="card" style={{ marginBottom: 12 }}>
-            <div className="section-hdr" style={{ marginBottom: 4 }}>
-              <div className="label-caps">Fee Structure</div>
-              <span className={`badge ${card.isLTF ? 'badge-mint' : 'badge-amber'}`}>{card.isLTF ? 'Lifetime Free' : `${formatINR(card.totalAnnualFee || 0)} / Yr`}</span>
-            </div>
-            {!card.isLTF && card.feeWaiverThreshold > 0 && (
-              <>
-                <Row k="Fee waiver spend" v={`${formatINR(spentThisYear)} / ${formatINR(card.feeWaiverThreshold)}`} />
-                <ProgressBar pct={(spentThisYear / card.feeWaiverThreshold) * 100} variant="gradient" style={{ marginBottom: 4 }} />
-              </>
-            )}
-            <Row k="Credit limit" v={formatINR(limit)} />
-            {sharedCards.length > 1 && (
-              <Row k="Shared with" v={sharedCards.filter(c => c.id !== card.id).map(c => `${c.name.split(' ')[0]} ••${c.cardLast4}`).join(', ')} />
-            )}
-            <Row k="Available credit" v={formatINR(card.availableCredit || 0)} color="var(--mint-dim)" />
-          </div>
-        )}
-
-        {/* Statement details */}
-        {card && isCreditCard && (
-          <div className="card" style={{ marginBottom: 12 }}>
-            <div className="label-caps" style={{ marginBottom: 4 }}>Statement Details</div>
-            <Row k="Statement date" v={dates.statementDate ? `${fmtD(dates.statementDate)} · monthly on the ${ordinal(Number(card.billingCycleDate))}` : 'Not set — tap Edit'} />
-            <Row k="Payment due date" v={dates.dueDate ? `${fmtD(dates.dueDate)} · ${card.paymentDueDays} days after` : '—'} />
-            {dates.nextStatementDate && <Row k="Next statement" v={`${fmtD(dates.nextStatementDate)} · due ${fmtD(dates.nextDueDate)}`} />}
-            <Row k="Status" v={isPaid ? 'Paid ✓' : 'Unpaid'} color={isPaid ? 'var(--mint-dim)' : 'var(--red-dim)'} />
-            <Row k="Current outstanding" v={formatINR(card.currentBalance || 0)} />
-            <Row k="Statement amount" v={formatINR(card.statementBalance || 0)} />
-            <Row k="Pending due" v={formatINR(isPaid ? 0 : (card.pendingDue ?? card.statementBalance ?? 0))} color={isPaid ? undefined : 'var(--red-dim)'} />
-            <Row k="Minimum due" v={formatINR(card.minimumDue || 0)} />
-            <Row k="Pending (unbilled) spends" v={formatINR(card.unbilled || 0)} />
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button className="btn-secondary" style={{ flex: 1, height: 38 }} onClick={() => setActiveTab(1)}>Details &amp; Limits</button>
-              <button className="btn-secondary" style={{ height: 38 }} onClick={() => setEditOpen(true)}>Edit</button>
-            </div>
-            {card.currentBalance > 0 && (
-              <button className="btn-primary" style={{ width: '100%', marginTop: 8, height: 42, fontSize: 13 }}
-                onClick={() => showNotification('Payment link would open here', 'info')}>
-                Pay {formatINR(card.currentBalance)} Now
-              </button>
-            )}
-          </div>
-        )}
-
-        {isCreditCard && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 2px 12px' }}>
-          <div className="label-caps">Total Outstanding</div>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>{formatINR(totalDue)}</div>
-        </div>}
-
-        {/* Tabs */}
-        <div className="tab-bar" style={{ marginLeft: 0, marginRight: 0, marginBottom: 12 }}>
-          {TABS.filter((_, i) => isCreditCard || i === 0).map((t, i) => (
-            <div key={t} className={`tab${activeTab === i ? ' active' : ''}`} onClick={() => setActiveTab(i)}>{t}</div>
-          ))}
+              {s.limit > 0 ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--txt2)', marginBottom: 4 }}>
+                    <span className="label-caps">Limit used {s.utilPct}%</span>
+                    <span style={{ fontWeight: 700 }}>{formatINR(s.available)} available of {formatINR(s.limit)}</span>
+                  </div>
+                  <ProgressBar pct={s.utilPct} variant={s.utilPct >= 70 ? 'red' : s.utilPct >= 40 ? 'amber' : 'mint'} />
+                </>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>Available credit {formatINR(s.available)} · set the limit in Edit</div>
+              )}
+              {shared.length > 0 && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--txt2)' }}>Limit shared with {shared.map(c => cardLabel(c)).join(', ')}</div>}
+            </>
+          ) : (
+            <>
+              <div className="label-caps">Spent this month</div>
+              <div style={{ fontSize: 24, fontWeight: 800 }}>{formatINR(spentMonth)}</div>
+            </>
+          )}
         </div>
 
-        {/* Tab: Transactions */}
-        {activeTab === 0 && (
-          <Card style={{ padding: '10px 14px', marginBottom: 10 }}>
-            <SectionHdr title="Card Transactions" right={<Badge variant="grey">{(allTxns || []).length} total</Badge>} />
-            {(allTxns || []).slice(0, 10).map(t => (
-              <TxnRow
-                key={t.id}
-                icon={getMerchantIcon(t.merchant)}
-                merchant={t.merchant}
-                meta={`${formatDate(t.date)} · ${t.category}`}
-                amount={t.amount}
-                isCredit={t.type === 'credit'}
-                badge={
-                  t.type === 'debit' ? (
-                    t.isExcluded
-                      ? <span className="badge badge-red" style={{ fontSize: 9 }}>⛔ Excl.</span>
-                      : <span className="badge badge-mint" style={{ fontSize: 9 }}>✅ Eligible</span>
-                  ) : <span className="badge badge-indigo" style={{ fontSize: 9 }}>Cashback</span>
-                }
-              />
-            ))}
-            {!(allTxns || []).length && (
-              <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--txt2)', fontSize: 12 }}>No transactions yet for this card</div>
-            )}
-          </Card>
-        )}
-
-        {/* Tab: Statement */}
-        {activeTab === 1 && (
-          <Card style={{ padding: '10px 14px', marginBottom: 10 }}>
-            <SectionHdr title="Statement History" right={<Badge variant="grey">Oct 2026</Badge>} />
-            {card && (
-              <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: 12, marginBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div><LabelCaps>Statement Due</LabelCaps><div className="mono-md" style={{ color: 'var(--red)' }}>{formatINR(card.statementBalance || 0)}</div></div>
-                  <div style={{ textAlign: 'right' }}><LabelCaps>Min Due</LabelCaps><div className="mono-md">{formatINR(card.minimumDue || 0)}</div></div>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--amber)', marginBottom: 8 }}>⚠ Due in {card.paymentDueDays} days</div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-primary" style={{ flex: 1, height: 36, fontSize: 12 }} onClick={() => showNotification('Marked as paid!', 'success')}>Mark Paid in Full</button>
-                  <button className="btn-secondary" style={{ fontSize: 11 }}>Pay Min</button>
-                </div>
-              </div>
-            )}
-            <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--txt2)', fontSize: 12 }}>Previous statements will appear here as SMS bills arrive.</div>
-          </Card>
-        )}
-
-        {/* Tab: Rewards */}
-        {activeTab === 2 && (
+        {credit && (
           <>
-            <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-              {REWARD_PERIODS.map((p, i) => (
-                <div key={p} onClick={() => setRewardPeriod(i)}
-                  style={{ flex: 1, textAlign: 'center', padding: '6px 4px', borderRadius: 8, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                    background: i === rewardPeriod ? 'var(--mint-bg)' : 'transparent',
-                    color: i === rewardPeriod ? 'var(--mint-dim)' : 'var(--txt2)',
-                    border: i === rewardPeriod ? '1px solid var(--mint-border)' : '1px solid var(--border2)' }}>{p}</div>
-              ))}
-            </div>
+            {/* Outstanding */}
+            <Section title="Outstanding details" right={<span className={`badge ${st.badge}`}>{st.label}</span>}>
+              <Row k="Billed amount still to pay" sub={s.billedIsEstimate && s.billed > 0 ? 'estimated from billed spends' : undefined} v={formatINR(s.pendingBilled)} color={s.pendingBilled > 0 ? 'var(--red-dim)' : 'var(--mint-dim)'} />
+              <Row k="Unbilled spends" sub={s.dates.statementDate ? `after ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} />
+              {Math.abs(s.other) >= 1 && <Row k="Other / adjustments" sub="interest, fees, older dues" v={formatINR(s.other)} />}
+              <div className="divider" />
+              <Row k="Total outstanding" v={formatINR(s.outstanding)} bold />
+            </Section>
 
-            <Card style={{ marginBottom: 8 }}>
-              <LabelCaps style={{ marginBottom: 8 }}>Rewards Earned — Last 6 Months</LabelCaps>
-              <ResponsiveContainer width="100%" height={120}>
-                <BarChart data={rewardChartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
-                  <XAxis dataKey="month" tick={{ fill: 'var(--txt2)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: 'var(--txt2)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(v) => `₹${v}`} contentStyle={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8, fontSize: 11 }} />
-                  <Bar dataKey="rewards" fill="var(--mint)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </Card>
+            {/* Billed */}
+            <Section title="Billed details">
+              <Row k="Statement date" sub={cycleLine} v={s.dates.statementDate ? fmtD(s.dates.statementDate) : 'Not set — tap Edit'} />
+              <Row k="Payment due date" sub={s.dates.dueDate ? `${card.paymentDueDays} days after statement` : undefined} v={s.dates.dueDate ? fmtD(s.dates.dueDate) : '—'} />
+              {s.dates.nextStatementDate && <Row k="Next statement" v={`${fmtD(s.dates.nextStatementDate)} · due ${fmtS(s.dates.nextDueDate)}`} />}
+              <div className="divider" />
+              <Row k="Billed amount" sub={s.billedIsEstimate ? (s.billed > 0 ? 'estimate, no statement SMS yet' : undefined) : 'from statement'} v={formatINR(s.billed)} bold />
+              <Row k="Paid so far" v={`− ${formatINR(s.paidThisCycle)}`} color="var(--mint-dim)" />
+              <Row k="Pending due" v={formatINR(s.pendingBilled)} color={s.pendingBilled > 0 ? 'var(--red-dim)' : 'var(--mint-dim)'} bold />
+              <Row k="Minimum due" v={formatINR(card.minimumDue || 0)} />
+            </Section>
 
-            {/* Cap utilisation */}
-            <Card style={{ marginBottom: 10 }}>
-              <LabelCaps style={{ marginBottom: 8 }}>Cap Utilisation — October 2026</LabelCaps>
-              {card?.rewardRules?.filter(r => r.cap > 0 && r.capPeriod === 'monthly').map((rule, i) => {
-                const used = 0
-                const pct = Math.round(used / rule.cap * 100)
-                return (
-                  <div key={i} style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
-                      <span style={{ color: 'var(--txt2)' }}>{rule.matchType === 'BASE' ? 'Base rate' : `${rule.targets?.slice(0, 2).join('/')} ${rule.rate * 100}%`} cap</span>
-                      <span className="mono-sm" style={{ color: pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--amber)' : 'var(--mint)' }}>
-                        {formatINR(used)} / {formatINR(rule.cap)}
-                      </span>
-                    </div>
-                    <ProgressBar pct={pct} variant={pct >= 90 ? 'red' : pct >= 70 ? 'amber' : 'mint'} />
-                    {pct >= 90 && <div style={{ fontSize: 10, color: 'var(--red)', marginTop: 2 }}>Cap nearly full — overflow earns {(rule.postCapRate || 0) * 100}%</div>}
-                  </div>
-                )
-              })}
-            </Card>
+            {/* Spend */}
+            <Section title="Spend details">
+              <Row k="Unbilled spends" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} bold />
+              <Row k="Billed in last statement" sub={s.prevStatement ? `${fmtS(s.prevStatement)} – ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.billedSpends)} />
+              <Row k="Spent this month" v={formatINR(spentMonth)} />
+              <div className="label-caps" style={{ margin: '10px 0 2px' }}>Unbilled · {s.unbilledTxns.length}</div>
+              <TxnList card={card} list={s.unbilledTxns} emptyText="No spends since the last statement" />
+              {s.dates.statementDate && (
+                <>
+                  <div className="label-caps" style={{ margin: '12px 0 2px' }}>Billed · {s.billedTxns.length}</div>
+                  <TxnList card={card} list={s.billedTxns} emptyText="No spends in the last statement period" />
+                </>
+              )}
+            </Section>
 
-            {/* Annual fee vs rewards */}
-            <Card style={{ marginBottom: 10 }}>
-              <LabelCaps style={{ marginBottom: 8 }}>Annual Economics</LabelCaps>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>Total Rewards YTD</div>
-                  <div className="mono-md" style={{ color: 'var(--mint)' }}>{formatINR(0)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>Annual Fee</div>
-                  <div className="mono-md" style={{ color: card?.isLTF ? 'var(--mint)' : 'var(--amber)' }}>
-                    {card?.isLTF ? '₹0 (LTF)' : formatINR(card?.totalAnnualFee || 0)}
-                  </div>
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>Net Benefit</div>
-                  <div className="mono-md" style={{ color: 'var(--mint)' }}>{formatINR(0 - (card?.isLTF ? 0 : card?.totalAnnualFee || 0))}</div>
-                </div>
-              </div>
-              {!card?.isLTF && <div style={{ marginTop: 8, padding: '6px 10px', background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 6, fontSize: 11, color: 'var(--amber-dim)' }}>⚠ Spend {formatINR(card?.feeWaiverThreshold - (card?.totalPaidThisYear || 0))} more to waive ₹{card?.totalAnnualFee} fee</div>}
-            </Card>
+            <PaymentDetails card={card} s={s} />
+
+            {/* Rewards & fees */}
+            <Section title="Rewards & fees" right={<Gift size={15} color="var(--pink)" />}>
+              <Row k="Cashback this month" v={formatINR(cbMonth)} color="var(--mint-dim)" />
+              <Row k="Cashback all-time" v={formatINR(cbAll)} color="var(--mint-dim)" />
+              {card.rewardPoints > 0 && <Row k="Reward points" v={card.rewardPoints.toLocaleString('en-IN')} />}
+              <Row k="No rewards on" v={exclusions.length ? exclusions.join(', ') : 'nothing excluded'} />
+              <div className="divider" />
+              <Row k="Annual fee" v={card.isLTF ? 'Lifetime free' : `${formatINR(card.totalAnnualFee || 0)} / yr`} />
+              {!card.isLTF && card.feeWaiverThreshold > 0 && <Row k="Fee waiver spend" v={`${formatINR(card.totalPaidThisYear || 0)} / ${formatINR(card.feeWaiverThreshold)}`} />}
+              {card.annualFeeDate && <Row k="Annual fee date" v={fmtD(card.annualFeeDate)} />}
+              {card.interestRate > 0 && <Row k="Interest rate" v={`${card.interestRate}% / month`} />}
+              {card.notes && <Row k="Notes" v={card.notes} />}
+            </Section>
           </>
         )}
 
-        {/* Tab: Analysis */}
-        {activeTab === 3 && (
-          <Card style={{ marginBottom: 10 }}>
-            <LabelCaps style={{ marginBottom: 8 }}>Smart Insights</LabelCaps>
-            <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--txt2)', fontSize: 12 }}>Insights will appear once you have card transactions.</div>
-          </Card>
+        {!credit && (
+          <Section title="Transactions">
+            <TxnList card={card} list={spends} emptyText="No transactions yet for this card" />
+          </Section>
         )}
-
-        <button className="btn-secondary" style={{ width: '100%', marginTop: 4, height: 40 }} onClick={() => showNotification('Card linking via SMS parser coming soon', 'info')}>
-          + Link Card via SMS Parser
-        </button>
       </div>
 
-      {editOpen && card && <CardEditSheet card={card} cards={cards} onClose={() => setEditOpen(false)} />}
+      {editOpen && <CardEditSheet card={card} cards={cards} onClose={() => setEditOpen(false)} />}
     </div>
   )
+}
+
+// ───────────────────────────── screen ─────────────────────────────
+
+export default function Cards() {
+  const [openId, setOpenId] = useState(null)
+  const cards = useLiveQuery(() => db.creditCards.toArray())
+  const allTxns = useLiveQuery(() => db.transactions.filter(t => t.cardId != null).toArray())
+  if (!cards || !allTxns) return <div style={{ padding: 20, color: 'var(--txt2)' }}>Loading...</div>
+
+  const byCard = {}
+  for (const t of allTxns) (byCard[t.cardId] ||= []).push(t)
+  const card = cards.find(c => c.id === openId)
+
+  if (card) return <Detail card={card} cards={cards} txns={byCard[card.id] || []} onBack={() => setOpenId(null)} />
+  return <Portfolio cards={cards} byCard={byCard} onOpen={setOpenId} />
 }

@@ -5,7 +5,7 @@ import { useStore } from '../store'
 import { saveCardEdit, groupOf } from '../lib/cards'
 import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import { BtnPrimary } from './UI'
-import { CARD_TYPES, BANKS, NETWORKS, CARD_NAMES, PARTNERS, variantsFor } from '../lib/cardCatalog'
+import { CARD_TYPES, BANKS, NETWORKS, CARD_NAMES, PARTNERS, EXCLUSION_CATEGORIES, excludedFor, variantsFor } from '../lib/cardCatalog'
 
 const dateStr = d => (d ? format(new Date(d), 'yyyy-MM-dd') : '')
 const fmt = d => (d ? format(d, 'd MMM yyyy') : '—')
@@ -35,20 +35,12 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
     minimumDue: str(card.minimumDue), unbilled: str(card.unbilled), currentBalance: str(card.currentBalance),
     billingCycleDate: card.cycleSet ? str(card.billingCycleDate) : '', paymentDueDays: card.cycleSet ? str(card.paymentDueDays) : '',
     status: isStatementPaid(card) ? 'paid' : 'pending',
+    excludedCategories: excludedFor(card),
     annualFeeDate: dateStr(card.annualFeeDate), interestRate: str(card.interestRate), rewardPoints: str(card.rewardPoints), notes: card.notes || '',
     totalAnnualFee: str(card.totalAnnualFee), feeWaiverThreshold: str(card.feeWaiverThreshold),
   })
   const isCredit = form.cardType === 'credit'
-  const [outTouched, setOutTouched] = useState(card.currentBalance > 0 && (card.currentBalance !== (card.pendingDue ?? card.statementBalance ?? 0) + (card.unbilled || 0)))
-  const set = k => e => {
-    const next = { ...form, [k]: e.target.value }
-    if (!outTouched && (k === 'pendingDue' || k === 'unbilled')) {
-      const sum = (Number(next.pendingDue) || 0) + (Number(next.unbilled) || 0)
-      next.currentBalance = sum ? String(sum) : ''
-    }
-    if (k === 'currentBalance') setOutTouched(true)
-    setForm(next)
-  }
+  const set = k => e => setForm({ ...form, [k]: e.target.value })
   const preview = cycleDates({ cycleSet: Number(form.billingCycleDate) >= 1, billingCycleDate: form.billingCycleDate, paymentDueDays: form.paymentDueDays })
   const num = k => ({ className: 'input', type: 'number', inputMode: 'decimal', value: form[k], onChange: set(k) })
 
@@ -152,9 +144,8 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <Field label="Current outstanding (₹)"><input {...num('currentBalance')} /></Field>
             <Field label="Statement amount (₹)"><input {...num('statementBalance')} /></Field>
-            <Field label="Pending due (₹)"><input {...num('pendingDue')} /></Field>
             <Field label="Minimum due (₹)"><input {...num('minimumDue')} /></Field>
-            <Field label="Unbilled spends (₹)"><input {...num('unbilled')} /></Field>
+            <Field label="Unbilled spends (₹) — used only if statement day is not set"><input {...num('unbilled')} /></Field>
             <Field label="Reward points"><input {...num('rewardPoints')} /></Field>
           </div>
           <Field label="Statement status">
@@ -170,6 +161,21 @@ export default function CardEditSheet({ card, cards, statement, onClose }) {
               Use these billing-cycle, status and amount details for all cards sharing this limit
             </label>
           )}
+
+          <div className="label-caps" style={{ marginTop: 6, color: 'var(--gold-dim)' }}>Reward exclusions</div>
+          <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: -4 }}>
+            Spends in ticked categories don't earn cashback / points on this card. Start from the common list and match it to your card's terms.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {EXCLUSION_CATEGORIES.map(c => {
+              const on = form.excludedCategories.includes(c)
+              return (
+                <div key={c} className={`chip${on ? ' active' : ''}`} onClick={() => setForm({ ...form, excludedCategories: on ? form.excludedCategories.filter(x => x !== c) : [...form.excludedCategories, c] })}>
+                  {on ? '⛔ ' : ''}{c}
+                </div>
+              )
+            })}
+          </div>
 
           <div className="label-caps" style={{ marginTop: 6, color: 'var(--gold-dim)' }}>Fees</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>

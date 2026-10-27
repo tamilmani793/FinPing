@@ -72,7 +72,7 @@ function extractCardLast4(text) {
 
 // "Avl Limit Rs.48,701.00" -> 48701
 export function extractAvailableLimit(text) {
-  const m = text.match(/(?:avl|avail(?:able)?)\.?\s*(?:credit\s*)?(?:limit|lmt|bal(?:ance)?)\s*[:\-]?\s*(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i)
+  const m = text.match(/(?:avl|avail(?:able)?)\.?\s*(?:credit\s*)?(?:limit|lmt|bal(?:ance)?)\s*(?:is|of)?\s*[:\-]?\s*(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i)
   return m ? parseFloat(m[1].replace(/,/g, '')) : null
 }
 
@@ -83,11 +83,12 @@ function extractAccountLast4(text) {
 
 function extractBank(text) {
   const banks = [
-    [/\bHDFC\b/, 'HDFC Bank'], [/\bICICI\b/, 'ICICI Bank'], [/\bSBI\b|STATE BANK/, 'State Bank of India'],
-    [/\bAXIS\b/, 'Axis Bank'], [/\bHSBC\b/, 'HSBC'], [/\bSLICE\b/, 'Slice'], [/\bKOTAK\b/, 'Kotak Bank'],
-    [/\bYES BANK\b/, 'Yes Bank'], [/\bIDFC\b/, 'IDFC First Bank'], [/\bAU (?:SMALL|BANK)|\bAU SFB\b/, 'AU Small Finance Bank'],
-    [/\bINDUSIND\b/, 'IndusInd Bank'], [/\bPNB\b|PUNJAB NATIONAL/, 'PNB'], [/\bBOB\b|BANK OF BARODA/, 'Bank of Baroda'],
-    [/\bCANARA\b/, 'Canara Bank'], [/\bRBL\b/, 'RBL Bank'], [/\bAMEX\b|AMERICAN EXPRESS/, 'American Express'],
+    // Bank names often arrive glued to other words (HDFCBANK, SBICARD, ICICIBK), so only the start is anchored.
+    [/\bHDFC/, 'HDFC Bank'], [/\bICICI/, 'ICICI Bank'], [/\bSBI|STATE BANK/, 'State Bank of India'],
+    [/\bAXIS/, 'Axis Bank'], [/\bHSBC/, 'HSBC'], [/\bSLICE\b/, 'Slice'], [/\bKOTAK/, 'Kotak Bank'],
+    [/\bYES BANK\b/, 'Yes Bank'], [/\bIDFC/, 'IDFC First Bank'], [/\bAU (?:SMALL|BANK)|\bAU SFB\b/, 'AU Small Finance Bank'],
+    [/\bINDUSIND/, 'IndusInd Bank'], [/\bPNB\b|PUNJAB NATIONAL/, 'PNB'], [/\bBOB\b|BANK OF BARODA/, 'Bank of Baroda'],
+    [/\bCANARA/, 'Canara Bank'], [/\bRBL/, 'RBL Bank'], [/\bAMEX\b|AMERICAN EXPRESS/, 'American Express'],
     [/STANDARD CHARTERED|\bSCB\b/, 'Standard Chartered'], [/\bFEDERAL BANK\b/, 'Federal Bank'],
   ]
   const upper = text.toUpperCase()
@@ -105,6 +106,11 @@ function classifyCategory(merchant, text) {
   }
   // Fallback keyword match on full SMS
   const smsLower = text.toLowerCase()
+  // Categories that card reward programmes commonly exclude.
+  if (/wallet (?:load|top.?up)|add(?:ed)? money|freecharge|mobikwik|paytm wallet/.test(smsLower)) return 'Wallet Load'
+  if (/income tax|\bgst\b|challan|municipal|passport|e-?filing|govt|government/.test(smsLower)) return 'Government & Tax'
+  if (/school|college|university|tuition|byju|unacademy|education/.test(smsLower)) return 'Education'
+  if (/jewel|tanishq|malabar|kalyan|joyalukkas|\bgold\b/.test(smsLower)) return 'Jewellery & Gold'
   if (/rent|house|flat|pg/.test(smsLower)) return 'Rent'
   if (/emi|loan installment|equated/.test(smsLower)) return 'EMI'
   if (/insurance|premium|policy/.test(smsLower)) return 'Insurance'
@@ -153,7 +159,8 @@ function detectStatementSMS(text) {
   const lower = text.toLowerCase()
   if (/(statement|bill generated|total.*due|minimum.*due|payment due date|closing balance)/.test(lower)) {
     const totalDue = extractAmount(text.match(/total.*?(?:due|amount)[:\s]+([\d,]+\.?\d*)/i)?.[0] || text)
-    const minDue = extractAmount(text.match(/min.*?(?:due|amount)[:\s]+([\d,]+\.?\d*)/i)?.[0] || '')
+    const minMatch = text.match(/min(?:imum)?\.?\s*(?:amt|amount)?\.?\s*(?:due|payable)?[^\d]{0,14}([\d,]+(?:\.\d+)?)/i)
+    const minDue = minMatch ? parseFloat(minMatch[1].replace(/,/g, '')) : null
     const dueDateMatch = text.match(/due\s+date[:\s]+(\d{1,2}\s+\w+\s+\d{4}|\d{2}[-\/]\d{2}[-\/]\d{2,4})/i)
     return {
       type: 'statement',
@@ -169,10 +176,11 @@ function detectStatementSMS(text) {
 
 function detectPaymentReceivedSMS(text) {
   const lower = text.toLowerCase()
-  if (/(payment received|thank you for.*payment|amount paid|payment of.*received)/.test(lower)) {
+  if (/(payment received|thank you for.*payment|amount paid|payment of.*(?:received|credited)|received towards your .*card|payment .*(?:has been )?(?:received|credited) .*card)/.test(lower)) {
     return {
       type: 'payment_received',
       amount: extractAmount(text),
+      availableLimit: extractAvailableLimit(text),
       cardLast4: extractCardLast4(text),
       bank: extractBank(text),
     }

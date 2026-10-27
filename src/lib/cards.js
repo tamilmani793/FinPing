@@ -108,7 +108,8 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
   }
   const probe = { ...cycle, billingCycleDate: day }
   const key = cycleDates(probe).key || null
-  const status = { statusPaid: form.status === 'paid', statusCycle: key }
+  // statusPaid is only kept when the user explicitly marked it; the screen works it out from payments otherwise.
+  const status = { statusPaid: form.status === 'paid', statusCycle: key, ...(statementFields.statementBalance > 0 ? { statementCycleKey: key } : {}) }
   const targets = sameStatement ? [...chosen] : [cardId]
   for (const id of targets) await db.creditCards.update(id, { ...statementFields, ...cycle, ...status })
 
@@ -123,5 +124,37 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
     interestRate: num(form.interestRate),
     rewardPoints: num(form.rewardPoints),
     notes: form.notes || '',
+    ...(Array.isArray(form.excludedCategories) ? { excludedCategories: form.excludedCategories } : {}),
   })
+}
+
+// Records a payment made towards a credit card (for payments the SMS did not capture).
+// It reduces what is owed and frees up the limit; it is flagged excluded so it never counts as income.
+export async function recordPayment(cardId, { amount, date, notes = '' }) {
+  const amt = Number(amount)
+  if (!(amt > 0)) throw new Error('Enter the amount paid')
+  const card = await db.creditCards.get(cardId)
+  if (!card) throw new Error('Card not found')
+  await db.transactions.add({
+    date: date ? new Date(date) : new Date(), amount: amt, type: 'credit', merchant: 'Card payment', category: 'Card Payment',
+    paymentMode: 'Credit Card', bank: card.bank || '', accountLast4: card.cardLast4 || null, cardId,
+    rawSMS: null, parsedBy: 'manual', kind: 'card_payment', tags: [], notes, isExcluded: true, createdAt: new Date(),
+  })
+  await db.creditCards.update(cardId, {
+    currentBalance: Math.max(0, (card.currentBalance || 0) - amt),
+    pendingDue: Math.max(0, (card.pendingDue ?? card.statementBalance ?? 0) - amt),
+  })
+  await shiftAvailable(cardId, amt)
+}
+
+// Undoes a manually recorded payment.
+export async function removePayment(txnId) {
+  const t = await db.transactions.get(txnId)
+  if (!t) return
+  const card = t.cardId != null ? await db.creditCards.get(t.cardId) : null
+  if (card) {
+    await db.creditCards.update(card.id, { currentBalance: (card.currentBalance || 0) + t.amount })
+    await shiftAvailable(card.id, -t.amount)
+  }
+  await db.transactions.delete(txnId)
 }

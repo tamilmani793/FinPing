@@ -60,3 +60,12 @@ export const typeLabel = c => (c?.cardType === 'debit' ? 'Debit' : c?.cardType =
 
 // "Visa Signature" / "Mastercard" / ""
 export const networkLabel = c => [c?.network, c?.variant].filter(Boolean).join(' ')
+
+// Spends in these categories are commonly left out of cashback / reward points. The real list
+// differs per card, so each card keeps its own editable list; this is only the starting point.
+export const EXCLUSION_CATEGORIES = [
+  'Fuel', 'Rent', 'Utilities & Bills', 'Insurance', 'EMI', 'Wallet Load', 'Government & Tax',
+  'Education', 'Jewellery & Gold', 'Investment', 'UPI Scan & Pay',
+]
+export const DEFAULT_EXCLUSIONS = ['Fuel', 'Rent', 'Wallet Load', 'Government & Tax', 'Insurance', 'Jewellery & Gold']
+export const excludedFor = card => (Array.isArray(card?.excludedCategories) ? card.excludedCategories : DEFAULT_EXCLUSIONS)

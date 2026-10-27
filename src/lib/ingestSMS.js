@@ -47,6 +47,16 @@ async function adjustCard(card, delta, kind = 'spend') {
   await shiftAvailable(card.id, -delta) // a spend lowers the (possibly shared) available credit
 }
 
+// The bank's own "Available limit" is the source of truth for what is still available.
+async function applyBankLimit(cardId, availableLimit) {
+  if (availableLimit == null) return
+  const fresh = await db.creditCards.get(cardId)
+  await setLimitFields(fresh, { availableCredit: availableLimit })
+  const shared = groupOf(fresh, await db.creditCards.toArray()).length > 1
+  // A single card's balance can be derived from limit - available; a shared pool's cannot.
+  if (!shared && fresh.creditLimit > 0) await db.creditCards.update(cardId, { currentBalance: Math.max(0, fresh.creditLimit - availableLimit) })
+}
+
 // Parse one SMS and apply it to local data. Returns { status, message }.
 // meta = { address, date } with date in epoch ms. Safe to call twice for the same SMS.
 export async function ingestSMS(rawText, meta = {}) {
@@ -80,28 +90,31 @@ export async function ingestSMS(rawText, meta = {}) {
       // Only credit cards carry a balance / limit. Debit and not-yet-typed cards just collect their spends.
       if (card && isCredit(card) && !isCashback) {
         await adjustCard(card, type === 'debit' ? parsed.amount : -parsed.amount)
-        // The bank's own "Avl Limit" is the source of truth for what is still available.
-        if (parsed.availableLimit != null) {
-          const fresh = await db.creditCards.get(card.id)
-          await setLimitFields(fresh, { availableCredit: parsed.availableLimit })
-          const shared = groupOf(fresh, await db.creditCards.toArray()).length > 1
-          // A single card's balance can be derived from limit - available; a shared pool's cannot.
-          if (!shared && fresh.creditLimit > 0) await db.creditCards.update(card.id, { currentBalance: Math.max(0, fresh.creditLimit - parsed.availableLimit) })
-        }
+        await applyBankLimit(card.id, parsed.availableLimit)
       }
       await log('saved', 'transaction')
       return { status: 'success', message: `₹${parsed.amount} ${type === 'debit' ? 'spent at' : 'from'} ${parsed.merchant || 'Unknown'}` }
     }
     case 'payment_received': {
       const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed, 'credit') : null
-      if (card) await adjustCard(card, -(parsed.amount || 0), 'payment')
+      if (card) {
+        // Keep the payment as its own entry so the card's payment history can list it. It is flagged
+        // excluded so it never counts as income in the totals.
+        await db.transactions.add({
+          date: receivedAt, amount: parsed.amount || 0, type: 'credit', merchant: 'Card payment', category: 'Card Payment',
+          paymentMode: 'Credit Card', bank: parsed.bank || '', accountLast4: parsed.cardLast4 || null, cardId: card.id,
+          rawSMS: text, parsedBy: 'auto', kind: 'card_payment', tags: [], notes: '', isExcluded: true, createdAt: new Date(),
+        })
+        await adjustCard(card, -(parsed.amount || 0), 'payment')
+        await applyBankLimit(card.id, parsed.availableLimit)
+      }
       await log('saved', 'payment_received')
       return { status: 'success', message: `Card payment of ₹${parsed.amount} recorded` }
     }
     case 'statement': {
       const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed, 'credit') : null
       if (card) {
-        await db.creditCards.update(card.id, { statementBalance: parsed.totalDue || 0, pendingDue: parsed.totalDue || 0, unbilled: 0, currentBalance: parsed.totalDue || 0, minimumDue: parsed.minimumDue || 0, statusPaid: false, statusCycle: cycleDates(card).key || null })
+        await db.creditCards.update(card.id, { statementBalance: parsed.totalDue || 0, pendingDue: parsed.totalDue || 0, unbilled: 0, currentBalance: parsed.totalDue || 0, minimumDue: parsed.minimumDue || 0, statusPaid: false, statusCycle: cycleDates(card, receivedAt).key || null, statementCycleKey: cycleDates(card, receivedAt).key || null })
       }
       await log('saved', 'statement')
       return { status: 'success', message: `Statement: ₹${parsed.totalDue} due` }

@@ -44,7 +44,7 @@ export default function Expenses() {
   , [selectedMonth, selectedYear])
 
   const totalSpent = (transactions || []).filter(t => t.type === 'debit' && !t.isExcluded).reduce((s, t) => s + t.amount, 0)
-  const totalCredits = (transactions || []).filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0)
+  const totalCredits = (transactions || []).filter(t => t.type === 'credit' && !t.isExcluded).reduce((s, t) => s + t.amount, 0)
 
   // Group by category
   const catMap = {}
