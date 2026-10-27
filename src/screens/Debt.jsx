@@ -6,13 +6,16 @@ import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCap
 import { useStore } from '../store'
 import { parseSMS } from '../lib/smsParser'
 import PoliciesView from '../components/PoliciesView'
-import { exportDebtsToFile, buildDebtBackup, importDebts, addManualRepayment, undoRepayment } from '../lib/debtBackup'
+import { exportDebtsToFile, buildDebtBackup, importDebts, addManualRepayment, recordRepayment, recordReceipt, undoRepayment } from '../lib/debtBackup'
+import { dailyInterest, splitPayment, lastRepaymentDate } from '../lib/loanMath'
 
 const EMPTY_DEBT = {
   name: '', type: 'PersonalLoan', lender: '', principal: '', currentOutstanding: '',
   interestRate: '', emiAmount: '', emiDate: '', startDate: '', endDate: '', notes: '',
+  loanAccountNo: '', debitAccountId: '', // loan account number, and the bank account the EMI is debited from
 }
-const EMPTY_REPAY = { amount: '', principal: '', interest: '', date: format(new Date(), 'yyyy-MM-dd'), notes: '' }
+const EMPTY_REPAY = { amount: '', principal: '', interest: '', date: format(new Date(), 'yyyy-MM-dd'), notes: '', accountId: '' }
+const EMPTY_RECEIPT = { amount: '', date: format(new Date(), 'yyyy-MM-dd'), notes: '', accountId: '' }
 
 // id (kept stable for saved debts) · label shown in the dropdown · icon
 const DEBT_TYPES = [
@@ -51,15 +54,21 @@ export default function Debt() {
   const [expandedId, setExpandedId] = useState(null)
   const [repayFor, setRepayFor] = useState(null)
   const [repayForm, setRepayForm] = useState(EMPTY_REPAY)
+  const [receiveFor, setReceiveFor] = useState(null)
+  const [receiveForm, setReceiveForm] = useState(EMPTY_RECEIPT)
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
   const { showNotification, debtSegment, setDebtSegment } = useStore()
+  const accounts = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => c.cardType === 'account' && !c.draft)
+  const acctLabel = a => `${a.name}${a.cardLast4 && !a.name.includes('••') ? ` ••${a.cardLast4}` : ''}`
 
   const [editId, setEditId] = useState(null) // set while the form below is editing an existing debt
   const [form, setForm] = useState(EMPTY_DEBT)
 
   const debts = useLiveQuery(() => db.debts.toArray())
   const repayments = useLiveQuery(() => db.debtRepayments.orderBy('date').reverse().limit(20).toArray())
+  const allRepayments = useLiveQuery(() => db.debtRepayments.toArray()) || []
+  const lastPaid = debtId => lastRepaymentDate(allRepayments.filter(r => r.debtId === debtId))
 
   const active = (debts || []).filter(d => d.status === 'active')
   const totalOutstanding = active.reduce((s, d) => s + d.currentOutstanding, 0)
@@ -76,6 +85,7 @@ export default function Debt() {
       principal: String(d.principal ?? ''), currentOutstanding: String(d.currentOutstanding ?? ''),
       interestRate: d.interestRate ? String(d.interestRate) : '', emiAmount: d.emiAmount ? String(d.emiAmount) : '',
       emiDate: d.emiDate ? String(d.emiDate) : '', startDate: day(d.startDate), endDate: day(d.endDate), notes: d.notes || '',
+      loanAccountNo: d.loanAccountNo || d.accountRef || '', debitAccountId: d.debitAccountId != null ? String(d.debitAccountId) : '',
     })
     setEditId(d.id)
     setAddOpen(true)
@@ -91,13 +101,17 @@ export default function Debt() {
       name: form.name, type: form.type, lender: form.lender, principal, currentOutstanding: outstanding,
       interestRate: parseFloat(form.interestRate || 0), emiAmount: parseFloat(form.emiAmount || 0), emiDate: parseInt(form.emiDate || 0),
       startDate: form.startDate ? new Date(form.startDate) : new Date(), endDate: form.endDate ? new Date(form.endDate) : null, notes: form.notes,
+      loanAccountNo: form.loanAccountNo.trim(), debitAccountId: form.debitAccountId === '' ? null : Number(form.debitAccountId),
     }
     if (editId) {
-      await db.debts.update(editId, fields)
+      const before = await db.debts.get(editId)
+      // Changing the outstanding balance restarts the interest count from today.
+      const restart = before && Number(before.currentOutstanding) !== outstanding ? { interestFrom: new Date() } : {}
+      await db.debts.update(editId, { ...fields, ...restart })
       showNotification('Debt updated', 'success')
     } else {
-      // Anything already paid off before you started tracking counts as principal paid.
-      await db.debts.add({ ...fields, totalPaid: Math.max(0, principal - outstanding), totalInterestPaid: 0, status: 'active' })
+      // Anything already paid off before you started tracking counts as principal paid. Interest counts from today.
+      await db.debts.add({ ...fields, totalPaid: Math.max(0, principal - outstanding), totalInterestPaid: 0, status: 'active', interestFrom: new Date() })
       showNotification('Debt added!', 'success')
     }
     closeForm()
@@ -119,14 +133,10 @@ export default function Debt() {
 
   const handleLinkRepayment = async (debtId) => {
     if (!parsed) return
-    await db.debtRepayments.add({
-      debtId, date: new Date(), amount: parsed.amount || 0,
-      principal: parsed.amount || 0, interest: 0, source: 'sms', rawSMS: parsed.rawText, notes: '',
-    })
-    const debt = await db.debts.get(debtId)
-    if (debt) await db.debts.update(debtId, { currentOutstanding: Math.max(0, debt.currentOutstanding - (parsed.amount || 0)), totalPaid: (debt.totalPaid || 0) + (parsed.amount || 0) })
+    // Interest for the days since the last payment comes off first; the rest reduces the principal.
+    const r = await recordRepayment(debtId, { amount: parsed.amount || 0, date: new Date(), source: 'sms', rawSMS: parsed.rawText })
     setParsed(null); setSmsText(''); setMatchSMSOpen(false)
-    showNotification(`Repayment of ${formatINR(parsed.amount)} linked!`, 'success')
+    showNotification(`Repayment of ${formatINR(parsed.amount)} linked · interest ${formatINR(r.interest)}, principal ${formatINR(r.principal)}`, 'success')
   }
 
   const handleSaveRepay = async () => {
@@ -137,9 +147,17 @@ export default function Debt() {
     } catch (e) { showNotification(e.message, 'error') }
   }
 
+  const handleSaveReceipt = async () => {
+    try {
+      await recordReceipt(receiveFor, receiveForm)
+      showNotification(`Received ${formatINR(receiveForm.amount)} recorded`, 'success')
+      setReceiveFor(null); setReceiveForm(EMPTY_RECEIPT)
+    } catch (e) { showNotification(e.message, 'error') }
+  }
+
   const handleUndo = async (id) => {
     await undoRepayment(id)
-    showNotification('Repayment removed and principal restored', 'success')
+    showNotification('Entry removed and balances put back', 'success')
   }
 
   const handleExport = async () => {
@@ -248,9 +266,18 @@ export default function Debt() {
                 {DEBT_TYPES.map(([id, label, icon]) => <option key={id} value={id}>{icon} {label}</option>)}
               </select>
               <input className="input" placeholder="Lender name" value={form.lender} onChange={e => setForm({ ...form, lender: e.target.value })} />
+              <input className="input" placeholder="Loan account number" value={form.loanAccountNo} onChange={e => setForm({ ...form, loanAccountNo: e.target.value })} />
+              <div>
+                <LabelCaps style={{ marginBottom: 4 }}>EMI debited from</LabelCaps>
+                <select className="input" value={form.debitAccountId} onChange={e => setForm({ ...form, debitAccountId: e.target.value })}>
+                  <option value="">Not set</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{acctLabel(a)}{a.accountBalance != null ? ` · ${formatINR(a.accountBalance)}` : ''}</option>)}
+                </select>
+                {!accounts.length && <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 4 }}>Add your bank account under Accounts first, then pick it here.</div>}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <input className="input" type="number" placeholder="Principal (₹)" value={form.principal} onChange={e => setForm({ ...form, principal: e.target.value })} />
-                <input className="input" type="number" placeholder="Outstanding (₹)" value={form.currentOutstanding} onChange={e => setForm({ ...form, currentOutstanding: e.target.value })} />
+                <input className="input" type="number" placeholder="Still owed now (₹)" value={form.currentOutstanding} onChange={e => setForm({ ...form, currentOutstanding: e.target.value })} />
                 <input className="input" type="number" placeholder="Interest rate %" value={form.interestRate} onChange={e => setForm({ ...form, interestRate: e.target.value })} />
                 <input className="input" type="number" placeholder="EMI amount (₹)" value={form.emiAmount} onChange={e => setForm({ ...form, emiAmount: e.target.value })} />
               </div>
@@ -264,6 +291,16 @@ export default function Debt() {
                   Principal paid so far: <b style={{ color: 'var(--mint-dim)' }}>{formatINR(Math.max(0, Number(form.principal) - Number(form.currentOutstanding)))}</b> ({Math.max(0, Math.min(100, Math.round((1 - Number(form.currentOutstanding) / Number(form.principal)) * 100)))}%)
                 </div>
               )}
+              {Number(form.interestRate) > 0 && Number(form.emiAmount) > 0 && (() => {
+                // What one month's EMI looks like at this rate: daily interest on the balance, rest to principal.
+                const bal = form.currentOutstanding === '' ? Number(form.principal) : Number(form.currentOutstanding)
+                const sp = splitPayment({ currentOutstanding: bal, interestRate: Number(form.interestRate) }, Number(form.emiAmount), new Date(), null)
+                return (
+                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>
+                    Interest ≈ <b style={{ color: 'var(--txt)' }}>{formatINR(sp.perDay, 2)}/day</b>. A month's EMI of {formatINR(Number(form.emiAmount))} ≈ <b style={{ color: 'var(--red-dim)' }}>{formatINR(sp.interest)} interest</b> + <b style={{ color: 'var(--mint-dim)' }}>{formatINR(sp.principal)} principal</b>.
+                  </div>
+                )
+              })()}
               <input className="input" placeholder="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
               <div style={{ display: 'flex', gap: 6 }}>
                 <BtnPrimary onClick={handleSaveDebt} style={{ flex: 1, height: 36, fontSize: 12 }}>{editId ? 'Save changes' : 'Save Debt'}</BtnPrimary>
@@ -310,22 +347,23 @@ export default function Debt() {
                 <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--indigo-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
                   {DEBT_ICONS[d.type] || '💳'}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{d.name}</div>
-                    {d.accountRef && <span className="mono-xs" style={{ color: 'var(--txt2)' }}>{d.accountRef}</span>}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
-                    <Badge variant="grey" style={{ fontSize: 9 }}>{DEBT_LABELS[d.type] || d.type}</Badge>
-                    {d.emiAmount > 0 && <Badge variant="mint" style={{ fontSize: 9 }}>SMS Auto-Tracked</Badge>}
-                    {d.interestRate > 0 && <span className="mono-xs" style={{ color: 'var(--txt2)' }}>{d.interestRate}% p.a.</span>}
-                    {d.interestRate === 0 && <span style={{ fontSize: 10, color: 'var(--txt2)' }}>0% Interest</span>}
-                  </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[d.lender, (d.loanAccountNo || d.accountRef) && `A/c ${d.loanAccountNo || d.accountRef}`].filter(Boolean).join(' · ') || ' '}</div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <div className="mono-md">{formatINR(d.currentOutstanding)}</div>
                   <div style={{ fontSize: 10, color: 'var(--txt2)' }}>of {formatINR(d.principal)}</div>
                 </div>
+              </div>
+
+              {/* Tags sit under the title row and wrap, so a long list never pushes the amount out of the card */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <Badge variant="grey" style={{ fontSize: 9 }}>{DEBT_LABELS[d.type] || d.type}</Badge>
+                {d.emiAmount > 0 && <Badge variant="mint" style={{ fontSize: 9 }}>SMS Auto-Tracked</Badge>}
+                {d.interestRate > 0
+                  ? <span className="mono-xs" style={{ color: 'var(--txt2)' }}>{d.interestRate}% p.a. · {formatINR(dailyInterest(d), 2)}/day now</span>
+                  : <span style={{ fontSize: 10, color: 'var(--txt2)' }}>0% interest</span>}
               </div>
 
               <LabelCaps style={{ marginBottom: 4 }}>Principal Cleared</LabelCaps>
@@ -343,6 +381,27 @@ export default function Debt() {
                       EMI: <strong style={{ color: 'var(--txt)' }}>{formatINR(d.emiAmount)}</strong> due {d.emiDate}th of every month
                     </div>
                   )}
+                  {(d.loanAccountNo || d.accountRef || d.debitAccountId != null) && (
+                    <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8, lineHeight: 1.6 }}>
+                      {(d.loanAccountNo || d.accountRef) && <div>Loan account no.: <b style={{ color: 'var(--txt)' }}>{d.loanAccountNo || d.accountRef}</b></div>}
+                      {d.debitAccountId != null && (() => { const a = accounts.find(x => x.id === d.debitAccountId); return a ? <div>EMI debited from: <b style={{ color: 'var(--txt)' }}>{acctLabel(a)}</b>{a.accountBalance != null ? ` · balance ${formatINR(a.accountBalance)}` : ''}</div> : null })()}
+                    </div>
+                  )}
+                  {d.interestRate > 0 && (() => {
+                    // Interest runs daily on the outstanding balance; each payment clears the interest first, the rest is principal.
+                    const sp = splitPayment(d, d.emiAmount || 0, new Date(), lastPaid(d.id))
+                    return (
+                      <div style={{ background: 'var(--bg2)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--txt2)', lineHeight: 1.6 }}>
+                        <div>Interest per day today: <b style={{ color: 'var(--txt)' }}>{formatINR(sp.perDay, 2)}</b> — on the balance still owed ({formatINR(d.currentOutstanding)}, not the original {formatINR(d.principal)}) at {d.interestRate}% a year</div>
+                        {d.emiAmount > 0 && sp.principal > 0 && (
+                          <div>After the next EMI the balance is {formatINR(Math.max(0, d.currentOutstanding - sp.principal))}, so it falls to <b style={{ color: 'var(--mint-dim)' }}>{formatINR(Math.max(0, d.currentOutstanding - sp.principal) * d.interestRate / 100 / 365, 2)}/day</b></div>
+                        )}
+                        <div>Interest built up over {sp.days} day{sp.days === 1 ? '' : 's'}: <b style={{ color: 'var(--red-dim)' }}>{formatINR(sp.accrued, 2)}</b></div>
+                        {d.emiAmount > 0 && <div>Next EMI {formatINR(d.emiAmount)} ≈ <b style={{ color: 'var(--red-dim)' }}>{formatINR(sp.interest)} interest</b> + <b style={{ color: 'var(--mint-dim)' }}>{formatINR(sp.principal)} principal</b> (only the principal lowers your balance)</div>}
+                        {d.totalInterestPaid > 0 && <div>Interest paid so far: <b style={{ color: 'var(--txt)' }}>{formatINR(d.totalInterestPaid)}</b></div>}
+                      </div>
+                    )
+                  })()}
                   {d.notes && <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>{d.notes}</div>}
                   {repayFor === d.id && (
                     <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, marginBottom: 8 }}>
@@ -350,9 +409,22 @@ export default function Debt() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                         <input className="input" type="number" inputMode="decimal" placeholder="Amount paid (₹)" value={repayForm.amount} onChange={e => setRepayForm({ ...repayForm, amount: e.target.value })} />
                         <input className="input" type="date" value={repayForm.date} onChange={e => setRepayForm({ ...repayForm, date: e.target.value })} />
-                        <input className="input" type="number" inputMode="decimal" placeholder="Principal (₹) — blank = all" value={repayForm.principal} onChange={e => setRepayForm({ ...repayForm, principal: e.target.value })} />
-                        <input className="input" type="number" inputMode="decimal" placeholder="Interest (₹)" value={repayForm.interest} onChange={e => setRepayForm({ ...repayForm, interest: e.target.value })} />
+                        <input className="input" type="number" inputMode="decimal" placeholder={d.interestRate > 0 ? 'Principal (₹) — auto' : 'Principal (₹) — blank = all'} value={repayForm.principal} onChange={e => setRepayForm({ ...repayForm, principal: e.target.value })} />
+                        <input className="input" type="number" inputMode="decimal" placeholder={d.interestRate > 0 ? 'Interest (₹) — auto' : 'Interest (₹)'} value={repayForm.interest} onChange={e => setRepayForm({ ...repayForm, interest: e.target.value })} />
                       </div>
+                      {d.interestRate > 0 && Number(repayForm.amount) > 0 && repayForm.interest === '' && repayForm.principal === '' && (() => {
+                        const sp = splitPayment(d, Number(repayForm.amount), repayForm.date, lastPaid(d.id))
+                        return (
+                          <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>
+                            Split automatically for {sp.days} day{sp.days === 1 ? '' : 's'} of interest: <b style={{ color: 'var(--red-dim)' }}>{formatINR(sp.interest)} interest</b> + <b style={{ color: 'var(--mint-dim)' }}>{formatINR(sp.principal)} principal</b>. Type your own amounts to override.
+                          </div>
+                        )
+                      })()}
+                      <LabelCaps style={{ marginBottom: 4 }}>Debited from</LabelCaps>
+                      <select className="input" style={{ marginBottom: 8 }} value={repayForm.accountId} onChange={e => setRepayForm({ ...repayForm, accountId: e.target.value })}>
+                        <option value="">{d.debitAccountId != null && accounts.find(x => x.id === d.debitAccountId) ? `Loan's account (${acctLabel(accounts.find(x => x.id === d.debitAccountId))})` : 'No bank account'}</option>
+                        {accounts.map(a => <option key={a.id} value={a.id}>{acctLabel(a)}{a.accountBalance != null ? ` · ${formatINR(a.accountBalance)}` : ''}</option>)}
+                      </select>
                       <input className="input" placeholder="Note (optional)" style={{ marginBottom: 8 }} value={repayForm.notes} onChange={e => setRepayForm({ ...repayForm, notes: e.target.value })} />
                       <div style={{ display: 'flex', gap: 6 }}>
                         <BtnPrimary onClick={handleSaveRepay} style={{ flex: 1, height: 36, fontSize: 12 }}>Save payment</BtnPrimary>
@@ -360,8 +432,56 @@ export default function Debt() {
                       </div>
                     </div>
                   )}
+                  {receiveFor === d.id && (
+                    <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, marginBottom: 8 }}>
+                      <LabelCaps style={{ marginBottom: 6 }}>{d.type === 'FriendLent' ? 'Amount received back' : 'Amount received from lender'}</LabelCaps>
+                      <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>
+                        {d.type === 'FriendLent' ? 'It lowers what you are still owed and is added to the account it reached.' : 'A disbursal or top-up: it adds to what you owe and to the amount borrowed, and is added to the account it reached.'}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                        <input className="input" type="number" inputMode="decimal" placeholder="Amount received (₹)" value={receiveForm.amount} onChange={e => setReceiveForm({ ...receiveForm, amount: e.target.value })} />
+                        <input className="input" type="date" value={receiveForm.date} onChange={e => setReceiveForm({ ...receiveForm, date: e.target.value })} />
+                      </div>
+                      <LabelCaps style={{ marginBottom: 4 }}>Credited to</LabelCaps>
+                      <select className="input" style={{ marginBottom: 8 }} value={receiveForm.accountId} onChange={e => setReceiveForm({ ...receiveForm, accountId: e.target.value })}>
+                        <option value="">{d.debitAccountId != null && accounts.find(x => x.id === d.debitAccountId) ? `Loan's account (${acctLabel(accounts.find(x => x.id === d.debitAccountId))})` : 'No bank account'}</option>
+                        {accounts.map(a => <option key={a.id} value={a.id}>{acctLabel(a)}{a.accountBalance != null ? ` · ${formatINR(a.accountBalance)}` : ''}</option>)}
+                      </select>
+                      <input className="input" placeholder="Note (optional)" style={{ marginBottom: 8 }} value={receiveForm.notes} onChange={e => setReceiveForm({ ...receiveForm, notes: e.target.value })} />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <BtnPrimary onClick={handleSaveReceipt} style={{ flex: 1, height: 36, fontSize: 12 }}>Save received</BtnPrimary>
+                        <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => setReceiveFor(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* This loan's own transaction list: every payment made and every amount received */}
+                  <LabelCaps style={{ margin: '10px 0 2px' }}>Transactions · {allRepayments.filter(r => r.debtId === d.id).length}</LabelCaps>
+                  {[...allRepayments.filter(r => r.debtId === d.id)].sort((a, b) => new Date(b.date) - new Date(a.date)).map(r => {
+                    const incoming = r.direction === 'in'
+                    const from = r.accountId != null ? accounts.find(x => x.id === r.accountId) : null
+                    return (
+                      <div key={r.id} className="txn-row">
+                        <div className="txn-icon" style={{ background: incoming ? 'var(--mint-bg)' : 'var(--bg2)', color: incoming ? 'var(--mint-dim)' : 'var(--red-dim)', fontSize: 16 }}>{incoming ? '↓' : '↑'}</div>
+                        <div className="txn-mid">
+                          <div className="txn-merchant">{incoming ? (d.type === 'FriendLent' ? 'Received back' : 'Amount received') : 'EMI / payment'}</div>
+                          <div className="txn-meta">
+                            {formatDate(r.date)}
+                            {!incoming && r.interest > 0 ? ` · interest ${formatINR(r.interest)} + principal ${formatINR(r.principal)}` : ''}
+                            {from ? ` · ${incoming ? 'to' : 'from'} ${acctLabel(from)}` : ''}
+                            {r.source === 'sms' ? ' · SMS' : ''}
+                          </div>
+                        </div>
+                        <div className="txn-amt"><div className={incoming ? 'amt-credit' : 'amt-debit'}>{incoming ? '+' : '−'}{formatINR(r.amount)}</div></div>
+                        {r.source !== 'sms' && <div title="Remove" style={{ cursor: 'pointer', color: 'var(--txt3)', padding: 6 }} onClick={() => handleUndo(r.id)}>✕</div>}
+                      </div>
+                    )
+                  })}
+                  {!allRepayments.some(r => r.debtId === d.id) && <div style={{ fontSize: 12, color: 'var(--txt2)', padding: '8px 0 12px' }}>No payments or receipts recorded for this loan yet.</div>}
+                  <div style={{ height: 8 }} />
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                    <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setRepayFor(repayFor === d.id ? null : d.id); setRepayForm({ ...EMPTY_REPAY, amount: d.emiAmount > 0 ? String(d.emiAmount) : '' }) }}>＋ Add Payment</button>
+                    <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setReceiveFor(null); setRepayFor(repayFor === d.id ? null : d.id); setRepayForm({ ...EMPTY_REPAY, amount: d.emiAmount > 0 ? String(d.emiAmount) : '' }) }}>＋ Add Payment</button>
+                    <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setRepayFor(null); setReceiveFor(receiveFor === d.id ? null : d.id); setReceiveForm(EMPTY_RECEIPT) }}>↓ Amount received</button>
                     <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setSmsText(''); setMatchSMSOpen(true) }}>📲 Link SMS Debit</button>
                     <button className="btn-secondary" style={{ height: 32, fontSize: 11, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => openEdit(d)}>✎ Edit debt</button>
                     <button className="btn-ghost" style={{ height: 32, fontSize: 11 }} onClick={() => handleMarkClosed(d.id)}>Mark as Closed</button>
@@ -389,7 +509,7 @@ export default function Debt() {
                 </div>
                 <div className="txn-amt">
                   <div style={{ fontSize: 13, color: 'var(--red)', fontWeight: 700 }}>-{formatINR(r.amount)}</div>
-                  <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{r.interest > 0 ? `Principal ${formatINR(r.principal)}` : r.source === 'sms' ? 'AUTO-DEBIT' : 'MANUAL'}</div>
+                  <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{r.interest > 0 ? `Int ${formatINR(r.interest)} · Princ ${formatINR(r.principal)}` : r.source === 'sms' ? 'AUTO-DEBIT' : 'MANUAL'}</div>
                 </div>
                 {r.source !== 'sms' && (
                   <div onClick={() => handleUndo(r.id)} title="Remove and restore principal" style={{ marginLeft: 8, cursor: 'pointer', color: 'var(--txt3)', fontSize: 14, padding: 4 }}>✕</div>

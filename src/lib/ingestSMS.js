@@ -2,6 +2,8 @@ import { db } from '../db/schema'
 import { parseSMS, isCreditCardSMS, detectCardKind } from './smsParser'
 import { shiftAvailable, setLimitFields, groupOf } from './cards'
 import { cycleDates } from './cycle'
+import { recordRepayment } from './debtBackup'
+import { findDuplicate, mergeDuplicate } from './dedupe'
 
 // Finds the card by its last four digits (preferring the same bank), or creates it.
 // kind = what the SMS says: 'credit' | 'debit' | 'unknown'. Once a card exists, the type the
@@ -108,6 +110,19 @@ export async function ingestSMS(rawText, meta = {}) {
       // No card mentioned, only an account number: it is a bank account (savings / current), not a card.
       if (!card && parsed.accountLast4) card = await findOrCreateCard({ ...parsed, cardLast4: parsed.accountLast4 }, 'account')
       const type = isCashback ? 'credit' : (parsed.transactionType || 'debit')
+
+      // The bank may send two different SMS for one transaction. Keep a single entry, fill in anything the
+      // first one lacked, and don't move any balance a second time.
+      const dup = isCashback ? null : await findDuplicate({ date: receivedAt, amount: parsed.amount, type, merchant: parsed.merchant, accountLast4: parsed.accountLast4 || parsed.cardLast4 })
+      if (dup) {
+        await mergeDuplicate(dup, { merchant: parsed.merchant, category: parsed.category, bank: parsed.bank, accountLast4: parsed.accountLast4 || parsed.cardLast4, cardId: card ? card.id : null }, text)
+        // Figures the bank reports as absolute ("Avl Bal", "Avl Limit") are still safe to take from the second SMS.
+        if (card && card.cardType === 'account' && parsed.availableLimit != null) await db.creditCards.update(card.id, { accountBalance: parsed.availableLimit })
+        if (card && isCredit(card)) await applyBankLimit(card.id, parsed.availableLimit)
+        await log('duplicate', 'transaction')
+        return { status: 'duplicate', message: `₹${parsed.amount} — same transaction as an earlier SMS` }
+      }
+
       await db.transactions.add({
         date: receivedAt, amount: parsed.amount || 0, type,
         merchant: isCashback ? 'Cashback Credit' : (parsed.merchant || 'Unknown'),
@@ -132,6 +147,14 @@ export async function ingestSMS(rawText, meta = {}) {
     }
     case 'payment_received': {
       const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed, 'credit') : null
+      // A payment is often confirmed twice (once when received, once when posted). Same card + amount within a day = one payment.
+      const alreadyPaid = card && await db.transactions.where('cardId').equals(card.id)
+        .filter(t => t.kind === 'card_payment' && Math.abs(t.amount - (parsed.amount || 0)) < 0.01 && Math.abs(new Date(t.date) - receivedAt) < 24 * 60 * 60 * 1000).first()
+      if (alreadyPaid) {
+        await applyBankLimit(card.id, parsed.availableLimit)
+        await log('duplicate', 'payment_received')
+        return { status: 'duplicate', message: 'Card payment already recorded' }
+      }
       if (card) {
         // Keep the payment as its own entry so the card's payment history can list it. It is flagged
         // excluded so it never counts as income in the totals.
@@ -156,14 +179,22 @@ export async function ingestSMS(rawText, meta = {}) {
     }
     case 'emi': {
       const debts = await db.debts.where('status').equals('active').toArray()
-      const debt = debts.find(d => d.emiAmount && Math.abs(d.emiAmount - parsed.amount) < 1 &&
-        (!parsed.bank || (d.lender || '').toLowerCase().includes(parsed.bank.split(' ')[0].toLowerCase())))
+      // The loan account number in the SMS is the surest match; otherwise EMI amount + lender.
+      const flat = s => String(s || '').replace(/[\s\-]/g, '').toLowerCase()
+      const haystack = flat(text)
+      const bank = (parsed.bank || '').toLowerCase()
+      const sameLender = d => {
+        const l = (d.lender || '').toLowerCase()
+        if (!bank || bank === 'unknown bank') return true
+        return l.includes(bank.split(' ')[0]) || (bank.startsWith('state bank') && l.includes('sbi'))
+      }
+      // Banks mask or shorten account numbers (XX778899), so the last digits are what is compared.
+      const tail = d => flat(d.loanAccountNo).slice(-6)
+      const debt = debts.find(d => d.loanAccountNo && tail(d).length >= 4 && haystack.includes(tail(d)))
+        || debts.find(d => d.emiAmount && Math.abs(d.emiAmount - parsed.amount) < 1 && sameLender(d))
       if (debt) {
-        await db.debtRepayments.add({ debtId: debt.id, date: receivedAt, amount: parsed.amount, principal: parsed.amount, interest: 0, source: 'sms', rawSMS: text, notes: '' })
-        await db.debts.update(debt.id, {
-          currentOutstanding: Math.max(0, debt.currentOutstanding - parsed.amount),
-          totalPaid: (debt.totalPaid || 0) + parsed.amount,
-        })
+        // Interest for the days since the last payment comes off first; only the rest lowers the principal.
+        await recordRepayment(debt.id, { amount: parsed.amount, date: receivedAt, source: 'sms', rawSMS: text })
         await log('saved', 'emi')
         return { status: 'success', message: `EMI ₹${parsed.amount} applied to ${debt.name}` }
       }

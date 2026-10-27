@@ -7,6 +7,7 @@ import { getUserName, setUserName } from '../lib/profile'
 import { exportBackup, copyBackup, inspectBackup, restoreBackup, lastBackupAt } from '../lib/backup'
 import { format } from 'date-fns'
 import { relinkTransactions } from '../lib/relink'
+import { removeDuplicateTransactions } from '../lib/dedupeCleanup'
 
 function Row({ Icon, title, sub, onClick, right }) {
   return (
@@ -110,6 +111,15 @@ export default function Settings() {
             try { const n = await relinkTransactions(); showNotification(n ? `${n} transactions linked` : 'Nothing to link — all transactions are already tied to a card or account', 'success') }
             catch (e) { showNotification('Could not link: ' + e.message, 'error') }
           }}>Link unlinked transactions</button>
+
+          <div style={{ fontSize: 14, fontWeight: 700, marginTop: 16 }}>Duplicate transactions</div>
+          <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 10px' }}>
+            When a bank sends two SMS for one payment you get two entries. This keeps one, and takes the extra one's effect off your card or account balance. New SMS are checked automatically.
+          </div>
+          <button className="btn-secondary" style={{ width: '100%', height: 40 }} onClick={async () => {
+            try { const n = await removeDuplicateTransactions(); showNotification(n ? `${n} duplicate${n === 1 ? '' : 's'} removed` : 'No duplicates found', 'success') }
+            catch (e) { showNotification('Could not clean up: ' + e.message, 'error') }
+          }}>Remove duplicate transactions</button>
         </div>
 
         <div className="card" style={{ marginBottom: 14, paddingTop: 4, paddingBottom: 4 }}>

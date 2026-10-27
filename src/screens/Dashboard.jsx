@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import EmiSheet, { useMonthlyEmi } from '../components/EmiSheet'
 import TxnDetailSheet from '../components/TxnDetailSheet'
+import CardDuesSheet, { useCardDues } from '../components/CardDuesSheet'
 import { SmsPermissionCard } from '../components/SmsSync'
 import { cardStats } from '../lib/cardStats'
 import { startOfMonth, subMonths, format } from 'date-fns'
@@ -74,7 +75,9 @@ export default function Dashboard() {
   const bills = cur.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
   const prevBills = prev.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
   const invested = investments.reduce((s, i) => s + (i.investedAmount || 0), 0)
-  const cardDue = cards.reduce((s, c) => s + (c.currentBalance || 0), 0)
+  // Card dues = billed amounts still unpaid across credit cards (same figures as the Accounts screen)
+  const { rows: dueRows, totalDue: cardDue, owingCount } = useCardDues()
+  const [duesOpen, setDuesOpen] = useState(false)
   // Monthly EMI = loan EMIs + insurance premiums (spread over their payment period)
   const { loans: emiLoans, policies: emiPolicies, total: emi } = useMonthlyEmi()
   const [emiOpen, setEmiOpen] = useState(false)
@@ -125,7 +128,7 @@ export default function Dashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           <Tile Icon={PiggyBank} tone="blue" label={`${mon} Invest`} value={formatINR(invested)} onClick={() => setActiveTab('wealth')} />
           <Tile Icon={Receipt} tone="gold" label={`${mon} Bills`} value={formatINR(bills)} extra={<Delta cur={bills} prev={prevBills} goodWhenUp={false} />} />
-          <Tile Icon={CreditCard} tone="red" label="Card Dues" value={formatINR(cardDue)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{cards.length} card{cards.length === 1 ? '' : 's'}</span>} onClick={() => setActiveTab('cards')} />
+          <Tile Icon={CreditCard} tone="red" label="Card Dues" value={formatINR(cardDue)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{owingCount} of {dueRows.length} card{dueRows.length === 1 ? '' : 's'} owing · tap for list</span>} onClick={() => setDuesOpen(true)} />
           <Tile Icon={Landmark} tone="orange" label="Monthly EMI" value={formatINR(emi)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{emiLoans.length} loan{emiLoans.length === 1 ? '' : 's'} · {emiPolicies.length} polic{emiPolicies.length === 1 ? 'y' : 'ies'} · tap for list</span>} onClick={() => setEmiOpen(true)} />
         </div>
 
@@ -182,6 +185,7 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      {duesOpen && <CardDuesSheet onClose={() => setDuesOpen(false)} />}
       {emiOpen && <EmiSheet onClose={() => setEmiOpen(false)} />}
       {detailTxn && <TxnDetailSheet txn={detailTxn} onClose={() => setDetailTxn(null)} />}
     </div>

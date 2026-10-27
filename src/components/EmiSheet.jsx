@@ -5,6 +5,7 @@ import { db } from '../db/schema'
 import { useStore } from '../store'
 import { formatINR } from './UI'
 import { isLive, monthlyEquivalent, freqLabel } from '../lib/policies'
+import { splitPayment, lastRepaymentDate } from '../lib/loanMath'
 
 const fmt = d => (d ? format(new Date(d), 'd MMM') : '—')
 
@@ -61,6 +62,7 @@ function Item({ icon, title, sub, amount, amountSub, onClick }) {
 export default function EmiSheet({ onClose }) {
   const { setActiveTab, setDebtSegment } = useStore()
   const { loans, policies, loanTotal, policyTotal, total } = useMonthlyEmi()
+  const repayments = useLiveQuery(() => db.debtRepayments.toArray()) || []
   const go = seg => { setDebtSegment(seg); setActiveTab('debt'); onClose() }
 
   return (
@@ -72,12 +74,19 @@ export default function EmiSheet({ onClose }) {
         <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 14 }}>Loan EMIs plus insurance premiums. A yearly or quarterly premium is spread over the months.</div>
 
         <Group title={`Loans · ${loans.length}`} total={`${formatINR(loanTotal)} / mo`}>
-          {loans.map(d => (
-            <Item key={d.id} icon={<Landmark size={17} />} onClick={() => go('loans')}
-              title={d.name}
-              sub={`${[d.lender, d.emiDate ? `EMI on the ${d.emiDate}th` : null].filter(Boolean).join(' · ')}${d.emiDate ? ` · next ${fmt(nextEmiDate(d.emiDate))}` : ''}`}
-              amount={formatINR(d.emiAmount)} amountSub={`${formatINR(d.currentOutstanding)} left`} />
-          ))}
+          {loans.map(d => {
+            // The EMI is interest (daily, on the balance) + principal; only the principal lowers what is left.
+            const due = nextEmiDate(d.emiDate)
+            const sp = d.interestRate > 0 ? splitPayment(d, d.emiAmount, due || new Date(), lastRepaymentDate(repayments.filter(r => r.debtId === d.id))) : null
+            return (
+              <Item key={d.id} icon={<Landmark size={17} />} onClick={() => go('loans')}
+                title={d.name}
+                sub={sp
+                  ? <>{[d.lender, due ? `next ${fmt(due)}` : null].filter(Boolean).join(' · ')}<br /><span style={{ color: 'var(--red-dim)' }}>{formatINR(sp.interest)} interest</span> + <span style={{ color: 'var(--mint-dim)' }}>{formatINR(sp.principal)} principal</span></>
+                  : `${[d.lender, d.emiDate ? `EMI on the ${d.emiDate}th` : null].filter(Boolean).join(' · ')}${due ? ` · next ${fmt(due)}` : ''}`}
+                amount={formatINR(d.emiAmount)} amountSub={`${formatINR(d.currentOutstanding)} left`} />
+            )
+          })}
           {!loans.length && <div style={{ fontSize: 12, color: 'var(--txt2)', padding: '8px 0' }}>No loans with an EMI. Add one on the Debt screen.</div>}
         </Group>
 

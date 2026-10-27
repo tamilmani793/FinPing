@@ -23,6 +23,10 @@ function extractAmount(text) {
     /(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)/i,
     /(?:debited|credited|spent|paid|withdrawn)\s+(?:by\s+)?(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)/i,
     /([\d,]+(?:\.\d{2}))\s*(?:has been|is|was)\s+(?:debited|credited)/i,
+    // No currency symbol: "debited amount of 13387", "Deducted 13387", "13387 deducted"
+    /(?:debited|credited|deducted|withdrawn)\s+(?:an?\s+)?(?:amount\s+)?(?:of\s+)?(?:by\s+)?([\d,]+(?:\.\d{1,2})?)(?!\d)/i,
+    /amount\s+of\s+([\d,]+(?:\.\d{1,2})?)(?!\d)/i,
+    /([\d,]+(?:\.\d{1,2})?)\s*(?:has been\s+|is\s+|was\s+)?(?:debited|deducted|credited)/i,
   ]
   for (const p of patterns) {
     const m = text.match(p)
@@ -248,7 +252,7 @@ export function parseSMS(rawText, sender = '', receivedAt = new Date()) {
   const isKnownSender = knownSenders.some(s => senderUpper.includes(s))
 
   // Quick exit for non-financial SMS (only filter if sender is known to be non-bank)
-  const hasFinancialKeywords = /(?:rs\.?|inr|₹|debited|credited|spent|cashback|emi|sip|mutual fund|statement|payment due)/i.test(rawText)
+  const hasFinancialKeywords = /(?:rs\.?|inr|₹|debited|deducted|credited|spent|cashback|emi|sip|mutual fund|statement|payment due|payment alert)/i.test(rawText)
   if (!hasFinancialKeywords) return null
 
   // Check specialised SMS types first
