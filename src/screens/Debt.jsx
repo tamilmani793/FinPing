@@ -6,7 +6,7 @@ import { TopBar, Card, SectionHdr, Badge, ProgressBar, TxnRow, Divider, LabelCap
 import { useStore } from '../store'
 import { parseSMS } from '../lib/smsParser'
 import PoliciesView from '../components/PoliciesView'
-import { exportDebtsToFile, buildDebtBackup, importDebts, addManualRepayment, recordRepayment, recordReceipt, undoRepayment } from '../lib/debtBackup'
+import { addManualRepayment, recordRepayment, recordReceipt, undoRepayment } from '../lib/debtBackup'
 import { dailyInterest, splitPayment, lastRepaymentDate } from '../lib/loanMath'
 
 const EMPTY_DEBT = {
@@ -56,8 +56,6 @@ export default function Debt() {
   const [repayForm, setRepayForm] = useState(EMPTY_REPAY)
   const [receiveFor, setReceiveFor] = useState(null)
   const [receiveForm, setReceiveForm] = useState(EMPTY_RECEIPT)
-  const [importOpen, setImportOpen] = useState(false)
-  const [importText, setImportText] = useState('')
   const { showNotification, debtSegment, setDebtSegment } = useStore()
   const accounts = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => c.cardType === 'account' && !c.draft)
   const acctLabel = a => `${a.name}${a.cardLast4 && !a.name.includes('••') ? ` ••${a.cardLast4}` : ''}`
@@ -160,30 +158,6 @@ export default function Debt() {
     showNotification('Entry removed and balances put back', 'success')
   }
 
-  const handleExport = async () => {
-    try { showNotification(`Saved ${await exportDebtsToFile()}`, 'success') }
-    catch (e) { showNotification('Export failed', 'error') }
-  }
-
-  const handleCopy = async () => {
-    try { await navigator.clipboard.writeText(await buildDebtBackup()); showNotification('Backup copied to clipboard', 'success') }
-    catch (e) { showNotification('Could not copy — use Export file', 'error') }
-  }
-
-  const runImport = async (text) => {
-    try {
-      const { addedDebts, addedRepayments } = await importDebts(text)
-      showNotification(`Imported ${addedDebts} debt(s), ${addedRepayments} repayment(s)`, 'success')
-      setImportText(''); setImportOpen(false)
-    } catch (e) { showNotification(e.message, 'error') }
-  }
-
-  const handleImportFile = async (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (file) await runImport(await file.text())
-  }
-
   const handleMarkClosed = async (id) => {
     await db.debts.update(id, { status: 'closed' })
     showNotification('Debt marked as closed!', 'success')
@@ -235,26 +209,6 @@ export default function Debt() {
           <button className="btn-primary" style={{ height: 40, fontSize: 12 }} onClick={() => (addOpen && !editId ? closeForm() : (setEditId(null), setForm(EMPTY_DEBT), setAddOpen(true)))}>+ Add New Debt</button>
           <button className="btn-secondary" style={{ height: 40, fontSize: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setMatchSMSOpen(!matchSMSOpen)}>📲 Match SMS Repay</button>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-          <button className="btn-ghost" style={{ height: 36 }} onClick={handleExport}>⬇ Export</button>
-          <button className="btn-ghost" style={{ height: 36 }} onClick={() => setImportOpen(!importOpen)}>⬆ Import</button>
-        </div>
-
-        {importOpen && (
-          <Card style={{ marginBottom: 10 }}>
-            <LabelCaps style={{ marginBottom: 6 }}>Import debts</LabelCaps>
-            <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>
-              Choose a FinPing debt backup (.json), or paste its contents. Debts and repayments already here are skipped.
-            </div>
-            <input type="file" accept="application/json,.json" onChange={handleImportFile} style={{ fontSize: 12, marginBottom: 8, width: '100%' }} />
-            <textarea className="input" style={{ height: 80, marginBottom: 8, fontSize: 11 }} placeholder="…or paste backup JSON here" value={importText} onChange={e => setImportText(e.target.value)} />
-            <div style={{ display: 'flex', gap: 6 }}>
-              <BtnPrimary onClick={() => runImport(importText)} style={{ flex: 1, height: 36, fontSize: 12 }}>Import pasted JSON</BtnPrimary>
-              <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={handleCopy}>Copy backup</button>
-            </div>
-          </Card>
-        )}
 
         {/* Add Debt Form */}
         {addOpen && (

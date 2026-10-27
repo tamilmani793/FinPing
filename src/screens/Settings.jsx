@@ -8,6 +8,7 @@ import { exportBackup, copyBackup, inspectBackup, restoreBackup, lastBackupAt } 
 import { format } from 'date-fns'
 import { relinkTransactions } from '../lib/relink'
 import { removeDuplicateTransactions } from '../lib/dedupeCleanup'
+import { importDebts } from '../lib/debtBackup'
 
 function Row({ Icon, title, sub, onClick, right }) {
   return (
@@ -48,6 +49,15 @@ export default function Settings() {
 
   const doRestore = async (text) => {
     try {
+      // An older debts-only file (from the Debt screen's former Export) is merged into what is already here.
+      let raw = null
+      try { raw = JSON.parse(text) } catch (e) { /* inspectBackup reports invalid files */ }
+      if (raw && raw.kind === 'debts') {
+        if (!window.confirm(`Add ${raw.debts?.length || 0} debts and ${raw.debtRepayments?.length || 0} payments from this older debts backup?\n\nWhat you already have is kept; duplicates are skipped.`)) return
+        const { addedDebts, addedRepayments } = await importDebts(text)
+        showNotification(`Added ${addedDebts} debt(s) and ${addedRepayments} payment(s)`, 'success')
+        return
+      }
       const { counts, exportedAt } = inspectBackup(text)
       const n = k => counts[k] || 0
       const msg = `Restore backup from ${exportedAt ? format(new Date(exportedAt), 'd MMM yyyy, h:mm a') : 'unknown date'}?

@@ -12,27 +12,7 @@ const revive = (row, fields) => {
   return out
 }
 
-export async function buildDebtBackup() {
-  const [debts, debtRepayments] = await Promise.all([db.debts.toArray(), db.debtRepayments.toArray()])
-  return JSON.stringify({ app: 'FinPing', kind: 'debts', version: 1, exportedAt: new Date().toISOString(), debts, debtRepayments }, null, 2)
-}
-
-// Saves as a file download; returns the filename.
-export async function exportDebtsToFile() {
-  const json = await buildDebtBackup()
-  const name = `finping-debts-${new Date().toISOString().slice(0, 10)}.json`
-  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-  return name
-}
-
-// Merges a backup into local data. Debts already present (same name, lender and principal) are
+// Merges an older debts-only backup file (kept so those files can still be restored from Settings). Debts already present (same name, lender and principal) are
 // kept as they are, and repayments already present (same debt, date and amount) are skipped.
 // Links to bank accounts are dropped: those accounts have different ids on another install.
 export async function importDebts(jsonText) {

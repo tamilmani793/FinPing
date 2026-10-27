@@ -72,7 +72,7 @@ export function inspectBackup(text) {
   let data
   try { data = parse(text) } catch (e) { throw new Error('That is not a valid backup file') }
   if (!data || data.app !== 'FinPing' || data.kind !== 'full' || typeof data.tables !== 'object') {
-    throw new Error('This is not a full FinPing backup (a debts-only file can be imported on the Debt screen)')
+    throw new Error('This is not a FinPing backup file')
   }
   if (data.dbVersion > db.verno) throw new Error('This backup is from a newer version of the app. Update the app first.')
   return { data, counts: Object.fromEntries(Object.entries(data.tables).map(([k, v]) => [k, v.length])), exportedAt: data.exportedAt }
