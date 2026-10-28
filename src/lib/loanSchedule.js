@@ -59,7 +59,8 @@ export function installment(debt, state, due, no) {
     }
   }
   const emi = Number(debt.emiAmount) || 0
-  const interest = Math.min(interestFor(debt, state.outstanding, state.from, due), emi)
+  // `carry` is interest already earned on the old balance before a part payment lowered it
+  const interest = Math.min(interestFor(debt, state.outstanding, state.from, due) + (state.carry || 0), emi)
   const lastOne = (Number(debt.tenureMonths) > 0 && no >= Number(debt.tenureMonths)) || emi - interest >= state.outstanding
   const principal = lastOne ? state.outstanding : Math.max(0, emi - interest)
   return {
@@ -76,16 +77,50 @@ export const nextEmiAmount = debt => {
   return row ? round2(row.principal + row.interest) : Number(debt.emiAmount) || 0
 }
 
+// Interest earned on the old balance from `interestFrom` up to `date` (used when a part payment lowers the
+// balance part-way through a month: that stretch is still charged on the balance it was owed on).
+export function accrualUntil(debt, date) {
+  const rate = Number(debt.interestRate) || 0
+  if (!(rate > 0) || Array.isArray(debt.schedule) || !debt.interestFrom) return 0
+  const days = Math.max(0, differenceInCalendarDays(startOfDay(new Date(date)), startOfDay(new Date(debt.interestFrom))))
+  return round2((debt.currentOutstanding || 0) * rate / 100 / 365 * days)
+}
+
+// A bank schedule after a part payment: the instalments already paid stay as they were; the rest are worked
+// out again on the lower balance (same EMI, interest = balance x rate / 12), so the loan ends sooner.
+export function rebuildSchedule(debt, outstanding) {
+  const done = (debt.schedule || []).slice(0, debt.paidCount || 0)
+  const next = (debt.schedule || [])[debt.paidCount || 0]
+  if (!next || !(outstanding > 0.005)) return debt.schedule
+  const emi = Number(debt.emiAmount) || 0, rate = Number(debt.interestRate) || 0
+  const day = new Date(next.dueDate).getDate()
+  const rows = [...done]
+  let bal = round2(outstanding), due = new Date(next.dueDate), stmt = next.statementDate ? new Date(next.statementDate) : null
+  while (bal > 0.005 && rows.length < 600) {
+    const interest = round2(bal * rate / 100 / 12)
+    const final = emi - interest >= bal || emi <= interest
+    const principal = final ? bal : round2(emi - interest)
+    bal = round2(bal - principal)
+    rows.push({ no: rows.length + 1, dueDate: due, statementDate: stmt || undefined, principal, interest, emi: round2(principal + interest), balanceAfter: bal, estimated: true })
+    if (final) break
+    due = followingDue(due, day)
+    if (stmt) stmt = addMonths(stmt, 1)
+  }
+  return rows
+}
+
 export function projectSchedule(debt, { maxRows = 600 } = {}) {
   const out = { rows: [], endDate: null, remaining: 0, totalInterest: 0, totalToPay: 0, neverEnds: false }
   if (!(debt.emiAmount > 0) || !debt.nextEmiDate || !(debt.currentOutstanding > 0)) return out
   let outstanding = debt.currentOutstanding
   let from = debt.interestFrom
+  let carry = Number(debt.accruedInterest) || 0
   let due = new Date(debt.nextEmiDate)
   let no = (debt.paidCount || 0) + 1
   const day = anchorDay(debt)
   while (outstanding > 0.005 && out.rows.length < maxRows) {
-    const row = installment(debt, { outstanding, from }, due, no)
+    const row = installment(debt, { outstanding, from, carry }, due, no)
+    carry = 0
     out.rows.push(row)
     out.totalInterest += row.interest
     out.totalToPay += row.emi

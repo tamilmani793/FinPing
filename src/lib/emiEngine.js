@@ -28,7 +28,7 @@ async function run(now) {
     while (d && d.status !== 'closed' && d.nextEmiDate && startOfDay(new Date(d.nextEmiDate)) <= today && guard++ < 240) {
       const due = new Date(d.nextEmiDate)
       const no = (d.paidCount || 0) + 1
-      const inst = installment(d, { outstanding: d.currentOutstanding, from: d.interestFrom }, due, no)
+      const inst = installment(d, { outstanding: d.currentOutstanding, from: d.interestFrom, carry: d.accruedInterest || 0 }, due, no)
       await recordRepayment(d.id, { amount: inst.emi, principal: inst.principal, interest: inst.interest, date: due, source: 'auto', installmentNo: no, statementDate: inst.statementDate || null })
       const after = await db.debts.get(d.id)
       const finished = inst.final || after.currentOutstanding <= 0.005

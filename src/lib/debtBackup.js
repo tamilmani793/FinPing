@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import { splitPayment, lastRepaymentDate } from './loanMath'
 import { findDuplicate } from './dedupe'
+import { accrualUntil, rebuildSchedule } from './loanSchedule'
 
 const DEBT_DATES = ['startDate', 'endDate', 'interestFrom']
 const REPAY_DATES = ['date']
@@ -110,8 +111,14 @@ export async function recordRepayment(debtId, { amount, principal, interest, dat
     const debt = await db.debts.get(debtId)
     if (!debt) throw new Error('Debt not found')
 
+    // A part payment typed in (not an EMI): all of it goes to principal from its date. Interest on the old
+    // balance up to that date is kept aside and charged with the next EMI; after it, interest runs on the lower balance.
+    const part = source === 'manual' && installmentNo == null && blank(interest) && blank(principal)
     let interestPart, principalPart
-    if (blank(interest) && blank(principal) && debt.interestRate > 0) {
+    if (part) {
+      principalPart = Math.min(amt, Math.max(0, round2(debt.currentOutstanding || 0)))
+      interestPart = round2(amt - principalPart) // only when paying more than is owed (pre-closure with interest)
+    } else if (blank(interest) && blank(principal) && debt.interestRate > 0) {
       const last = lastRepaymentDate(await db.debtRepayments.where('debtId').equals(debtId).toArray())
       const sp = splitPayment(debt, amt, payDate, last)
       interestPart = sp.interest
@@ -127,12 +134,26 @@ export async function recordRepayment(debtId, { amount, principal, interest, dat
     })
     const outstanding = Math.max(0, round2((debt.currentOutstanding || 0) - principalPart))
     // each posting keeps what was left afterwards, so the ledger reads: EMI, interest, principal, balance
-    await db.debtRepayments.add({ debtId, direction: 'out', date: payDate, amount: amt, principal: principalPart, interest: interestPart, outstandingAfter: outstanding, installmentNo, statementDate, source, rawSMS, notes, ...acct })
+    const undoInfo = {}
+    const patch = {}
+    if (part) {
+      undoInfo.carryBefore = debt.accruedInterest || 0
+      undoInfo.interestFromBefore = debt.interestFrom || null
+      patch.accruedInterest = round2((debt.accruedInterest || 0) + accrualUntil(debt, payDate))
+      if (Array.isArray(debt.schedule) && outstanding > 0.005) {
+        undoInfo.scheduleBefore = debt.schedule
+        patch.schedule = rebuildSchedule(debt, outstanding)
+        patch.tenureMonths = patch.schedule.length
+      }
+    } else if (installmentNo != null || source === 'auto') patch.accruedInterest = 0 // the EMI has charged it
+    // each posting keeps what was left afterwards, so the ledger reads: EMI, interest, principal, balance
+    await db.debtRepayments.add({ debtId, direction: 'out', date: payDate, amount: amt, principal: principalPart, interest: interestPart, outstandingAfter: outstanding, installmentNo, statementDate, source, rawSMS, notes, ...undoInfo, ...acct })
     await db.debts.update(debtId, {
       currentOutstanding: outstanding,
       totalPaid: (debt.totalPaid || 0) + principalPart,
       totalInterestPaid: (debt.totalInterestPaid || 0) + interestPart,
       interestFrom: payDate, // interest is counted again from this payment
+      ...patch,
       ...(outstanding === 0 ? { status: 'closed' } : {}),
     })
     return { interest: interestPart, principal: principalPart }
@@ -204,6 +225,13 @@ export async function undoRepayment(repaymentId) {
     if (r.accountTxnId != null && r.accountTxnOwned) await db.transactions.delete(r.accountTxnId)
     await db.debtRepayments.delete(repaymentId)
     // Interest runs from the payment before this one again.
-    if (debt) await db.debts.update(debt.id, { interestFrom: lastRepaymentDate(await db.debtRepayments.where('debtId').equals(debt.id).toArray()) })
+    if (debt) {
+      await db.debts.update(debt.id, {
+        interestFrom: r.interestFromBefore ?? lastRepaymentDate(await db.debtRepayments.where('debtId').equals(debt.id).toArray()),
+        ...(r.carryBefore != null ? { accruedInterest: r.carryBefore } : {}),
+        // a part payment that re-worked a bank schedule: put the schedule back
+        ...(r.scheduleBefore ? { schedule: r.scheduleBefore, tenureMonths: r.scheduleBefore.length } : {}),
+      })
+    }
   })
 }

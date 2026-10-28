@@ -121,7 +121,8 @@ export default function Debt() {
         ...form, type: p.type, name: form.name || `${p.type === 'DebitCardEMI' ? 'Debit card EMI' : p.type === 'CreditCardEMI' ? 'Credit card EMI' : p.type === 'HomeLoan' ? 'Home loan' : 'EMI'}${tail ? ` ••${tail}` : ''}`,
         loanAccountNo: p.meta.loanNo || form.loanAccountNo, principal: String(p.meta.principal || p.meta.currentOutstanding), interestRate: p.meta.rate ? String(p.meta.rate) : '',
         tenureMonths: String(p.rows.length), startDate: p.meta.bookedDate ? format(p.meta.bookedDate, 'yyyy-MM-dd') : form.startDate, mode: 'schedule',
-        currentOutstanding: '', emiAmount: '', nextEmiDate: '',
+        currentOutstanding: String(p.meta.currentOutstanding ?? p.meta.principal), emiAmount: String((p.rows[1] || p.rows[0]).emi),
+        nextEmiDate: format(p.rows[0].dueDate, 'yyyy-MM-dd'), paidCount: '0',
       })
       setPaste({ ...paste, open: false })
     } catch (e) { showNotification(e.message, 'error') }
@@ -362,7 +363,8 @@ export default function Debt() {
                     {accounts.map(a => <option key={a.id} value={a.id}>{acctLabel(a)}{a.accountBalance != null ? ` · ${formatINR(a.accountBalance)}` : ''}</option>)}
                   </select>
                 </Field>
-                {!sched && <>
+                {/* with a pasted / saved bank schedule these are shown filled in, but locked: the schedule decides them */}
+                <fieldset disabled={!!sched} style={{ display: 'contents', border: 0, padding: 0, margin: 0 }}>
                 <Field label={FIXED_TYPES.includes(form.type) ? 'Purchase / loan amount (₹)' : 'Loan amount (₹)'}><input className="input" type="number" inputMode="decimal" value={form.principal} onChange={e => setForm({ ...form, principal: e.target.value })} /></Field>
                 <Field label="Still owed now (₹)"><input className="input" type="number" inputMode="decimal" placeholder="blank = new loan" value={form.currentOutstanding} onChange={e => setForm({ ...form, currentOutstanding: e.target.value })} /></Field>
                 <Field label="Interest % a year"><input className="input" type="number" inputMode="decimal" placeholder={FIXED_TYPES.includes(form.type) ? '0 for no-cost EMI' : ''} value={form.interestRate} onChange={e => setForm({ ...form, interestRate: e.target.value })} /></Field>
@@ -377,9 +379,10 @@ export default function Debt() {
                   <select className="input" value={form.mode} onChange={e => setForm({ ...form, mode: e.target.value })}>
                     <option value="reducing">Reducing-balance loan (interest on what is still owed)</option>
                     <option value="fixed">Fixed EMI schedule (card / purchase EMI)</option>
+                    {(sched || form.mode === 'schedule') && <option value="schedule">Your bank's own schedule (pasted)</option>}
                   </select>
                 </Field>
-                </>}
+                </fieldset>
               </div>
 
               {!sched && <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '8px 0' }}>
@@ -525,21 +528,16 @@ export default function Debt() {
                     {repayFor === d.id && (
                       <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, marginBottom: 8 }}>
                         <LabelCaps style={{ marginBottom: 6 }}>Extra payment · still owed {formatINR(d.currentOutstanding)}</LabelCaps>
-                        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>For a part-payment or pre-closure on top of the monthly EMI. Regular EMIs post themselves.</div>
+                        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>A part-payment or pre-closure on top of the monthly EMI. The whole amount reduces the principal from the date you choose; interest after that date is charged on the lower balance. Regular EMIs post themselves.</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                           <input className="input" type="number" inputMode="decimal" placeholder="Amount paid (₹)" value={repayForm.amount} onChange={e => setRepayForm({ ...repayForm, amount: e.target.value })} />
                           <input className="input" type="date" value={repayForm.date} onChange={e => setRepayForm({ ...repayForm, date: e.target.value })} />
-                          <input className="input" type="number" inputMode="decimal" placeholder={d.interestRate > 0 ? 'Principal (₹) — auto' : 'Principal (₹) — blank = all'} value={repayForm.principal} onChange={e => setRepayForm({ ...repayForm, principal: e.target.value })} />
-                          <input className="input" type="number" inputMode="decimal" placeholder={d.interestRate > 0 ? 'Interest (₹) — auto' : 'Interest (₹)'} value={repayForm.interest} onChange={e => setRepayForm({ ...repayForm, interest: e.target.value })} />
                         </div>
-                        {d.interestRate > 0 && Number(repayForm.amount) > 0 && repayForm.interest === '' && repayForm.principal === '' && (() => {
-                          const sp = splitPayment(d, Number(repayForm.amount), repayForm.date, lastPaid(d.id))
-                          return (
-                            <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>
-                              Split automatically for {sp.days} day{sp.days === 1 ? '' : 's'} of interest: <b style={{ color: 'var(--red-dim)' }}>{formatINR(sp.interest)} interest</b> + <b style={{ color: 'var(--mint-dim)' }}>{formatINR(sp.principal)} principal</b>. Type your own amounts to override.
-                            </div>
-                          )
-                        })()}
+                        {Number(repayForm.amount) > 0 && (
+                          <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>
+                            Still owed after this: <b style={{ color: 'var(--mint-dim)' }}>{formatINR(Math.max(0, d.currentOutstanding - Number(repayForm.amount)))}</b> · principal reduced by <b style={{ color: 'var(--mint-dim)' }}>{formatINR(Math.min(Number(repayForm.amount), d.currentOutstanding))}</b>, no interest taken out of it.
+                          </div>
+                        )}
                         <LabelCaps style={{ marginBottom: 4 }}>Debited from</LabelCaps>
                         <select className="input" style={{ marginBottom: 8 }} value={repayForm.accountId} onChange={e => setRepayForm({ ...repayForm, accountId: e.target.value })}>{acctOptions(d)}</select>
                         <input className="input" placeholder="Note (optional)" style={{ marginBottom: 8 }} value={repayForm.notes} onChange={e => setRepayForm({ ...repayForm, notes: e.target.value })} />
