@@ -69,8 +69,8 @@ export default function StatementImportSheet({ account, onClose }) {
         {!plan && !needPw && (
           <>
             <label className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 42, marginBottom: 10, cursor: 'pointer' }}>
-              Choose PDF, CSV or Excel (.xlsx) file
-              <input type="file" accept=".pdf,.csv,.xlsx,.txt,.tsv,application/pdf,text/csv" style={{ display: 'none' }} disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) read(f, '') }} />
+              Choose PDF, CSV or Excel file
+              <input type="file" accept=".pdf,.csv,.xlsx,.xls,.txt,.tsv,application/pdf,text/csv,application/vnd.ms-excel" style={{ display: 'none' }} disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) read(f, '') }} />
             </label>
             <div style={{ fontSize: 11, color: 'var(--txt2)', textAlign: 'center', margin: '6px 0' }}>or paste the rows (with the header line)</div>
             <textarea className="input" style={{ height: 120, fontSize: 11, marginBottom: 10 }} placeholder="Date,Narration,Withdrawal Amt.,Deposit Amt.,Closing Balance" value={text} onChange={e => setText(e.target.value)} />

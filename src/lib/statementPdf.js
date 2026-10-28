@@ -16,8 +16,8 @@ export class PasswordNeeded extends Error {
 }
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9/ ]/g, ' ').replace(/\s+/g, ' ').trim()
-const MONEY = /^[(]?[\d,]+\.\d{1,2}[)]?\s*(dr|cr)?$/i
-const JUNK = /^(page \d+|page no|statement of account|opening balance|closing balance|generated|registered office|this is a computer|end of statement|\*+|continued)/i
+const MONEY = /^[+-]?\s*(?:[C₹]|Rs\.?|INR)?\s*[(]?-?[\d,]+\.\d{1,2}[)]?\s*(dr|cr)?$/i
+const JUNK = /^(page \d+|page no|statement of account|account statement for|account statement from|opening balance|closing balance|generated|registered office|this is a computer|end of statement|\*+|continued)/i
 
 // text items of one page -> lines of cells, each cell {text, x0, x1}
 function pageLines(items) {
@@ -39,7 +39,9 @@ function pageLines(items) {
       if (last && it.x0 - last.x1 < 4.5) { last.text += (it.x0 - last.x1 > 0.5 ? ' ' : '') + it.text; last.x1 = Math.max(last.x1, it.x1) }
       else cells.push({ text: it.text, x0: it.x0, x1: it.x1 })
     }
-    return cells.map(c => ({ ...c, text: c.text.replace(/\s+/g, ' ').trim() }))
+    const out = cells.map(c => ({ ...c, text: c.text.replace(/\s+/g, ' ').trim() }))
+    out.y = l.y
+    return out
   })
 }
 
@@ -67,25 +69,58 @@ function findHeader(lines) {
   return null
 }
 
+// The same heading can sit at different x positions on each page (HDFC card statements shift the table on the first page),
+// so every page is read against its own heading line.
+function findPageHeader(pl, hdrNorm) {
+  for (let j = 0; j < Math.min(pl.length, 60); j++) {
+    if (norm(pl[j].map(c => c.text).join(' ')) === hdrNorm) return { cells: pl[j], end: j + 1 }
+    if (pl[j + 1]) {
+      const m = mergeLines(pl[j], pl[j + 1])
+      if (norm(m.map(c => c.text).join(' ')) === hdrNorm) return { cells: m, end: j + 2 }
+    }
+  }
+  return null
+}
+
 export function linesToTable(lines) {
   const head = findHeader(lines)
   if (!head) throw new Error("Couldn't find the transaction table in this PDF. Download the statement as CSV or Excel from net banking instead.")
   const headerText = head.cells.map(c => c.text)
+  const hdrNorm = norm(headerText.join(' '))
   const numericCols = head.cells.map((c, i) => i).filter(i => [head.cols.debit, head.cols.credit, head.cols.amount, head.cols.balance].includes(i))
-  const table = [headerText]
-  const start = head.index + 1
-  const body = lines.slice(start)
+  const table = [headerText], pagesOut = [], ysOut = []
+  const headerLine = lines[head.index]
+  let cells = head.cells
+  for (const p of [...new Set(lines.map(l => l.page))]) {
+    if (p < headerLine.page) continue
+    const pl = lines.filter(l => l.page === p)
+    let start = 0
+    if (p === headerLine.page) start = pl.indexOf(headerLine) + 1
+    else { const found = findPageHeader(pl, hdrNorm); if (found) { cells = found.cells; start = found.end } }
+    for (const r of assignRows(pl.slice(start), cells, head.cols, numericCols, headerText.length)) { table.push(r.row); pagesOut.push(p); ysOut.push(r.y) }
+  }
+  return foldContinuations(table, head.cols, pagesOut, ysOut)
+}
 
+// the lines of one page -> table rows, placing every cell under its heading
+function assignRows(body, headCells, cols, numericCols, width) {
   // Headings are often centred over their column (a wide "Narration" column whose text starts far left of its
   // heading), so where the text columns really start is read from the rows themselves: the left edges that
   // many cells share. With one such edge per text heading they are matched left to right.
-  const textCols = head.cells.map((c, i) => i).filter(i => !numericCols.includes(i))
+  const textCols = headCells.map((c, i) => i).filter(i => !numericCols.includes(i))
   const edges = []
-  // only lines inside the transaction rows count (not page titles, address blocks or footers)
-  const isDateLine = cells => cells.some(c => DATE_AT_START.test(c.text))
-  const inRows = body.filter((cells, i) => {
-    const same = body.filter(l => l.page === cells.page)
-    return same.indexOf(cells) >= same.findIndex(isDateLine) && same.indexOf(cells) <= same.length - 1 - [...same].reverse().findIndex(isDateLine)
+  // only lines that belong to a transaction count (not page titles, address blocks or footers): a line with a date AND an
+  // amount, and the few unamounted lines right after it
+  const hasMoney = cells => cells.some(c => MONEY.test(c.text))
+  const isDateLine = cells => cells.some(c => DATE_AT_START.test(c.text)) && hasMoney(cells)
+  const inRows = []
+  body.forEach((cells, i) => {
+    if (isDateLine(cells)) { inRows.push(cells); return }
+    for (let j = i - 1; j >= 0 && i - j <= 5; j--) {
+      if (hasMoney(cells)) break
+      if (isDateLine(body[j])) { if (Math.min(...cells.map(c => c.x0)) >= Math.min(...body[j].map(c => c.x0)) + 5) inRows.push(cells); break }
+      if (hasMoney(body[j])) break
+    }
   })
   for (const cells of inRows) for (const c of cells) {
     if (MONEY.test(c.text)) continue
@@ -93,31 +128,34 @@ export function linesToTable(lines) {
     e ? (e.n++, e.x = (e.x * (e.n - 1) + c.x0) / e.n) : edges.push({ x: c.x0, n: 1 })
   }
   const dateRows = body.filter(cells => cells.some(c => DATE_AT_START.test(c.text))).length
-  const anchors = edges.filter(e => e.n >= Math.max(3, dateRows * 0.1)).sort((a, b) => a.x - b.x).map(e => e.x)
+  const anchors = edges.filter(e => e.n >= Math.max(2, dateRows * 0.1)).sort((a, b) => a.x - b.x).map(e => e.x)
   const useAnchors = anchors.length === textCols.length
+  const lastAmountRight = Math.max(0, ...body.flatMap(cells => cells.filter(c => MONEY.test(c.text)).map(c => c.x1)))
+  const narrationAfterAmounts = cols.narration > Math.max(...numericCols, -1)
 
-  for (const cells of body) {
-    const row = headerText.map(() => '')
+  return body.map(cells => {
+    const row = Array.from({ length: width }, () => '')
     for (const c of cells) {
       let col
       if (MONEY.test(c.text) && numericCols.length) {
         // amounts are right-aligned under their heading: pick the numeric column whose right edge is nearest
-        col = numericCols.reduce((best, i) => (Math.abs(head.cells[i].x1 - c.x1) < Math.abs(head.cells[best].x1 - c.x1) ? i : best), numericCols[0])
-      } else if (useAnchors) {
+        col = numericCols.reduce((best, i) => (Math.abs(headCells[i].x1 - c.x1) < Math.abs(headCells[best].x1 - c.x1) ? i : best), numericCols[0])
+      } else if (narrationAfterAmounts && !DATE_ONLY.test(c.text) && c.x0 >= lastAmountRight - 4) {
+        col = cols.narration
+      } else if (useAnchors && !narrationAfterAmounts) {
         let k = 0
         for (let i = 0; i < anchors.length; i++) if (c.x0 >= anchors[i] - 3) k = i
         col = textCols[k]
       } else {
-        const lefts = head.cells.map(h => h.x0 - 3)
+        const lefts = headCells.map(h => h.x0 - 3)
         col = 0
         for (let i = 0; i < lefts.length; i++) if (c.x0 >= lefts[i]) col = i
-        if (numericCols.includes(col) && !MONEY.test(c.text)) col = head.cols.narration
+        if (numericCols.includes(col) && !MONEY.test(c.text)) col = cols.narration
       }
       row[col] = row[col] ? `${row[col]} ${c.text}` : c.text
     }
-    table.push(row)
-  }
-  return foldContinuations(table, head.cols, lines.slice(start).map(l => l.page))
+    return { row, y: cells.y }
+  })
 }
 
 // A transaction often takes 2-4 printed lines: the date sits on the first, the long narration wraps over all of
@@ -128,9 +166,36 @@ const DATE_ONLY = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]
 const DATE_AT_START = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ -,]*\d{2,4})/
 const FOOTER = /(statement summary|end of statement|generated (on|by)|this is a computer|registered office|closing balance\s*:|page \d+ of \d+|gstin|state account branch)/i
 
-function foldContinuations(table, c, pages) {
+function foldContinuations(table, c, pages, ys = []) {
   const hdr = norm(table[0].join(' '))
   const out = [table[0]]
+  // Is the narration printed around the date line (some of it above it)? Then text before a page's first date line
+  // belongs to that date line, and every loose line goes to the NEAREST date line instead of the previous one.
+  const usable = table.slice(1).map((row, i) => ({ row, i })).filter(({ row }) => { const line = norm(row.join(' ')); return line && line !== hdr && !JUNK.test(line) && !FOOTER.test(row.join(' ')) })
+  const firstOnPage = usable.find(u => pages[u.i] === pages[usable[0]?.i])
+  const centred = !!firstOnPage && !DATE_AT_START.test((firstOnPage.row[c.date] || '').trim()) && ys.length > 0
+  if (centred) {
+    const dates = usable.filter(u => DATE_AT_START.test((u.row[c.date] || '').trim()))
+    const blocks = new Map(dates.map(d => [d.i, [d]]))
+    for (const u of usable) {
+      if (blocks.has(u.i)) continue
+      let best = null
+      for (const d of dates) if (pages[d.i] === pages[u.i] && (!best || Math.abs(ys[d.i] - ys[u.i]) < Math.abs(ys[best.i] - ys[u.i]))) best = d
+      if (best && Math.abs(ys[best.i] - ys[u.i]) < 60) blocks.get(best.i).push(u)
+    }
+    for (const [di, list] of blocks) {
+      list.sort((p, q) => ys[q.i] - ys[p.i])
+      const merged = table[0].map(() => '')
+      for (const u of list) u.row.forEach((v, k) => {
+        if (!v) return
+        if (k === c.narration) merged[k] = `${merged[k]} ${v}`.trim().slice(0, 300)
+        else if (!merged[k]) merged[k] = v
+        else if (k !== c.date && !MONEY.test(v)) merged[k] = `${merged[k]} ${v}`.trim()
+      })
+      out.push(merged)
+    }
+    return out
+  }
   let cur = null, curPage = null, stop = false
   table.slice(1).forEach((row, i) => {
     if (stop) return

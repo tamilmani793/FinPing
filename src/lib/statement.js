@@ -123,10 +123,17 @@ export function parseStatementDate(v) {
 
 // "1,234.50", "1234.5 Dr", "(500.00)", "" -> number | null
 function parseMoney(v) {
-  const s = String(v ?? '').replace(/[₹,\s]|rs\.?|inr/gi, '')
+  const s = String(v ?? '').replace(/[₹,\s+]|rs\.?|inr/gi, '').replace(/^C(?=[\d(])/, '')
   if (!s || s === '-') return null
   const n = parseFloat(s.replace(/[()]/g, '').replace(/(dr|cr)$/i, ''))
   return Number.isFinite(n) ? Math.abs(n) : null
+}
+// a running balance keeps its sign (overdraft / current accounts can be negative): "-1,234.00", "(1,234.00)" or "1,234.00 Dr"
+function parseBalance(v) {
+  const raw = String(v ?? '').trim()
+  const n = parseMoney(raw)
+  if (n == null) return null
+  return /^-|^\(|\bdr$/i.test(raw.replace(/\s/g, '')) ? -n : n
 }
 const isCr = v => /cr$/i.test(String(v ?? '').trim())
 
@@ -141,14 +148,16 @@ export function detectColumns(table) {
       const exact = h.findIndex(c => /^(txn\.? |tran(saction)? |posting )?date$/.test(c))
       return exact >= 0 ? exact : find(/date|\bdt\b/)
     })()
-    const debit = find(/withdraw/, /^debit/, /\bdebit amount/, /^dr\b/, /^dr$/)
-    const credit = find(/deposit/, /^credit/, /\bcredit amount/, /^cr\b/, /^cr$/)
-    const amount = find(/^amount/, /transaction amount/)
+    const marker = c => /(debit|dr)\s*\/\s*(credit|cr)|(credit|cr)\s*\/\s*(debit|dr)/.test(c)
+    const findCol = (...tests) => h.findIndex(c => c && !marker(c) && tests.some(t => t.test(c)))
+    const debit = findCol(/withdraw/, /^debit/, /\bdebit amount/, /^dr\b/, /^dr$/)
+    const credit = findCol(/deposit/, /^credit/, /\bcredit amount/, /^cr\b/, /^cr$/)
+    const amount = find(/^amount/, /^amt\b/, /transaction amount/)
     const narration = find(/narration/, /description/, /particulars/, /remarks/, /transaction details/, /details/)
     if (date < 0 || narration < 0 || !((debit >= 0 && credit >= 0) || amount >= 0)) continue
     return {
       header: i, date, narration, debit, credit, amount,
-      type: find(/dr\s*\/\s*cr/, /^type$/, /^cr\s*\/\s*dr/),
+      type: find(/dr\s*\/\s*cr/, /debit\s*\/\s*credit/, /^type$/, /^cr\s*\/\s*dr/, /credit\s*\/\s*debit/),
       ref: find(/chq/, /cheque/, /\bref/),
       balance: find(/balance/, /^bal\b/, /^bal$/),
     }
@@ -188,7 +197,13 @@ export function narrationInfo(n) {
   const tail = (list, name) => list.slice(list.indexOf(name) + 1).filter(x => x && !isRef(x) && !x.includes('@') && !BANKY.test(x)).join(' ').trim()
   const masked = (s.match(/x{4,}(\d{3,4})\b/i) || [])[1]
   let mode = 'Bank', name = '', note = ''
-  if (/^DC\s+\d+\s+AUTOPAY/.test(up)) { name = 'Debit Card EMI (AutoPay)'; note = 'Standing instruction' }
+  if (/^IB FUNDS TRANSFER/.test(up)) { mode = 'NetBanking'; name = 'Funds Transfer'; note = /\bCR\b/.test(up) ? 'Money in' : /\bDR\b/.test(up) ? 'Money out' : '' }
+  else if (/EMI ON DC/.test(up)) { name = 'Debit Card EMI'; note = /PRIN/.test(up) ? 'Principal' : /INT/.test(up) ? 'Interest' : '' }
+  else if (/^LN\b.*AUTOPAY|^AUTOPAY\b/.test(up)) { name = 'Autopay'; note = 'Standing instruction' }
+  else if (/\bINT\.?\s*COLL|INTEREST (COLL|CHARG)/.test(up)) { name = 'Interest Charged'; note = s.replace(/^.*?(\d{2}-\d{2}-\d{4}.*)$/, '$1').slice(0, 40) }
+  else if (/\bINT\.?\s*PD\b|INTEREST PAID|INTEREST CREDIT/.test(up) && !/^UPI/.test(up)) { name = 'Savings Interest'; note = s.replace(/^INTEREST\s*/i, '').slice(0, 40) }
+  else if (/^TO:?\s*X+\d+:/.test(up)) { name = s.replace(/^TO:?\s*X+\d+:/i, '').split(/[:/]/)[0]; note = 'Transfer to your own account' }
+  else if (/^DC\s+\d+\s+AUTOPAY/.test(up)) { name = 'Debit Card EMI (AutoPay)'; note = 'Standing instruction' }
   else if (/^CBDC/.test(up)) { mode = 'Bank'; name = 'Digital Rupee (CBDC)'; note = /unload/i.test(s) ? 'Moved back to the bank' : '' }
   else if (/^INTEREST (PAID|CREDIT)/.test(up)) { name = 'Savings Interest'; note = s.replace(/^INTEREST\s*/i, '') }
   else if (/^(TO TRANSFER|BY TRANSFER)?\W*UPI/.test(up)) {
@@ -211,7 +226,7 @@ export function narrationInfo(n) {
   }
   else if (/^(ACH|NACH|ECS|SI )/.test(up)) { mode = 'Bank'; name = nameSeg(segs.slice(1)) || '' }
   else name = nameSeg(segs) || segs[0] || ''
-  name = nice(name.replace(/\s+IN$/, '').replace(/\d{9,}.*$/, '').replace(/@.*$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 40)
+  name = nice(name.replace(/\[[^\]]*\]/g, ' ').replace(/\(ref#[^)]*\)?/gi, ' ').replace(/\bhttps?:?\S*/gi, ' ').replace(/\b\w*\d{4,}\w*\b/g, ' ').replace(/(bengaluru|bangalore|mumbai|new delhi|delhi|chennai|gurgaon|gurugram|hyderabad|pune|noida|kolkata|thane|ahmedabad|jaipur)\s*$/i, '').replace(/\s+(private|pvt|privat\w*)\s*\w*$/i, '').replace(/\s+IN$/, '').replace(/\d{9,}.*$/, '').replace(/@.*$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 40)
   return { mode, merchant: name || 'Unknown', vpa, note: note.slice(0, 60) }
 }
 
@@ -234,16 +249,17 @@ export function statementRows(table) {
     if (c.amount >= 0 && debit == null && credit == null) {
       const a = parseMoney(r[c.amount])
       const dir = (c.type >= 0 ? r[c.type] : r[c.amount]) || ''
-      const bal = c.balance >= 0 ? parseMoney(r[c.balance]) : null
+      const bal = c.balance >= 0 ? parseBalance(r[c.balance]) : null
       // one amount column and no Dr / Cr marker: the balance says which way the money moved
       const marked = /\b(cr|dr)\b|cr$|dr$/i.test(dir) || (c.type >= 0 && /^[cd]$/i.test(dir.trim()))
       if (a != null) {
-        if (marked) { if (/cr|^\s*c\s*$|credit/i.test(dir) || isCr(r[c.amount])) credit = a; else debit = a }
+        if (/^\s*\+/.test(String(r[c.amount] || ''))) credit = a // a leading + is money in (HDFC card statements)
+        else if (marked) { if (/cr|^\s*c\s*$|credit/i.test(dir) || isCr(r[c.amount])) credit = a; else debit = a }
         else if (bal != null && prevBal != null) { if (bal > prevBal) credit = a; else debit = a }
         else debit = a
       }
     }
-    if (c.balance >= 0) { const b = parseMoney(r[c.balance]); if (b != null) prevBal = b }
+    if (c.balance >= 0) { const b = parseBalance(r[c.balance]); if (b != null) prevBal = b }
     if (!(debit > 0) && !(credit > 0)) continue
     const narration = r[c.narration] || ''
     const info = narrationInfo(narration)
@@ -253,8 +269,8 @@ export function statementRows(table) {
       date, type, amount, narration, merchant: info.merchant === 'Unknown' ? (fallbackName(narration) || 'Unknown') : info.merchant, mode: info.mode,
       category: canonCategory(classifyCategory(info.merchant, narration)),
       vpa: info.vpa, note: info.note, ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
-      balance: c.balance >= 0 ? parseMoney(r[c.balance]) : null,
-      key: `${date.toISOString().slice(0, 10)}|${type}|${amount}|${c.balance >= 0 ? parseMoney(r[c.balance]) : norm(narration).slice(0, 60)}`,
+      balance: c.balance >= 0 ? parseBalance(r[c.balance]) : null,
+      key: `${date.toISOString().slice(0, 10)}|${type}|${amount}|${c.balance >= 0 ? parseBalance(r[c.balance]) : norm(narration).slice(0, 60)}`,
     })
   }
   if (!rows.length) throw new Error('The table was found, but no dated rows with an amount were readable in it.')
@@ -350,7 +366,7 @@ export function correction(row, txn) {
 export function newEntry(row, accountId, account) {
   const isCard = account && account.cardType !== 'account'
   // on a credit card statement a credit is either the bill being paid (not income) or a refund / cashback
-  const billPaid = isCard && row.type === 'credit' && /(payment|paid|received|thank you|bbps|neft|imps|upi)/i.test(row.narration) && !/(refund|reversal|cashback)/i.test(row.narration)
+  const billPaid = isCard && row.type === 'credit' && /(payment|paid|received|thank you|bbps|neft|imps|upi|autopay)/i.test(row.narration) && !/(refund|reversal|cashback)/i.test(row.narration)
   const cardBill = !isCard && /\b(cred|cc payment|credit card|cardpay|card bill)\b/i.test(row.narration)
   return {
     date: row.date, amount: row.amount, type: row.type, merchant: billPaid ? 'Card payment' : row.merchant,
@@ -370,7 +386,7 @@ export async function readStatement({ file, text, password }) {
     const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf' || String.fromCharCode(...head.slice(0, 4)) === '%PDF'
     const isOle = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0 // old .xls, or an encrypted .xlsx
     if (isPdf) table = await (await import('./statementPdf')).parsePdf(await file.arrayBuffer(), password)
-    else if (isOle) throw new Error('This Excel file is old-format or password-protected, which cannot be read here. Open it in Excel, enter the password, use Save As → CSV (or .xlsx without a password), then import that. Or import the bank\'s PDF, which can be opened with its password here.')
+    else if (isOle) table = (await import('./statementXls')).parseXls(await file.arrayBuffer())
     else if (/\.xlsx$/i.test(file.name) || file.type.includes('spreadsheetml')) table = await parseXlsx(await file.arrayBuffer())
     else table = parseDelimited(await file.text())
   } else table = parseDelimited(text)
