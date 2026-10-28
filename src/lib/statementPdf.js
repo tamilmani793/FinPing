@@ -133,8 +133,16 @@ function assignRows(body, headCells, cols, numericCols, width) {
   const lastAmountRight = Math.max(0, ...body.flatMap(cells => cells.filter(c => MONEY.test(c.text)).map(c => c.x1)))
   const narrationAfterAmounts = cols.narration > Math.max(...numericCols, -1)
 
+  const dateXs = body.map(cells => cells.find(c => DATE_AT_START.test(c.text) && cells.some(k => MONEY.test(k.text)))).filter(Boolean).map(c => c.x0).sort((p, q) => p - q)
+  const pageDateX0 = dateXs.length ? dateXs[Math.floor(dateXs.length / 2)] : null
+  const pageMoneyX0 = Math.min(1e9, ...body.flatMap(cells => cells.filter(c => MONEY.test(c.text)).map(c => c.x0)))
+
   return body.map(cells => {
     const row = Array.from({ length: width }, () => '')
+    // Text between the date and the first amount is the description, whatever the heading position says; a reference
+    // number or a second date in that stretch keeps its own column
+    const dateCell = cells.find(c => DATE_AT_START.test(c.text))
+    const moneyX0 = Math.min(1e9, ...cells.filter(c => MONEY.test(c.text)).map(c => c.x0))
     for (const c of cells) {
       let col
       if (MONEY.test(c.text) && numericCols.length) {
@@ -146,6 +154,11 @@ function assignRows(body, headCells, cols, numericCols, width) {
         let k = 0
         for (let i = 0; i < anchors.length; i++) if (c.x0 >= anchors[i] - 3) k = i
         col = textCols[k]
+      } else if (!useAnchors && !narrationAfterAmounts && dateCell === c) {
+        col = cols.date
+      } else if (!useAnchors && !narrationAfterAmounts && pageDateX0 != null && !DATE_ONLY.test(c.text) && !(cols.ref >= 0 && /^[A-Za-z]{0,4}\d{9,}$/.test(c.text))
+        && c.x0 >= (dateCell ? dateCell.x1 : pageDateX0) - 5 + (dateCell ? 0 : 10) && c.x0 < Math.min(moneyX0, pageMoneyX0) - 4) {
+        col = cols.narration
       } else {
         const lefts = headCells.map(h => h.x0 - 3)
         col = 0
@@ -162,8 +175,8 @@ function assignRows(body, headCells, cols, numericCols, width) {
 // them, and the reference / value date / amounts sit on whichever line is level with the middle of the cell, so
 // the lines above AND below them belong to the same transaction. A new transaction starts at a line whose DATE
 // column holds a date (a value date in another column does not count). Lines are then joined cell by cell.
-const DATE_ONLY = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ -,]*\d{2,4})$/
-const DATE_AT_START = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ -,]*\d{2,4})/
+const DATE_ONLY = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ ,.-]*\d{2,4})$/
+const DATE_AT_START = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ ,.-]*\d{2,4})/
 const FOOTER = /(statement summary|end of statement|generated (on|by)|this is a computer|registered office|closing balance\s*:|page \d+ of \d+|gstin|state account branch)/i
 
 function foldContinuations(table, c, pages, ys = []) {

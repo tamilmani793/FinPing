@@ -5,6 +5,7 @@ import { parseSMS } from './smsParser'
 // in a row (4 ATM withdrawals of 8,000; 4 payments of 4,000). So "same amount, same minute" is NOT
 // enough: the evidence inside the messages decides.
 export const DUP_WINDOW_MS = 5 * 60 * 1000
+const BARE_WINDOW_MS = 30 * 1000
 const DAY = 24 * 60 * 60 * 1000
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -52,7 +53,10 @@ export function isSameTransaction(a, b, windowMs = DUP_WINDOW_MS) {
   const dt = Math.abs(new Date(a.date) - new Date(b.date))
   // an EMI is posted on its due date, while the bank's alert carries the real debit time: same day is close enough
   if (loanEntry && dt <= 30 * 60 * 60 * 1000) return true
-  if (dt <= windowMs) return true
+  // Nothing inside either message tells the payments apart (no reference, balance or time stamp): only a copy that
+  // arrives within seconds is the same alert. Four genuine payments of the same amount a minute or two apart stay four.
+  const bare = !sa.refs.size && !sb.refs.size && sa.balance == null && sb.balance == null && sa.stamp == null && sb.stamp == null
+  if (dt <= (bare ? Math.min(windowMs, BARE_WINDOW_MS) : windowMs)) return true
   return sa.mandate && sb.mandate && sameLocalDay(a.date, b.date)
 }
 

@@ -366,11 +366,12 @@ export function correction(row, txn) {
 export function newEntry(row, accountId, account) {
   const isCard = account && account.cardType !== 'account'
   // on a credit card statement a credit is either the bill being paid (not income) or a refund / cashback
-  const billPaid = isCard && row.type === 'credit' && /(payment|paid|received|thank you|bbps|neft|imps|upi|autopay)/i.test(row.narration) && !/(refund|reversal|cashback)/i.test(row.narration)
+  const cashback = isCard && row.type === 'credit' && /cashback|cash back|reward/i.test(row.narration)
+  const billPaid = isCard && row.type === 'credit' && !cashback && /(payment|paid|received|thank you|bbps|bppy|neft|imps|upi|autopay|online trf|payzapp|net ?banking|cc pay)/i.test(row.narration) && !/(refund|reversal|reversed|crv)/i.test(row.narration)
   const cardBill = !isCard && /\b(cred|cc payment|credit card|cardpay|card bill)\b/i.test(row.narration)
   return {
     date: row.date, amount: row.amount, type: row.type, merchant: billPaid ? 'Card payment' : row.merchant,
-    category: billPaid || cardBill ? 'Card Payment' : row.category,
+    category: billPaid || cardBill ? 'Card Payment' : cashback ? 'Cashback' : row.category,
     paymentMode: isCard ? 'Credit Card' : row.mode, bank: account?.bank || '', accountLast4: account?.cardLast4 || null, cardId: accountId, rawSMS: null,
     parsedBy: 'statement', counterparty: row.merchant !== 'Unknown' ? row.merchant : null, vpa: row.vpa || null, stmtKey: row.stmtKey, bankNarration: row.narration, refNo: row.ref || [...row.refs][0] || null, stmtBalance: row.balance,
     ...(billPaid ? { kind: 'card_payment' } : {}),

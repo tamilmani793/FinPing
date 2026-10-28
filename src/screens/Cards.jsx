@@ -211,7 +211,7 @@ function TxnList({ card, list, emptyText, cards = [] }) {
               ? (r.eligible
                 ? <span className="badge badge-mint" style={{ fontSize: 9 }}>✅ Rewards</span>
                 : <span className="badge badge-red" style={{ fontSize: 9 }}>⛔ {r.reason}</span>)
-              : <span className="badge badge-indigo" style={{ fontSize: 9 }}>Refund / credit</span>}
+              : <span className="badge badge-indigo" style={{ fontSize: 9 }}>{t.kind === 'card_payment' || t.category === 'Card Payment' ? 'Bill payment' : t.category === 'Cashback' ? 'Cashback' : 'Refund'}</span>}
           />
         )
       })}
@@ -249,7 +249,7 @@ export function filterTxns(list, { period, from, to, dir }, now = new Date()) {
 function FilteredTxnList({ card, list, cards, emptyText }) {
   const [f, setF] = useState({ period: 'all', from: '', to: '', dir: 'both' })
   const shown = filterTxns(list, f)
-  const money = shown.filter(t => !t.isExcluded)
+  const money = shown // card bill payments count as money in even though they are left out of spending
   const inn = money.filter(t => t.type === 'credit').reduce((a, t) => a + t.amount, 0)
   const out = money.filter(t => t.type === 'debit').reduce((a, t) => a + t.amount, 0)
   return (
