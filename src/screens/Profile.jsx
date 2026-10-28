@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Sun, Moon, SunMoon, Check } from 'lucide-react'
+import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Sun, Moon, SunMoon, Check, Pencil, X, SlidersHorizontal } from 'lucide-react'
 import { format } from 'date-fns'
 import { TopBar, BtnPrimary, Avatar } from '../components/UI'
 import { useStore } from '../store'
@@ -31,12 +31,14 @@ export default function Profile() {
   const { name: savedName, photo } = useProfile()
   const { palette, mode } = useTheme()
   const [name, setName] = useState(savedName)
+  const [editingName, setEditingName] = useState(false)
   const [busy, setBusy] = useState(false)
   const [last, setLast] = useState(lastBackupAt())
   const photoInput = useRef(null)
   const restoreInput = useRef(null)
 
-  const saveName = () => { setUserName(name.trim()); showNotification('Name saved') }
+  const saveName = () => { setUserName(name.trim()); setEditingName(false); showNotification('Name saved') }
+  const cancelName = () => { setName(savedName); setEditingName(false) }
 
   const onPhoto = async e => {
     const file = e.target.files?.[0]
@@ -109,10 +111,18 @@ export default function Profile() {
             {photo && <button className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => { setProfilePhoto(''); showNotification('Picture removed') }}><Trash2 size={13} /> Remove</button>}
           </div>
           <div className="label-caps" style={{ textAlign: 'left', marginBottom: 6 }}>Your name</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input className="input" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveName() }} placeholder="Shown in the Home greeting" />
-            <button className="btn-primary" style={{ height: 46, padding: '0 18px' }} onClick={saveName} disabled={name.trim() === savedName}>Save</button>
-          </div>
+          {editingName ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input className="input" autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') cancelName() }} placeholder="Shown in the Home greeting" />
+              <button className="btn-primary" style={{ height: 52, width: 52, padding: 0, flexShrink: 0 }} onClick={saveName} aria-label="Save name"><Check size={20} /></button>
+              <button className="btn-ghost" style={{ height: 52, width: 52, padding: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={cancelName} aria-label="Cancel"><X size={18} /></button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 18 }}>
+              <div style={{ flex: 1, textAlign: 'left', fontSize: 16, fontWeight: 700, color: savedName ? 'var(--txt)' : 'var(--txt3)' }}>{savedName || 'Add your name'}</div>
+              <div onClick={() => { setName(savedName); setEditingName(true) }} aria-label="Edit name" style={{ width: 34, height: 34, borderRadius: 12, background: 'var(--gold-bg)', color: 'var(--gold-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Pencil size={16} /></div>
+            </div>
+          )}
           <div style={{ fontSize: 10.5, color: 'var(--txt3)', textAlign: 'left', marginTop: 8 }}>Your picture and name stay on this phone and are only used inside the app.</div>
         </div>
 
@@ -147,6 +157,10 @@ export default function Profile() {
               )
             })}
           </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 14, paddingTop: 4, paddingBottom: 4 }}>
+          <Row Icon={SlidersHorizontal} title="Dropdown options" sub="Banks, cards, categories, insurers and more" onClick={() => setActiveTab('options')} />
         </div>
 
         {/* backup */}

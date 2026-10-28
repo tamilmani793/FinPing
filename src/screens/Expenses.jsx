@@ -1,21 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
+import { endOfMonth } from 'date-fns'
+import { IndianRupee, Store, Tag, Wallet, CreditCard, StickyNote } from 'lucide-react'
 import { db } from '../db/schema'
-import { TopBar, Card, SectionHdr, Badge, TxnRow, Divider, LabelCaps, BtnPrimary, BtnSecondary, formatINR, getMerchantIcon, formatDate } from '../components/UI'
+import { TopBar, Card, SectionHdr, Badge, TxnRow, LabelCaps, BtnPrimary, formatINR, getMerchantIcon, formatDate } from '../components/UI'
+import { Field, FormHeading, TextField, Picker } from '../components/Fields'
 import TxnDetailSheet from '../components/TxnDetailSheet'
 import { applyTxnToCard } from '../lib/ingestSMS'
+import { useOptions, categoryIcon } from '../lib/options'
 import { useStore } from '../store'
-
-const CATEGORY_ICONS = {
-  'Food Delivery': '🍔', 'E-Commerce': '🛍', 'Utilities & Bills': '⚡',
-  'Transport': '🚗', 'Health': '💊', 'Fuel': '⛽', 'Rent': '🏠',
-  'Grocery': '🥦', 'Travel Online': '✈️', 'Entertainment': '🎬',
-  'Insurance': '🛡', 'EMI': '🏦', 'General': '💳', 'Cashback': '💚',
-}
 
 const FILTERS = ['All', 'Food', 'Shopping', 'Utilities', 'Travel', 'Fuel', 'Excluded']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MODES = ['UPI', 'Card', 'NetBanking', 'Cash', 'Wallet']
+const I = 17
 
 export default function Expenses() {
   const [activeFilter, setActiveFilter] = useState(0)
@@ -25,6 +23,7 @@ export default function Expenses() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth())
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const { showNotification, composeRequest } = useStore()
+  const categoryList = useOptions('categories')
 
   useEffect(() => { if (composeRequest > 0) setShowAddForm(true) }, [composeRequest])
 
@@ -86,16 +85,21 @@ export default function Expenses() {
     showNotification('Transaction added!', 'success')
   }
 
+  const cardOptions = accountList.map(c => ({
+    value: String(c.id), label: c.name + (c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''),
+    sub: c.cardType === 'account' ? 'bank account' : c.cardType === 'debit' ? 'debit card' : 'credit card',
+  }))
+
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150, position: 'relative' }}>
       <TopBar sub={`Expenses · ${MONTHS[selectedMonth]} ${selectedYear}`} />
 
       {/* Month Selector */}
       <div style={{ padding: '10px 16px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <select value={selectedMonth} onChange={e => setSelectedMonth(+e.target.value)} className="input" style={{ flex: 1, height: 36 }}>
+        <select value={selectedMonth} onChange={e => setSelectedMonth(+e.target.value)} className="input" style={{ flex: 1, height: 40, borderRadius: 14 }}>
           {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
         </select>
-        <select value={selectedYear} onChange={e => setSelectedYear(+e.target.value)} className="input" style={{ width: 80, height: 36 }}>
+        <select value={selectedYear} onChange={e => setSelectedYear(+e.target.value)} className="input" style={{ width: 96, height: 40, borderRadius: 14 }}>
           {[2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
@@ -123,33 +127,38 @@ export default function Expenses() {
         <SectionHdr title="By Category" right={<Badge variant="grey">{cats.length} categories</Badge>} />
 
         <div style={{ marginBottom: 10 }}>
-          <button className="btn-secondary" style={{ width: '100%', height: 36, fontSize: 12 }} onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Close' : '+ Add Manually'}</button>
+          <button className="btn-secondary" style={{ width: '100%', height: 42, fontSize: 13 }} onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Close' : '+ Add Manually'}</button>
         </div>
 
         {/* Manual Add Form */}
         {showAddForm && (
-          <Card style={{ marginBottom: 10 }}>
-            <LabelCaps style={{ marginBottom: 8 }}>Add Transaction</LabelCaps>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input className="input" placeholder="Merchant name" value={form.merchant} onChange={e => setForm({ ...form, merchant: e.target.value })} />
-              <input className="input" type="number" placeholder="Amount (₹)" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-              <select className="input" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                {Object.keys(CATEGORY_ICONS).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <select className="input" value={form.cardId} onChange={e => setForm({ ...form, cardId: e.target.value })}>
-                <option value="">Paid from: none (cash / other)</option>
-                {accountList.map(c => <option key={c.id} value={c.id}>{c.name}{c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''} · {c.cardType === 'account' ? 'bank account' : c.cardType === 'debit' ? 'debit card' : 'credit card'}</option>)}
-              </select>
+          <Card style={{ marginBottom: 12, padding: 16 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>Add a transaction</div>
+            <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '2px 0 14px' }}>Cash spends and anything the SMS sync missed.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field label="Merchant"><TextField icon={<Store size={I} />} placeholder="Where did you spend?" value={form.merchant} onChange={e => setForm({ ...form, merchant: e.target.value })} /></Field>
+              <div className="form-grid">
+                <Field label="Amount"><TextField icon={<IndianRupee size={I} />} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></Field>
+                <Field label="Category">
+                  <Picker value={form.category} options={categoryList.map(c => ({ value: c.name, label: c.name, icon: c.icon }))} onChange={v => setForm({ ...form, category: v })} title="Category" placeholder="Select" />
+                </Field>
+              </div>
+              <FormHeading>Paid from</FormHeading>
+              <Field label="Card or account">
+                <Picker value={form.cardId} options={cardOptions} onChange={v => setForm({ ...form, cardId: v })} icon={<CreditCard size={I} />} title="Paid from" placeholder="None (cash / other)" clearLabel="None (cash / other)" />
+              </Field>
               {!form.cardId && (
-                <select className="input" value={form.paymentMode} onChange={e => setForm({ ...form, paymentMode: e.target.value })}>
-                  {['UPI', 'Card', 'NetBanking', 'Cash', 'Wallet'].map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <Field label="Payment mode">
+                  <Picker value={form.paymentMode} options={MODES} onChange={v => setForm({ ...form, paymentMode: v })} icon={<Wallet size={I} />} title="Payment mode" />
+                </Field>
               )}
-              <input className="input" placeholder="Tags (comma separated)" value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} />
-              <input className="input" placeholder="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <BtnPrimary onClick={handleAddManual} style={{ flex: 1, height: 36, fontSize: 12 }}>Save</BtnPrimary>
-                <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => setShowAddForm(false)}>Cancel</button>
+              <div className="form-grid">
+                <Field label="Tags"><TextField icon={<Tag size={I} />} placeholder="comma separated" value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} /></Field>
+                <Field label="Notes"><TextField icon={<StickyNote size={I} />} placeholder="Optional" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
+                <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={() => setShowAddForm(false)}>Cancel</button>
+                <BtnPrimary onClick={handleAddManual} style={{ flex: 1 }}>Save</BtnPrimary>
               </div>
             </div>
           </Card>
@@ -164,7 +173,7 @@ export default function Expenses() {
           return (
             <Card key={cat} style={{ padding: '10px 14px', marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: isExpanded ? 6 : 0 }} onClick={() => toggleCat(cat)}>
-                <div style={{ fontSize: 18 }}>{CATEGORY_ICONS[cat] || '💳'}</div>
+                <div style={{ fontSize: 18 }}>{categoryIcon(categoryList, cat)}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{cat}</div>
                   <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{txns.length} transaction{txns.length !== 1 ? 's' : ''}</div>

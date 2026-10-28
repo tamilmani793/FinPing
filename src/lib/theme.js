@@ -68,6 +68,7 @@ export function themeVars(paletteId, dark) {
     '--pink': t.accent, '--pink-bg': t.accentBg,
     '--txt': t.txt, '--txt2': t.txt2, '--txt3': t.txt3,
     '--border': `rgba(${line},${dark ? 0.10 : 0.10})`, '--border2': `rgba(${line},${dark ? 0.18 : 0.18})`,
+    '--line-rgb': dark ? '0,0,0' : line,
     '--shadow': dark ? '0 2px 10px rgba(0,0,0,0.35)' : `0 2px 10px rgba(${line},0.07)`,
     '--nav-shadow': dark ? '0 6px 22px rgba(0,0,0,0.5)' : `0 6px 22px rgba(${line},0.16)`,
     '--track': `rgba(${line},${dark ? 0.16 : 0.10})`, '--chip-grey': `rgba(${line},${dark ? 0.12 : 0.06})`,

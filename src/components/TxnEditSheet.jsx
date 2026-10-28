@@ -1,34 +1,29 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { IndianRupee, Calendar, Store, Wallet, CreditCard } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
+import { useOptions } from '../lib/options'
 import { BtnPrimary } from './UI'
+import { Field, Segmented, TextField, Picker } from './Fields'
 
-const CATEGORIES = ['Food Delivery', 'E-Commerce', 'Utilities & Bills', 'Transport', 'Health', 'Fuel', 'Rent', 'Grocery', 'Travel Online',
-  'Entertainment', 'Insurance', 'EMI', 'Investment', 'UPI Scan & Pay', 'Cashback', 'Salary', 'Transfer', 'General']
 const MODES = ['UPI', 'Credit Card', 'Debit Card', 'Card', 'Bank', 'NetBanking', 'Cash', 'Wallet', 'Other']
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <div className="label-caps" style={{ marginBottom: 4 }}>{label}</div>
-      {children}
-    </div>
-  )
-}
+const I = 17
 
 // Fix anything SMS parsing got wrong: direction, mode, category, card, amount...
 export default function TxnEditSheet({ txn, onClose }) {
   const { showNotification } = useStore()
   const cards = useLiveQuery(() => db.creditCards.toArray()) || []
+  const categoryList = useOptions('categories')
   const [f, setF] = useState({
     merchant: txn.merchant || '', amount: String(txn.amount ?? ''), date: format(new Date(txn.date), 'yyyy-MM-dd'),
     type: txn.type || 'debit', category: txn.category || 'General', paymentMode: txn.paymentMode || 'Other',
     cardId: txn.cardId ?? '', notes: txn.notes || '', isExcluded: !!txn.isExcluded,
   })
   const set = k => e => setF({ ...f, [k]: e.target.value })
-  const categories = CATEGORIES.includes(f.category) ? CATEGORIES : [f.category, ...CATEGORIES]
+  // a category that is no longer in the list (old data) stays selectable
+  const categories = categoryList.some(c => c.name === f.category) ? categoryList : [{ name: f.category, icon: '💳' }, ...categoryList]
   const modes = MODES.includes(f.paymentMode) ? MODES : [f.paymentMode, ...MODES]
 
   const save = async () => {
@@ -57,45 +52,37 @@ export default function TxnEditSheet({ txn, onClose }) {
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
         <div className="sheet-handle" />
-        <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 12 }}>Edit transaction</div>
-        {txn.rawSMS && <div className="sms-raw" style={{ marginBottom: 12 }}>{txn.rawSMS}</div>}
+        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 12 }}>Edit transaction</div>
+        {txn.rawSMS && <div className="sms-raw" style={{ marginBottom: 14 }}>{txn.rawSMS}</div>}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Field label="Type">
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[['debit', 'Expense (money out)'], ['credit', 'Income / deposit (money in)']].map(([v, l]) => (
-                <div key={v} className={`chip${f.type === v ? ' active' : ''}`} style={{ flex: 1, textAlign: 'center' }} onClick={() => setF({ ...f, type: v })}>{l}</div>
-              ))}
-            </div>
-          </Field>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <Field label="Merchant / description"><input className="input" value={f.merchant} onChange={set('merchant')} /></Field>
-            <Field label="Amount (₹)"><input className="input" type="number" inputMode="decimal" value={f.amount} onChange={set('amount')} /></Field>
-            <Field label="Date"><input className="input" type="date" value={f.date} onChange={set('date')} /></Field>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Segmented value={f.type} options={[{ value: 'debit', label: 'Money out' }, { value: 'credit', label: 'Money in' }]} onChange={v => setF({ ...f, type: v })} />
+          <Field label="Merchant / description"><TextField icon={<Store size={I} />} value={f.merchant} onChange={set('merchant')} /></Field>
+          <div className="form-grid">
+            <Field label="Amount"><TextField icon={<IndianRupee size={I} />} type="number" inputMode="decimal" value={f.amount} onChange={set('amount')} /></Field>
+            <Field label="Date"><TextField icon={<Calendar size={I} />} type="date" value={f.date} onChange={set('date')} /></Field>
             <Field label="Category">
-              <select className="input" value={f.category} onChange={set('category')}>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>
+              <Picker value={f.category} options={categories.map(c => ({ value: c.name, label: c.name, icon: c.icon }))} onChange={v => setF({ ...f, category: v })} title="Category" placeholder="Select" />
             </Field>
             <Field label="Paid via">
-              <select className="input" value={f.paymentMode} onChange={set('paymentMode')}>{modes.map(m => <option key={m} value={m}>{m}</option>)}</select>
-            </Field>
-            <Field label="Card">
-              <select className="input" value={f.cardId} onChange={set('cardId')}>
-                <option value="">None (bank account / cash)</option>
-                {cards.map(c => <option key={c.id} value={c.id}>{c.name}{c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''}</option>)}
-              </select>
+              <Picker value={f.paymentMode} options={modes} onChange={v => setF({ ...f, paymentMode: v })} icon={<Wallet size={I} />} title="Paid via" placeholder="Select" />
             </Field>
           </div>
-          <Field label="Notes"><input className="input" value={f.notes} onChange={set('notes')} placeholder="Optional" /></Field>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-            <input type="checkbox" checked={f.isExcluded} onChange={e => setF({ ...f, isExcluded: e.target.checked })} />
+          <Field label="Card or account">
+            <Picker value={String(f.cardId)} options={cards.map(c => ({ value: String(c.id), label: c.name + (c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : '') }))}
+              onChange={v => setF({ ...f, cardId: v })} icon={<CreditCard size={I} />} title="Card or account" placeholder="None (cash / other)" clearLabel="None (bank account / cash)" />
+          </Field>
+          <Field label="Notes"><TextField value={f.notes} onChange={set('notes')} placeholder="Optional" /></Field>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5 }}>
+            <input type="checkbox" checked={f.isExcluded} onChange={e => setF({ ...f, isExcluded: e.target.checked })} style={{ width: 18, height: 18, accentColor: 'var(--gold)' }} />
             Exclude from spend totals
           </label>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            <BtnPrimary onClick={save} style={{ flex: 1 }}>Save</BtnPrimary>
-            <button className="btn-ghost" style={{ height: 46 }} onClick={onClose}>Cancel</button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={onClose}>Cancel</button>
+            <BtnPrimary onClick={save} style={{ flex: 1 }}>Save changes</BtnPrimary>
           </div>
-          <button className="btn-ghost" style={{ color: 'var(--red-dim)', borderColor: 'var(--red-border)' }} onClick={remove}>Delete transaction</button>
+          <button className="btn-ghost" style={{ color: 'var(--red-dim)', borderColor: 'var(--red-border)', height: 46 }} onClick={remove}>Delete transaction</button>
         </div>
       </div>
     </div>

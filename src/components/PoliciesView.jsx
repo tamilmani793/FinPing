@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { differenceInCalendarDays, format } from 'date-fns'
-import { ShieldCheck } from 'lucide-react'
+import { ShieldCheck, IndianRupee, Calendar, Building2, FileText, Hash, StickyNote, Repeat, BadgeCheck } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { BtnPrimary, formatINR } from './UI'
-import { POLICY_TYPES, INSURERS, FREQUENCIES, freqLabel, monthlyEquivalent, isLive, advanceDue, dueState } from '../lib/policies'
+import { Field, Segmented, TextField, Picker } from './Fields'
+import { useOptionNames } from '../lib/options'
+import { FREQUENCIES, freqLabel, monthlyEquivalent, isLive, advanceDue, dueState } from '../lib/policies'
 
 const EMPTY = {
   name: '', insurer: '', type: 'Term insurance', policyNo: '', sumAssured: '', premium: '', frequency: 'monthly',
@@ -13,15 +15,6 @@ const EMPTY = {
 }
 const day = v => (v ? format(new Date(v), 'yyyy-MM-dd') : '')
 const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <div className="label-caps" style={{ marginBottom: 4 }}>{label}</div>
-      {children}
-    </div>
-  )
-}
 
 function DueBadge({ policy }) {
   const state = dueState(policy)
@@ -35,6 +28,8 @@ function DueBadge({ policy }) {
 
 export default function PoliciesView() {
   const { showNotification } = useStore()
+  const insurers = useOptionNames('insurers')
+  const policyTypes = useOptionNames('policyTypes')
   const policies = useLiveQuery(() => db.policies.toArray()) || []
   const [open, setOpen] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -100,37 +95,36 @@ export default function PoliciesView() {
       <button className="btn-primary" style={{ width: '100%', height: 42, marginBottom: 12 }} onClick={() => (open && !editId ? close() : (setEditId(null), setForm(EMPTY), setOpen(true)))}>＋ Add policy</button>
 
       {open && (
-        <div className="card" style={{ marginBottom: 12 }}>
-          <div className="label-caps" style={{ marginBottom: 8 }}>{editId ? 'Edit policy' : 'Add policy'}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Field label="Policy name"><input className="input" value={form.name} onChange={set('name')} placeholder="e.g. LIC Jeevan Anand, HDFC Click 2 Protect" /></Field>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <Field label="Insurer"><input className="input" list="dl-insurers" value={form.insurer} onChange={set('insurer')} placeholder="LIC" /></Field>
-              <Field label="Policy type">
-                <select className="input" value={form.type} onChange={set('type')}>{POLICY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
-              </Field>
-              <Field label="Premium (₹)"><input className="input" type="number" inputMode="decimal" value={form.premium} onChange={set('premium')} /></Field>
-              <Field label="Paid">
-                <select className="input" value={form.frequency} onChange={set('frequency')}>{FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}</select>
-              </Field>
-              <Field label="Next premium due"><input className="input" type="date" value={form.nextDueDate} onChange={set('nextDueDate')} /></Field>
-              <Field label="Sum assured (₹)"><input className="input" type="number" inputMode="decimal" value={form.sumAssured} onChange={set('sumAssured')} /></Field>
-              <Field label="Policy ends / matures on"><input className="input" type="date" value={form.endDate} onChange={set('endDate')} /></Field>
-              <Field label="Maturity amount (₹, if any)"><input className="input" type="number" inputMode="decimal" value={form.maturityAmount} onChange={set('maturityAmount')} /></Field>
+        <div className="card" style={{ marginBottom: 12, padding: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 14 }}>{editId ? 'Edit policy' : 'Add a policy'}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <Field label="Policy name"><TextField icon={<ShieldCheck size={17} />} value={form.name} onChange={set('name')} placeholder="e.g. LIC Jeevan Anand" /></Field>
+            <div className="form-grid">
+              <Field label="Insurer"><Picker value={form.insurer} options={insurers} onChange={v => setForm({ ...form, insurer: v })} allowCustom icon={<Building2 size={17} />} title="Insurer" placeholder="LIC" clearLabel="Not set" /></Field>
+              <Field label="Policy type"><Picker value={form.type} options={policyTypes} onChange={v => setForm({ ...form, type: v })} icon={<FileText size={17} />} title="Policy type" /></Field>
             </div>
-            <Field label="Policy number (optional)"><input className="input" value={form.policyNo} onChange={set('policyNo')} /></Field>
-            <Field label="Notes (optional)"><input className="input" value={form.notes} onChange={set('notes')} /></Field>
+            <Field label="Premium paid"><Segmented value={form.frequency} options={FREQUENCIES.map(f => ({ value: f.id, label: f.label }))} onChange={v => setForm({ ...form, frequency: v })} /></Field>
+            <div className="form-grid">
+              <Field label="Premium"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" value={form.premium} onChange={set('premium')} placeholder="0" /></Field>
+              <Field label="Next premium due"><TextField icon={<Calendar size={17} />} type="date" value={form.nextDueDate} onChange={set('nextDueDate')} /></Field>
+              <Field label="Sum assured"><TextField icon={<BadgeCheck size={17} />} type="number" inputMode="decimal" value={form.sumAssured} onChange={set('sumAssured')} placeholder="0" /></Field>
+              <Field label="Ends / matures on"><TextField icon={<Calendar size={17} />} type="date" value={form.endDate} onChange={set('endDate')} /></Field>
+              <Field label="Maturity amount" span hint="Only if the policy pays out at the end."><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" value={form.maturityAmount} onChange={set('maturityAmount')} placeholder="0" /></Field>
+            </div>
+            <div className="form-grid">
+              <Field label="Policy number"><TextField icon={<Hash size={17} />} value={form.policyNo} onChange={set('policyNo')} placeholder="Optional" /></Field>
+              <Field label="Notes"><TextField icon={<StickyNote size={17} />} value={form.notes} onChange={set('notes')} placeholder="Optional" /></Field>
+            </div>
             {Number(form.premium) > 0 && (
-              <div style={{ fontSize: 11, color: 'var(--txt2)' }}>
+              <div style={{ fontSize: 12, color: 'var(--txt2)', margin: '-4px 6px 0' }}>
                 {freqLabel(form.frequency)} premium of {formatINR(Number(form.premium))} counts as <b style={{ color: 'var(--txt)' }}>{formatINR(monthlyEquivalent({ premium: Number(form.premium), frequency: form.frequency }))}</b> a month in Monthly EMI.
               </div>
             )}
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={close}>Cancel</button>
               <BtnPrimary onClick={save} style={{ flex: 1 }}>{editId ? 'Save changes' : 'Save policy'}</BtnPrimary>
-              <button className="btn-ghost" style={{ height: 46 }} onClick={close}>Cancel</button>
             </div>
           </div>
-          <datalist id="dl-insurers">{INSURERS.map(i => <option key={i} value={i} />)}</datalist>
         </div>
       )}
 

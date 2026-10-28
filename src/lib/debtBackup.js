@@ -111,13 +111,25 @@ export async function recordRepayment(debtId, { amount, principal, interest, dat
     const debt = await db.debts.get(debtId)
     if (!debt) throw new Error('Debt not found')
 
-    // A part payment typed in (not an EMI): all of it goes to principal from its date. Interest on the old
-    // balance up to that date is kept aside and charged with the next EMI; after it, interest runs on the lower balance.
-    const part = source === 'manual' && installmentNo == null && blank(interest) && blank(principal)
+    // A payment typed in (not an EMI that posted itself). You can split it into principal and interest; with no
+    // split, all of it is principal. Interest on the old balance up to the payment date is kept aside and charged
+    // with the next EMI (less any interest paid now); after it, interest runs on the lower balance.
+    const part = source === 'manual' && installmentNo == null
     let interestPart, principalPart
     if (part) {
-      principalPart = Math.min(amt, Math.max(0, round2(debt.currentOutstanding || 0)))
-      interestPart = round2(amt - principalPart) // only when paying more than is owed (pre-closure with interest)
+      const owed = Math.max(0, round2(debt.currentOutstanding || 0))
+      if (blank(interest) && blank(principal)) {
+        principalPart = Math.min(amt, owed)
+        interestPart = round2(amt - principalPart) // only when paying more than is owed (pre-closure with interest)
+      } else {
+        // one part typed: the other is whatever is left of the amount
+        principalPart = blank(principal) ? null : round2(Number(principal))
+        interestPart = blank(interest) ? round2(amt - principalPart) : round2(Math.min(Math.max(Number(interest) || 0, 0), amt))
+        if (principalPart == null) principalPart = round2(amt - interestPart)
+        if (!(principalPart >= 0)) throw new Error('Principal cannot be negative')
+        if (Math.abs(principalPart + interestPart - amt) > 0.011) throw new Error(`Principal ${principalPart} + interest ${interestPart} must add up to the amount paid (${amt})`)
+        if (principalPart > owed + 0.005) throw new Error(`Principal cannot be more than what is still owed (${owed})`)
+      }
     } else if (blank(interest) && blank(principal) && debt.interestRate > 0) {
       const last = lastRepaymentDate(await db.debtRepayments.where('debtId').equals(debtId).toArray())
       const sp = splitPayment(debt, amt, payDate, last)
@@ -139,7 +151,7 @@ export async function recordRepayment(debtId, { amount, principal, interest, dat
     if (part) {
       undoInfo.carryBefore = debt.accruedInterest || 0
       undoInfo.interestFromBefore = debt.interestFrom || null
-      patch.accruedInterest = round2((debt.accruedInterest || 0) + accrualUntil(debt, payDate))
+      patch.accruedInterest = Math.max(0, round2((debt.accruedInterest || 0) + accrualUntil(debt, payDate) - interestPart))
       if (Array.isArray(debt.schedule) && outstanding > 0.005) {
         undoInfo.scheduleBefore = debt.schedule
         patch.schedule = rebuildSchedule(debt, outstanding)

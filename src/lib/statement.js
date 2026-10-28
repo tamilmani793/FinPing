@@ -4,6 +4,7 @@
 // ICICI "Transaction Remarks", Axis "PARTICULARS" / "DR" / "CR"...), so the header row and the columns
 // are found by their names instead of by position.
 import { classifyCategory } from './smsParser'
+import { canonCategory } from './options'
 
 // ───────────────────────────── text → table ─────────────────────────────
 
@@ -244,7 +245,7 @@ export function statementRows(table) {
     const amount = debit > 0 ? debit : credit
     rows.push({
       date, type, amount, narration, merchant: info.merchant, mode: info.mode,
-      category: classifyCategory(info.merchant, narration),
+      category: canonCategory(classifyCategory(info.merchant, narration)),
       vpa: info.vpa, note: info.note, ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
       balance: c.balance >= 0 ? parseMoney(r[c.balance]) : null,
       key: `${date.toISOString().slice(0, 10)}|${type}|${amount}|${c.balance >= 0 ? parseMoney(r[c.balance]) : norm(narration).slice(0, 60)}`,

@@ -7,9 +7,12 @@ import { useStore } from '../store'
 import PoliciesView from '../components/PoliciesView'
 import { addManualRepayment, recordReceipt, undoRepayment } from '../lib/debtBackup'
 import { dailyInterest, splitPayment, lastRepaymentDate } from '../lib/loanMath'
-import { projectSchedule, defaultMode, nextEmiAmount, FIXED_TYPES } from '../lib/loanSchedule'
+import { projectSchedule, defaultMode, nextEmiAmount, accrualUntil, FIXED_TYPES } from '../lib/loanSchedule'
 import { parseEmiSchedule } from '../lib/scheduleImport'
 import { postDueEmis } from '../lib/emiEngine'
+import { Landmark, Wallet, Calendar, IndianRupee, Percent, Hash, User, FileText, Clock, Building2 } from 'lucide-react'
+import { Field, FormHeading, Segmented, TextField, Picker } from '../components/Fields'
+import { useDebtTypes } from '../lib/options'
 
 const EMPTY_DEBT = {
   name: '', type: 'PersonalLoan', lender: '', loanAccountNo: '', debitAccountId: '',
@@ -17,46 +20,32 @@ const EMPTY_DEBT = {
   nextEmiDate: '', paidCount: '', startDate: '', mode: 'reducing', notes: '',
 }
 const today = () => format(new Date(), 'yyyy-MM-dd')
+// How a typed-in payment splits: nothing entered = all principal; one part entered = the other is the rest.
+function splitOf(d, f) {
+  const amt = Number(f.amount) || 0
+  const owed = Math.max(0, Number(d.currentOutstanding) || 0)
+  const hasP = f.principal !== '' && f.principal != null, hasI = f.interest !== '' && f.interest != null
+  let p, i
+  if (hasP && hasI) { p = Number(f.principal); i = Number(f.interest) }
+  else if (hasI) { i = Number(f.interest); p = amt - i }
+  else if (hasP) { p = Number(f.principal); i = amt - p }
+  else { p = Math.min(amt, owed); i = amt - p }
+  p = Math.round(p * 100) / 100; i = Math.round(i * 100) / 100
+  let error = ''
+  if (amt > 0) {
+    if (p < 0 || i < 0) error = 'Principal and interest cannot be negative'
+    else if (Math.abs(p + i - amt) > 0.011) error = `Principal + interest is ${formatINR(p + i)} but you paid ${formatINR(amt)}`
+    else if (p > owed + 0.005) error = `Principal is more than the ${formatINR(owed)} still owed`
+  }
+  return { p: amt > 0 ? p : '', i: amt > 0 ? i : '', error }
+}
 const EMPTY_REPAY = { amount: '', principal: '', interest: '', date: today(), notes: '', accountId: '' }
 const EMPTY_RECEIPT = { amount: '', date: today(), notes: '', accountId: '' }
-
-// id (kept stable for saved debts) · label shown in the dropdown · icon
-const DEBT_TYPES = [
-  ['HomeLoan', 'Home loan', '🏠'],
-  ['MortgageLoan', 'Mortgage / loan against property', '🏘'],
-  ['GoldLoan', 'Gold loan', '🪙'],
-  ['CarLoan', 'Car loan', '🚗'],
-  ['TwoWheelerLoan', 'Two-wheeler loan', '🏍'],
-  ['PersonalLoan', 'Personal loan', '💼'],
-  ['EducationLoan', 'Education loan', '🎓'],
-  ['BusinessLoan', 'Business loan', '🏢'],
-  ['LoanAgainstSecurities', 'Loan against shares / mutual funds', '📈'],
-  ['CreditCardEMI', 'Credit card EMI', '💳'],
-  ['DebitCardEMI', 'Debit card EMI', '💳'],
-  ['ConsumerEMI', 'No-cost / consumer durable EMI', '📱'],
-  ['Overdraft', 'Overdraft', '🏦'],
-  ['CreditLine', 'Credit line / Buy-now-pay-later', '🧾'],
-  ['FriendBorrowed', 'Borrowed from friend / family', '🤝'],
-  ['FriendLent', 'Lent to friend / family', '🤲'],
-  ['Other', 'Other', '📄'],
-]
-const DEBT_ICONS = Object.fromEntries(DEBT_TYPES.map(([id, , icon]) => [id, icon]))
-const DEBT_LABELS = Object.fromEntries(DEBT_TYPES.map(([id, label]) => [id, label]))
 
 const toDate = s => (s ? new Date(`${s}T12:00:00`) : null)
 const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 const fmtS = d => (d ? format(new Date(d), 'd MMM') : '—')
 
-function Field({ label, children, span }) {
-  return (
-    <div style={span ? { gridColumn: '1 / -1' } : undefined}>
-      <LabelCaps style={{ marginBottom: 4 }}>{label}</LabelCaps>
-      {children}
-    </div>
-  )
-}
-
-// One line per instalment: date · EMI · interest · principal · balance left
 function ScheduleTable({ rows, footer }) {
   const cols = '1.05fr 1fr 0.9fr 1fr 1.2fr'
   const cell = { fontSize: 11, padding: '5px 0', fontVariantNumeric: 'tabular-nums' }
@@ -96,6 +85,9 @@ export default function Debt() {
   const { showNotification, debtSegment, setDebtSegment } = useStore()
   const accounts = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => c.cardType === 'account' && !c.draft)
   const acctLabel = a => `${a.name}${a.cardLast4 && !a.name.includes('••') ? ` ••${a.cardLast4}` : ''}`
+  const { list: debtTypes, icons: DEBT_ICONS, labels: DEBT_LABELS } = useDebtTypes()
+  const typeOptions = debtTypes.map(t => ({ value: t.id, label: t.label, icon: t.icon }))
+  const accountOptions = accounts.map(a => ({ value: String(a.id), label: acctLabel(a), sub: a.accountBalance != null ? formatINR(a.accountBalance) : undefined }))
 
   const debts = useLiveQuery(() => db.debts.toArray())
   const allRepayments = useLiveQuery(() => db.debtRepayments.toArray()) || []
@@ -251,12 +243,11 @@ export default function Debt() {
     showNotification('Debt marked as closed', 'success')
   }
 
-  const acctOptions = d => (
-    <>
-      <option value="">{d.debitAccountId != null && accounts.find(x => x.id === d.debitAccountId) ? `Loan's account (${acctLabel(accounts.find(x => x.id === d.debitAccountId))})` : 'No bank account'}</option>
-      {accounts.map(a => <option key={a.id} value={a.id}>{acctLabel(a)}{a.accountBalance != null ? ` · ${formatINR(a.accountBalance)}` : ''}</option>)}
-    </>
-  )
+  // the accounts a payment can be debited from / credited to; blank = the loan's own account
+  const acctOptions = d => {
+    const own = d.debitAccountId != null ? accounts.find(x => x.id === d.debitAccountId) : null
+    return [{ value: '', label: own ? `Loan's account (${acctLabel(own)})` : 'No bank account' }, ...accountOptions]
+  }
 
   // preview of the schedule the form describes
   const preview = (() => {
@@ -270,10 +261,8 @@ export default function Debt() {
       <TopBar title="Debt" />
 
       {/* Loans | Insurance policies */}
-      <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px' }}>
-        {[['loans', 'Loans'], ['insurance', 'Insurance']].map(([id, label]) => (
-          <div key={id} className={`chip${debtSegment === id ? ' active' : ''}`} style={{ flex: 1, textAlign: 'center' }} onClick={() => setDebtSegment(id)}>{label}</div>
-        ))}
+      <div style={{ padding: '0 16px 12px' }}>
+        <Segmented value={debtSegment} options={[{ value: 'loans', label: 'Loans' }, { value: 'insurance', label: 'Insurance' }]} onChange={setDebtSegment} />
       </div>
       {debtSegment === 'insurance' && <PoliciesView />}
       {debtSegment !== 'insurance' && (
@@ -318,10 +307,9 @@ export default function Debt() {
                       <textarea className="input" style={{ height: 130, fontSize: 11, marginBottom: 8 }} placeholder="0000000000138408252 01 Apr 2026 EMI ON DC 61802.28 16.00 12 26952.28&#10;4783.00 934.00 20 Apr 2026&#10;4847.00 760.00 20 May 2026 …" value={paste.text} onChange={e => setPaste({ ...paste, text: e.target.value })} />
                       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                         <div style={{ flex: 1 }}>
-                          <LabelCaps style={{ marginBottom: 4 }}>Payment is due on day … of the month AFTER the statement</LabelCaps>
-                          <input className="input" type="number" inputMode="numeric" min="1" max="31" value={paste.dueDay} onChange={e => setPaste({ ...paste, dueDay: e.target.value })} />
+                          <Field label="Due on day … of the month AFTER the statement"><TextField icon={<Calendar size={17} />} type="number" inputMode="numeric" min="1" max="31" value={paste.dueDay} onChange={e => setPaste({ ...paste, dueDay: e.target.value })} /></Field>
                         </div>
-                        <BtnPrimary onClick={readSchedule} style={{ height: 46, padding: '0 16px' }}>Read</BtnPrimary>
+                                                <BtnPrimary onClick={readSchedule} style={{ height: 52, padding: '0 22px', marginBottom: 0 }}>Read</BtnPrimary>
                       </div>
                       <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 6 }}>Card EMIs only: statement on the 20th and payment on the 5th of the next month, enter 5. A loan-details page already has its due dates, so this is ignored.</div>
                     </div>
@@ -348,39 +336,35 @@ export default function Debt() {
               )}
               {sched?.fromDebt && <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 10 }}>This loan follows your bank's own EMI schedule, so its amounts and dates are fixed. You can change its name, lender, account number and notes here. To use a different schedule, delete the loan and paste the new one.</div>}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div className="form-grid">
                 <Field label="Type" span>
-                  <select className="input" value={form.type} onChange={e => setType(e.target.value)}>
-                    {DEBT_TYPES.map(([id, label, icon]) => <option key={id} value={id}>{icon} {label}</option>)}
-                  </select>
+                  <Picker value={form.type} options={typeOptions} onChange={setType} title="Type of debt" placeholder="Choose a type" />
                 </Field>
-                <Field label="Name" span><input className="input" placeholder="e.g. HDFC Home Loan, Phone EMI" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
-                <Field label="Lender"><input className="input" value={form.lender} onChange={e => setForm({ ...form, lender: e.target.value })} /></Field>
-                <Field label="Loan account no."><input className="input" value={form.loanAccountNo} onChange={e => setForm({ ...form, loanAccountNo: e.target.value })} /></Field>
+                <Field label="Name" span><TextField icon={<FileText size={17} />} placeholder="e.g. HDFC Home Loan, Phone EMI" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
+                <Field label="Lender"><TextField icon={<Building2 size={17} />} value={form.lender} onChange={e => setForm({ ...form, lender: e.target.value })} /></Field>
+                <Field label="Loan account no."><TextField icon={<Hash size={17} />} value={form.loanAccountNo} onChange={e => setForm({ ...form, loanAccountNo: e.target.value })} /></Field>
                 <Field label="EMI debited from" span>
-                  <select className="input" value={form.debitAccountId} onChange={e => setForm({ ...form, debitAccountId: e.target.value })}>
-                    <option value="">Not set</option>
-                    {accounts.map(a => <option key={a.id} value={a.id}>{acctLabel(a)}{a.accountBalance != null ? ` · ${formatINR(a.accountBalance)}` : ''}</option>)}
-                  </select>
+                  <Picker value={form.debitAccountId} options={accountOptions} onChange={v => setForm({ ...form, debitAccountId: v })} icon={<Landmark size={17} />} title="EMI debited from" placeholder="Not set" clearLabel="Not set" />
                 </Field>
                 {/* with a pasted / saved bank schedule these are shown filled in, but locked: the schedule decides them */}
                 <fieldset disabled={!!sched} style={{ display: 'contents', border: 0, padding: 0, margin: 0 }}>
-                <Field label={FIXED_TYPES.includes(form.type) ? 'Purchase / loan amount (₹)' : 'Loan amount (₹)'}><input className="input" type="number" inputMode="decimal" value={form.principal} onChange={e => setForm({ ...form, principal: e.target.value })} /></Field>
-                <Field label="Still owed now (₹)"><input className="input" type="number" inputMode="decimal" placeholder="blank = new loan" value={form.currentOutstanding} onChange={e => setForm({ ...form, currentOutstanding: e.target.value })} /></Field>
-                <Field label="Interest % a year"><input className="input" type="number" inputMode="decimal" placeholder={FIXED_TYPES.includes(form.type) ? '0 for no-cost EMI' : ''} value={form.interestRate} onChange={e => setForm({ ...form, interestRate: e.target.value })} /></Field>
-                <Field label="EMI amount (₹)"><input className="input" type="number" inputMode="decimal" value={form.emiAmount} onChange={e => setForm({ ...form, emiAmount: e.target.value })} /></Field>
-                <Field label="Tenure (months)"><input className="input" type="number" inputMode="numeric" value={form.tenureMonths} onChange={e => setForm({ ...form, tenureMonths: e.target.value })} /></Field>
-                <Field label={form.currentOutstanding === '' && !editId ? 'First EMI date' : 'Next EMI date'}><input className="input" type="date" value={form.nextEmiDate} onChange={e => setForm({ ...form, nextEmiDate: e.target.value })} /></Field>
+                <Field label={FIXED_TYPES.includes(form.type) ? 'Purchase / loan amount' : 'Loan amount'}><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" value={form.principal} onChange={e => setForm({ ...form, principal: e.target.value })} /></Field>
+                <Field label="Still owed now"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder="blank = new loan" value={form.currentOutstanding} onChange={e => setForm({ ...form, currentOutstanding: e.target.value })} /></Field>
+                <Field label="Interest % a year"><TextField icon={<Percent size={17} />} type="number" inputMode="decimal" placeholder={FIXED_TYPES.includes(form.type) ? '0 for no-cost EMI' : ''} value={form.interestRate} onChange={e => setForm({ ...form, interestRate: e.target.value })} /></Field>
+                <Field label="EMI amount"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" value={form.emiAmount} onChange={e => setForm({ ...form, emiAmount: e.target.value })} /></Field>
+                <Field label="Tenure (months)"><TextField icon={<Clock size={17} />} type="number" inputMode="numeric" value={form.tenureMonths} onChange={e => setForm({ ...form, tenureMonths: e.target.value })} /></Field>
+                <Field label={form.currentOutstanding === '' && !editId ? 'First EMI date' : 'Next EMI date'}><TextField icon={<Calendar size={17} />} type="date" value={form.nextEmiDate} onChange={e => setForm({ ...form, nextEmiDate: e.target.value })} /></Field>
                 {(editId || form.currentOutstanding !== '') && (
-                  <Field label="EMIs already paid"><input className="input" type="number" inputMode="numeric" value={form.paidCount} onChange={e => setForm({ ...form, paidCount: e.target.value })} /></Field>
+                  <Field label="EMIs already paid"><TextField icon={<Hash size={17} />} type="number" inputMode="numeric" value={form.paidCount} onChange={e => setForm({ ...form, paidCount: e.target.value })} /></Field>
                 )}
-                <Field label="Start / disbursal date"><input className="input" type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></Field>
+                <Field label="Start / disbursal date"><TextField icon={<Calendar size={17} />} type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></Field>
                 <Field label="How it is paid" span>
-                  <select className="input" value={form.mode} onChange={e => setForm({ ...form, mode: e.target.value })}>
-                    <option value="reducing">Reducing-balance loan (interest on what is still owed)</option>
-                    <option value="fixed">Fixed EMI schedule (card / purchase EMI)</option>
-                    {(sched || form.mode === 'schedule') && <option value="schedule">Your bank's own schedule (pasted)</option>}
-                  </select>
+                  <Picker value={form.mode} disabled={!!sched} onChange={v => setForm({ ...form, mode: v })} icon={<Wallet size={17} />} title="How it is paid" placeholder="Choose"
+                    options={[
+                      { value: 'reducing', label: 'Reducing-balance loan', sub: 'interest on what is still owed' },
+                      { value: 'fixed', label: 'Fixed EMI schedule', sub: 'card / purchase EMI' },
+                      ...((sched || form.mode === 'schedule') ? [{ value: 'schedule', label: "Your bank's own schedule", sub: 'pasted' }] : []),
+                    ]} />
                 </Field>
                 </fieldset>
               </div>
@@ -405,10 +389,10 @@ export default function Debt() {
                 </div>
               )}
 
-              <input className="input" placeholder="Notes (optional)" style={{ marginBottom: 8 }} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <BtnPrimary onClick={handleSaveDebt} style={{ flex: 1, height: 38, fontSize: 13 }}>{editId ? 'Save changes' : 'Save debt'}</BtnPrimary>
-                <button className="btn-ghost" style={{ height: 38, fontSize: 12 }} onClick={closeForm}>Cancel</button>
+              <Field label="Notes" style={{ marginBottom: 14 }}><TextField icon={<FileText size={17} />} placeholder="Optional" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={closeForm}>Cancel</button>
+                <BtnPrimary onClick={handleSaveDebt} style={{ flex: 1 }}>{editId ? 'Save changes' : 'Save debt'}</BtnPrimary>
               </div>
             </Card>
           )}
@@ -501,10 +485,8 @@ export default function Debt() {
                     {d.notes && <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>{d.notes}</div>}
 
                     {/* Ledger of what was paid, and what is still to come */}
-                    <div style={{ display: 'flex', gap: 8, margin: '4px 0 8px' }}>
-                      {[['ledger', `Ledger · ${rows.length}`], ['upcoming', `Upcoming · ${proj.remaining}`]].map(([id, label]) => (
-                        <div key={id} className={`chip${view === id ? ' active' : ''}`} style={{ flex: 1, textAlign: 'center', padding: '5px 4px' }} onClick={() => setTab({ ...tab, [d.id]: id })}>{label}</div>
-                      ))}
+                    <div style={{ margin: '4px 0 10px' }}>
+                      <Segmented value={view} options={[{ value: 'ledger', label: `Ledger · ${rows.length}` }, { value: 'upcoming', label: `Upcoming · ${proj.remaining}` }]} onChange={id => setTab({ ...tab, [d.id]: id })} />
                     </div>
                     {view === 'ledger' && (rows.length ? (
                       <ScheduleTable rows={rows.map(r => {
@@ -512,7 +494,7 @@ export default function Debt() {
                         const manual = r.source !== 'auto'
                         return {
                           key: r.id, date: fmtS(r.date), dim: false, incoming,
-                          tag: incoming ? (d.type === 'FriendLent' ? 'received back' : 'received') : r.installmentNo ? `EMI #${r.installmentNo}${r.statementDate ? ` · stmt ${fmtS(r.statementDate)}` : ''}` : manual ? 'extra payment' : '',
+                          tag: incoming ? (d.type === 'FriendLent' ? 'received back' : 'received') : r.installmentNo ? `EMI #${r.installmentNo}${r.statementDate ? ` · stmt ${fmtS(r.statementDate)}` : ''}` : manual ? 'payment' : '',
                           emi: r.amount, interest: incoming ? 0 : r.interest, principal: incoming ? 0 : r.principal, balance: r.outstandingAfter ?? null,
                           onClick: manual ? () => { if (window.confirm('Remove this entry and put the balance back?')) handleUndo(r.id) } : undefined,
                         }
@@ -525,50 +507,65 @@ export default function Debt() {
                       />
                     ) : <div style={{ fontSize: 12, color: 'var(--txt2)', padding: '8px 0 12px' }}>{d.emiAmount > 0 ? 'No EMIs left.' : 'Add an EMI amount and date to see the schedule.'}</div>)}
 
-                    {repayFor === d.id && (
-                      <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, marginBottom: 8 }}>
-                        <LabelCaps style={{ marginBottom: 6 }}>Extra payment · still owed {formatINR(d.currentOutstanding)}</LabelCaps>
-                        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>A part-payment or pre-closure on top of the monthly EMI. The whole amount reduces the principal from the date you choose; interest after that date is charged on the lower balance. Regular EMIs post themselves.</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                          <input className="input" type="number" inputMode="decimal" placeholder="Amount paid (₹)" value={repayForm.amount} onChange={e => setRepayForm({ ...repayForm, amount: e.target.value })} />
-                          <input className="input" type="date" value={repayForm.date} onChange={e => setRepayForm({ ...repayForm, date: e.target.value })} />
+                    {repayFor === d.id && (() => {
+                      const split = splitOf(d, repayForm)
+                      const accrued = d.interestRate > 0 && !Array.isArray(d.schedule) ? Math.round(accrualUntil(d, repayForm.date || new Date()) + (d.accruedInterest || 0)) : 0
+                      return (
+                      <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 22, padding: 14, marginBottom: 10 }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>Make a payment</div>
+                        <div style={{ fontSize: 12, color: 'var(--txt2)', margin: '2px 0 4px' }}>Still owed <b style={{ color: 'var(--txt)' }}>{formatINR(d.currentOutstanding)}</b></div>
+                        <div style={{ fontSize: 11.5, color: 'var(--txt2)', margin: '0 0 12px', lineHeight: 1.5 }}>Enter what you paid and how it splits. Only the principal part lowers what you owe, from the date you choose; interest after that date is charged on the lower balance. With no split, all of it is principal. Regular EMIs post themselves.</div>
+                        <div className="form-grid" style={{ marginBottom: 12 }}>
+                          <Field label="Amount paid"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder="0" value={repayForm.amount} onChange={e => setRepayForm({ ...repayForm, amount: e.target.value })} /></Field>
+                          <Field label="Date"><TextField icon={<Calendar size={17} />} type="date" value={repayForm.date} onChange={e => setRepayForm({ ...repayForm, date: e.target.value })} /></Field>
+                          <Field label="Principal"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder={split.p !== '' && repayForm.principal === '' ? String(split.p) : '0'} value={repayForm.principal} onChange={e => setRepayForm({ ...repayForm, principal: e.target.value })} /></Field>
+                          <Field label="Interest"><TextField icon={<Percent size={17} />} type="number" inputMode="decimal" placeholder={split.i !== '' && repayForm.interest === '' ? String(split.i) : '0'} value={repayForm.interest} onChange={e => setRepayForm({ ...repayForm, interest: e.target.value })} /></Field>
                         </div>
-                        {Number(repayForm.amount) > 0 && (
-                          <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>
-                            Still owed after this: <b style={{ color: 'var(--mint-dim)' }}>{formatINR(Math.max(0, d.currentOutstanding - Number(repayForm.amount)))}</b> · principal reduced by <b style={{ color: 'var(--mint-dim)' }}>{formatINR(Math.min(Number(repayForm.amount), d.currentOutstanding))}</b>, no interest taken out of it.
+                        {accrued > 0 && (
+                          <div style={{ fontSize: 12, color: 'var(--txt2)', margin: '0 6px 10px' }}>
+                            Interest built up so far: <b style={{ color: 'var(--red-dim)' }}>{formatINR(accrued)}</b>{' '}
+                            <span style={{ color: 'var(--gold-dim)', fontWeight: 700, cursor: 'pointer' }} onClick={() => setRepayForm({ ...repayForm, interest: String(Math.min(accrued, Number(repayForm.amount) || accrued)), principal: '' })}>Use as the interest part</span>
                           </div>
                         )}
-                        <LabelCaps style={{ marginBottom: 4 }}>Debited from</LabelCaps>
-                        <select className="input" style={{ marginBottom: 8 }} value={repayForm.accountId} onChange={e => setRepayForm({ ...repayForm, accountId: e.target.value })}>{acctOptions(d)}</select>
-                        <input className="input" placeholder="Note (optional)" style={{ marginBottom: 8 }} value={repayForm.notes} onChange={e => setRepayForm({ ...repayForm, notes: e.target.value })} />
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <BtnPrimary onClick={handleSaveRepay} style={{ flex: 1, height: 36, fontSize: 12 }}>Save payment</BtnPrimary>
-                          <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => setRepayFor(null)}>Cancel</button>
+                        {Number(repayForm.amount) > 0 && (
+                          <div style={{ fontSize: 12, margin: '0 6px 12px', color: split.error ? 'var(--red-dim)' : 'var(--txt2)', lineHeight: 1.5 }}>
+                            {split.error || <>Principal <b style={{ color: 'var(--mint-dim)' }}>{formatINR(split.p)}</b> + interest <b style={{ color: 'var(--red-dim)' }}>{formatINR(split.i)}</b> = {formatINR(Number(repayForm.amount))} · still owed after this <b style={{ color: 'var(--txt)' }}>{formatINR(Math.max(0, d.currentOutstanding - split.p))}</b></>}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
+                          <Field label="Debited from"><Picker value={repayForm.accountId} options={acctOptions(d)} onChange={v => setRepayForm({ ...repayForm, accountId: v })} icon={<Landmark size={17} />} title="Debited from" placeholder="No bank account" /></Field>
+                          <Field label="Note"><TextField icon={<FileText size={17} />} placeholder="Optional" value={repayForm.notes} onChange={e => setRepayForm({ ...repayForm, notes: e.target.value })} /></Field>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                          <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={() => setRepayFor(null)}>Cancel</button>
+                          <BtnPrimary onClick={handleSaveRepay} style={{ flex: 1 }}>Save payment</BtnPrimary>
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
                     {receiveFor === d.id && (
-                      <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, marginBottom: 8 }}>
-                        <LabelCaps style={{ marginBottom: 6 }}>{d.type === 'FriendLent' ? 'Amount received back' : 'Amount received from lender'}</LabelCaps>
-                        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>
+                      <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 22, padding: 14, marginBottom: 10 }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>{d.type === 'FriendLent' ? 'Amount received back' : 'Amount received from lender'}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--txt2)', margin: '4px 0 12px', lineHeight: 1.5 }}>
                           {d.type === 'FriendLent' ? 'It lowers what you are still owed and is added to the account it reached.' : 'A disbursal or top-up: it adds to what you owe and to the amount borrowed, and is added to the account it reached.'}
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                          <input className="input" type="number" inputMode="decimal" placeholder="Amount received (₹)" value={receiveForm.amount} onChange={e => setReceiveForm({ ...receiveForm, amount: e.target.value })} />
-                          <input className="input" type="date" value={receiveForm.date} onChange={e => setReceiveForm({ ...receiveForm, date: e.target.value })} />
+                        <div className="form-grid" style={{ marginBottom: 12 }}>
+                          <Field label="Amount received"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder="0" value={receiveForm.amount} onChange={e => setReceiveForm({ ...receiveForm, amount: e.target.value })} /></Field>
+                          <Field label="Date"><TextField icon={<Calendar size={17} />} type="date" value={receiveForm.date} onChange={e => setReceiveForm({ ...receiveForm, date: e.target.value })} /></Field>
                         </div>
-                        <LabelCaps style={{ marginBottom: 4 }}>Credited to</LabelCaps>
-                        <select className="input" style={{ marginBottom: 8 }} value={receiveForm.accountId} onChange={e => setReceiveForm({ ...receiveForm, accountId: e.target.value })}>{acctOptions(d)}</select>
-                        <input className="input" placeholder="Note (optional)" style={{ marginBottom: 8 }} value={receiveForm.notes} onChange={e => setReceiveForm({ ...receiveForm, notes: e.target.value })} />
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <BtnPrimary onClick={handleSaveReceipt} style={{ flex: 1, height: 36, fontSize: 12 }}>Save received</BtnPrimary>
-                          <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => setReceiveFor(null)}>Cancel</button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
+                          <Field label="Credited to"><Picker value={receiveForm.accountId} options={acctOptions(d)} onChange={v => setReceiveForm({ ...receiveForm, accountId: v })} icon={<Landmark size={17} />} title="Credited to" placeholder="No bank account" /></Field>
+                          <Field label="Note"><TextField icon={<FileText size={17} />} placeholder="Optional" value={receiveForm.notes} onChange={e => setReceiveForm({ ...receiveForm, notes: e.target.value })} /></Field>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                          <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={() => setReceiveFor(null)}>Cancel</button>
+                          <BtnPrimary onClick={handleSaveReceipt} style={{ flex: 1 }}>Save received</BtnPrimary>
                         </div>
                       </div>
                     )}
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                      <button className="btn-secondary" style={{ height: 32, fontSize: 11 }} onClick={() => { setReceiveFor(null); setRepayFor(repayFor === d.id ? null : d.id); setRepayForm({ ...EMPTY_REPAY, amount: '' }) }}>＋ Extra payment</button>
+                      <button className="btn-secondary" style={{ height: 32, fontSize: 11 }} onClick={() => { setReceiveFor(null); setRepayFor(repayFor === d.id ? null : d.id); setRepayForm({ ...EMPTY_REPAY, amount: '' }) }}>＋ Make payment</button>
                       <button className="btn-secondary" style={{ height: 32, fontSize: 11 }} onClick={() => { setRepayFor(null); setReceiveFor(receiveFor === d.id ? null : d.id); setReceiveForm(EMPTY_RECEIPT) }}>↓ Amount received</button>
                       <button className="btn-secondary" style={{ height: 32, fontSize: 11 }} onClick={() => openEdit(d)}>✎ Edit debt</button>
                       <button className="btn-ghost" style={{ height: 32, fontSize: 11 }} onClick={() => handleMarkClosed(d.id)}>Mark as closed</button>

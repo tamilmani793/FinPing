@@ -3,6 +3,7 @@ import { parseSMS, isCreditCardSMS, detectCardKind, extractAvailableLimit } from
 import { shiftAvailable, setLimitFields, groupOf } from './cards'
 import { cycleDates } from './cycle'
 import { findDuplicate, mergeDuplicate, pairTransfer } from './dedupe'
+import { canonCategory } from './options'
 
 // Finds the card by its last four digits (preferring the same bank), or creates it.
 // kind = what the SMS says: 'credit' | 'debit' | 'unknown'. Once a card exists, the type the
@@ -125,7 +126,7 @@ export async function ingestSMS(rawText, meta = {}) {
       // first one lacked, and don't move any balance a second time.
       const dup = isCashback ? null : await findDuplicate({ date: receivedAt, amount: parsed.amount, type, merchant: parsed.merchant, accountLast4: parsed.accountLast4 || parsed.cardLast4, rawSMS: text })
       if (dup) {
-        await mergeDuplicate(dup, { merchant: parsed.merchant, category: parsed.category, bank: parsed.bank, accountLast4: parsed.accountLast4 || parsed.cardLast4, cardId: card ? card.id : null }, text)
+        await mergeDuplicate(dup, { merchant: parsed.merchant, category: canonCategory(parsed.category), bank: parsed.bank, accountLast4: parsed.accountLast4 || parsed.cardLast4, cardId: card ? card.id : null }, text)
         // Figures the bank reports as absolute ("Avl Bal", "Avl Limit") are still safe to take from the second SMS.
         if (card && card.cardType === 'account' && parsed.availableLimit != null) await db.creditCards.update(card.id, { accountBalance: parsed.availableLimit })
         if (card && isCredit(card)) await applyBankLimit(card.id, parsed.availableLimit)
@@ -136,7 +137,7 @@ export async function ingestSMS(rawText, meta = {}) {
       const newTxn = {
         date: receivedAt, amount: parsed.amount || 0, type,
         merchant: isCashback ? 'Cashback Credit' : (parsed.merchant || 'Unknown'),
-        category: isCashback ? 'Cashback' : (parsed.category || 'General'),
+        category: isCashback ? 'Cashback' : canonCategory(parsed.category || 'General'),
         paymentMode: card && card.cardType !== 'account' ? (card.cardType === 'debit' ? 'Debit Card' : card.cardType === 'unknown' ? 'Card' : 'Credit Card') : (parsed.paymentMode || 'Other'), bank: parsed.bank || '', accountLast4: parsed.accountLast4 || parsed.cardLast4 || null,
         cardId: card ? card.id : null, rawSMS: text, parsedBy: 'auto',
         tags: [], notes: '', isExcluded: false, createdAt: new Date(),
