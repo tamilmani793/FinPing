@@ -16,10 +16,26 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // A release build is signed with your own keystore when one is provided (the CI reads it from GitHub secrets),
+    // so every build carries the same signature and installs as an update. Without one, release falls back to
+    // the debug key so the build still works.
+    def releaseStore = System.getenv('FINPING_KEYSTORE')
+    signingConfigs {
+        if (releaseStore) {
+            release {
+                storeFile file(releaseStore)
+                storePassword System.getenv('FINPING_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('FINPING_KEY_ALIAS')
+                keyPassword System.getenv('FINPING_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            debuggable false
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig releaseStore ? signingConfigs.release : signingConfigs.debug
         }
     }
 }

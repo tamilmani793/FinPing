@@ -32,20 +32,34 @@ jobs:
         env:
           BASE_PATH: ./
       - run: npx cap sync android
-      - run: chmod +x gradlew && ./gradlew assembleDebug
+      - name: Prepare signing key (optional)
+        env:
+          KEYSTORE_B64: ${{ secrets.FINPING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/finping.jks"
+            echo "FINPING_KEYSTORE=$RUNNER_TEMP/finping.jks" >> "$GITHUB_ENV"
+            echo "FINPING_KEYSTORE_PASSWORD=${{ secrets.FINPING_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "FINPING_KEY_ALIAS=${{ secrets.FINPING_KEY_ALIAS }}" >> "$GITHUB_ENV"
+            echo "FINPING_KEY_PASSWORD=${{ secrets.FINPING_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          else
+            echo "No signing key secrets set: the release APK is signed with a temporary debug key."
+          fi
+      # A release build is not debuggable and carries no debug flags, which payment apps' security checks look at.
+      - run: chmod +x gradlew && ./gradlew assembleRelease
         working-directory: android
       - name: Upload APK as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: FinPing-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
       - name: Publish APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk FinPing.apk
+          cp android/app/build/outputs/apk/release/app-release.apk FinPing.apk
           SHA=$(git rev-parse --short HEAD)
           if [ "$BUILD_BRANCH" = "main" ]; then
             TAG=latest
@@ -58,4 +72,4 @@ jobs:
             PRE="--prerelease"
           fi
           gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" FinPing.apk $PRE --target "$(git rev-parse HEAD)" --title "$TITLE" --notes "Debug APK built from branch '$BUILD_BRANCH' at $SHA. Enable 'Install unknown apps' to install."
+          gh release create "$TAG" FinPing.apk $PRE --target "$(git rev-parse HEAD)" --title "$TITLE" --notes "Release APK built from branch '$BUILD_BRANCH' at $SHA. Enable 'Install unknown apps' to install."
