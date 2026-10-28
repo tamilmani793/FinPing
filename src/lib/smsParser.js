@@ -65,7 +65,7 @@ function extractCardLast4(text) {
   const patterns = [
     /\bcard\s*(?:no\.?|number|ending(?:\s+with|\s+in)?)?\s*[:\-]?\s*[xX*.•]*\s*(\d{4})\b/i, // Card x4092, Card no. XX1234, card ending 0123
     /\bending\s+(?:with\s+|in\s+)?(\d{4})\b/i,
-    /(?:XX|x{2}|\.{2})(\d{4})/i,
+    /(?:XX|x{2}|\.{2})[-\s]?(\d{4})/i, // XX1234, XXXX-5279
   ]
   for (const p of patterns) {
     const m = text.match(p)
@@ -160,13 +160,51 @@ export function detectCardKind(text) {
 
 export const isCreditCardSMS = text => detectCardKind(text) === 'credit'
 
+// Messages that mention an amount but moved no money. These must never become transactions.
+//   - OTPs ("OTP is 551974 for txn of INR 278.00") come BEFORE the real payment and may never complete
+//   - failed / declined payments
+export function isOtpOrFailed(text) {
+  const t = text.toLowerCase()
+  const moved = /\b(debited|credited|spent|withdrawn|deducted|sent rs)\b/.test(t)
+  if (/\botp\b|one[- ]?time (?:password|pin)|verification code/.test(t) && !moved) return true
+  if (/\b(failed|declined|unsuccessful|rejected)\b|not (?:been )?(?:successful|completed)|could not be processed/.test(t)) return true
+  return false
+}
+
+//   - reminders ("payment of Rs.1528 ... is due on 2026-10-21. The amount will be debited")
+//   - requests and reward claims ("cashback request ... is being processed", "claimed 10 SuperCoins")
+export function isReminderOrRequest(text) {
+  const t = text.toLowerCase()
+  const done = /\bhas been (?:successfully )?(?:debited|paid|credited)\b|\bsuccessfully (?:debited|paid)\b/.test(t)
+  if (!done && /\b(?:is|are|was) due on\b|\bdue on\b|\bdue for payment\b|will be (?:debited|deducted|charged|presented)|\bplease maintain\b|\breminder\b|\bupcoming\b/.test(t)) return true
+  if (/(?:being|currently being) processed|we got your .{0,40}request|request (?:has been |is )?(?:received|raised|submitted)|successfully claimed|supercoins|congratulations/.test(t)) return true
+  return false
+}
+
+// "SBI Card bill of INR 100.00 paid for Mobile Number-... from your HDFC BANK LTD account (XX2919) using UPI"
+// is the CARD ISSUER confirming a bill payment; the bank's own "Sent Rs.100 ..." alert is the debit.
+function detectCardBillPaidSMS(text) {
+  const m = text.match(/\b([A-Za-z]+(?: [A-Za-z]+)?)\s+card bill of\s*(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)\s+paid/i)
+  if (!m) return null
+  const issuer = m[1].replace(/^(?:your|the)\s+/i, '')
+  return {
+    type: 'payment_received',
+    billPaid: true,
+    amount: parseFloat(m[2].replace(/,/g, '')),
+    availableLimit: null,
+    cardLast4: null,
+    bank: extractBank(issuer),
+    paidFromLast4: extractAccountLast4(text),
+  }
+}
+
 function detectStatementSMS(text) {
   const lower = text.toLowerCase()
-  if (/(statement|bill generated|total.*due|minimum.*due|payment due date|closing balance)/.test(lower)) {
-    const totalDue = extractAmount(text.match(/total.*?(?:due|amount)[:\s]+([\d,]+\.?\d*)/i)?.[0] || text)
+  if (/(statement|bill (?:has been )?generated|has been generated|total[\s\S]{0,40}due|minimum[\s\S]{0,20}due|payment due date|closing balance)/.test(lower)) {
+    const totalDue = extractAmount(text.match(/total\s*(?:amount|amt)?(?:\s*due)?[:\s]*(?:rs\.?|inr|₹)?\s*[\d,]+(?:\.\d+)?/i)?.[0] || text.match(/total.*?(?:due|amount)[:\s]+([\d,]+\.?\d*)/i)?.[0] || text)
     const minMatch = text.match(/min(?:imum)?\.?\s*(?:amt|amount)?\.?\s*(?:due|payable)?[^\d]{0,14}([\d,]+(?:\.\d+)?)/i)
     const minDue = minMatch ? parseFloat(minMatch[1].replace(/,/g, '')) : null
-    const dueDateMatch = text.match(/due\s+date[:\s]+(\d{1,2}\s+\w+\s+\d{4}|\d{2}[-\/]\d{2}[-\/]\d{2,4})/i)
+    const dueDateMatch = text.match(/due\s+date[:\s]+(\d{1,2}\s+\w+\s+\d{4}|\w+\s+\d{1,2},?\s+\d{4}|\d{2}[-\/]\d{2}[-\/]\d{2,4})/i)
     return {
       type: 'statement',
       totalDue: totalDue || extractAmount(text),
@@ -230,8 +268,10 @@ function detectInvestmentSMS(text) {
 
 function detectCashbackSMS(text) {
   const lower = text.toLowerCase()
-  if (/(cashback|reward points?|cashpoints?)\s+(?:of\s+)?(?:rs\.?|₹|inr)?\s*[\d,]+/.test(lower) &&
-      /(credited|added|earned)/.test(lower)) {
+  const cashbackFirst = /(cashback|reward points?|cashpoints?)\s+(?:of\s+)?(?:rs\.?|₹|inr)?\s*[\d,]+/.test(lower)
+  // "Rs. 1200 has been credited to your CASHBACK SBI Card account"
+  const creditedToCashback = /(?:rs\.?|₹|inr)\s*[\d,]+(?:\.\d+)?\s+has been credited to your cashback/.test(lower)
+  if ((cashbackFirst || creditedToCashback) && /(credited|added|earned)/.test(lower)) {
     return {
       type: 'cashback_credited',
       amount: extractAmount(text),
@@ -255,9 +295,18 @@ export function parseSMS(rawText, sender = '', receivedAt = new Date()) {
   const hasFinancialKeywords = /(?:rs\.?|inr|₹|debited|deducted|credited|spent|cashback|emi|sip|mutual fund|statement|payment due|payment alert)/i.test(rawText)
   if (!hasFinancialKeywords) return null
 
+  // OTPs and failed payments are not transactions at all
+  if (isOtpOrFailed(rawText)) return null
+
   // Check specialised SMS types first
   const statementResult = detectStatementSMS(rawText)
   if (statementResult) return { ...statementResult, rawText, sender, receivedAt, confidence: 0.9 }
+
+  // Reminders ("...is due on...") and requests / reward claims moved no money either
+  if (isReminderOrRequest(rawText)) return null
+
+  const billPaid = detectCardBillPaidSMS(rawText)
+  if (billPaid) return { ...billPaid, rawText, sender, receivedAt, confidence: 0.9 }
 
   const paymentResult = detectPaymentReceivedSMS(rawText)
   if (paymentResult) return { ...paymentResult, rawText, sender, receivedAt, confidence: 0.9 }

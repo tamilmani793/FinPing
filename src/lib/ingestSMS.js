@@ -1,9 +1,9 @@
 import { db } from '../db/schema'
-import { parseSMS, isCreditCardSMS, detectCardKind } from './smsParser'
+import { parseSMS, isCreditCardSMS, detectCardKind, extractAvailableLimit } from './smsParser'
 import { shiftAvailable, setLimitFields, groupOf } from './cards'
 import { cycleDates } from './cycle'
 import { recordRepayment } from './debtBackup'
-import { findDuplicate, mergeDuplicate } from './dedupe'
+import { findDuplicate, mergeDuplicate, pairTransfer } from './dedupe'
 
 // Finds the card by its last four digits (preferring the same bank), or creates it.
 // kind = what the SMS says: 'credit' | 'debit' | 'unknown'. Once a card exists, the type the
@@ -62,6 +62,15 @@ async function applyBankLimit(cardId, availableLimit) {
   if (!shared && fresh.creditLimit > 0) await db.creditCards.update(cardId, { currentBalance: Math.max(0, fresh.creditLimit - availableLimit) })
 }
 
+// The one credit card a bank has, when an SMS names the issuer but not the card number.
+// With two or more cards from that bank there is no way to tell which, so nothing is guessed.
+async function soleCardOfBank(bank) {
+  if (!bank || bank === 'Unknown Bank') return null
+  const first = bank.toLowerCase().split(' ')[0]
+  const cards = (await db.creditCards.toArray()).filter(c => !c.draft && (!c.cardType || c.cardType === 'credit') && String(c.bank || '').toLowerCase().split(' ')[0] === first)
+  return cards.length === 1 ? cards[0] : null
+}
+
 // A debit-card spend (or refund) moves the linked bank account's balance. If the SMS reports the
 // account balance itself ("Avl Bal"), that is the truth; otherwise the amount is taken off the
 // last known balance. An account with no balance entered yet is left alone.
@@ -107,13 +116,15 @@ export async function ingestSMS(rawText, meta = {}) {
       const isCashback = parsed.type === 'cashback_credited'
       const kind = detectCardKind(text)
       let card = kind ? await findOrCreateCard(parsed, kind) : null
+      // "Rs. 1200 credited to your CASHBACK SBI Card account" names the issuer but no card number
+      if (!card && kind === 'credit') card = await soleCardOfBank(parsed.bank)
       // No card mentioned, only an account number: it is a bank account (savings / current), not a card.
       if (!card && parsed.accountLast4) card = await findOrCreateCard({ ...parsed, cardLast4: parsed.accountLast4 }, 'account')
       const type = isCashback ? 'credit' : (parsed.transactionType || 'debit')
 
       // The bank may send two different SMS for one transaction. Keep a single entry, fill in anything the
       // first one lacked, and don't move any balance a second time.
-      const dup = isCashback ? null : await findDuplicate({ date: receivedAt, amount: parsed.amount, type, merchant: parsed.merchant, accountLast4: parsed.accountLast4 || parsed.cardLast4 })
+      const dup = isCashback ? null : await findDuplicate({ date: receivedAt, amount: parsed.amount, type, merchant: parsed.merchant, accountLast4: parsed.accountLast4 || parsed.cardLast4, rawSMS: text })
       if (dup) {
         await mergeDuplicate(dup, { merchant: parsed.merchant, category: parsed.category, bank: parsed.bank, accountLast4: parsed.accountLast4 || parsed.cardLast4, cardId: card ? card.id : null }, text)
         // Figures the bank reports as absolute ("Avl Bal", "Avl Limit") are still safe to take from the second SMS.
@@ -123,14 +134,16 @@ export async function ingestSMS(rawText, meta = {}) {
         return { status: 'duplicate', message: `₹${parsed.amount} — same transaction as an earlier SMS` }
       }
 
-      await db.transactions.add({
+      const newTxn = {
         date: receivedAt, amount: parsed.amount || 0, type,
         merchant: isCashback ? 'Cashback Credit' : (parsed.merchant || 'Unknown'),
         category: isCashback ? 'Cashback' : (parsed.category || 'General'),
         paymentMode: card && card.cardType !== 'account' ? (card.cardType === 'debit' ? 'Debit Card' : card.cardType === 'unknown' ? 'Card' : 'Credit Card') : (parsed.paymentMode || 'Other'), bank: parsed.bank || '', accountLast4: parsed.accountLast4 || parsed.cardLast4 || null,
         cardId: card ? card.id : null, rawSMS: text, parsedBy: 'auto',
         tags: [], notes: '', isExcluded: false, createdAt: new Date(),
-      })
+      }
+      newTxn.id = await db.transactions.add(newTxn)
+      await pairTransfer(newTxn) // your own money moving between two of your accounts is not income or spending
       // A bank account keeps the balance the bank reports ("Avl Bal").
       if (card && card.cardType === 'account' && parsed.availableLimit != null) await db.creditCards.update(card.id, { accountBalance: parsed.availableLimit })
       // A debit card spends from the bank account it is linked to.
@@ -146,10 +159,20 @@ export async function ingestSMS(rawText, meta = {}) {
       return { status: 'success', message: `₹${parsed.amount} ${type === 'debit' ? 'spent at' : 'from'} ${parsed.merchant || 'Unknown'}` }
     }
     case 'payment_received': {
-      const card = isCreditCardSMS(text) ? await findOrCreateCard(parsed, 'credit') : null
-      // A payment is often confirmed twice (once when received, once when posted). Same card + amount within a day = one payment.
+      let card = isCreditCardSMS(text) ? await findOrCreateCard(parsed, 'credit') : null
+      // "SBI Card bill of INR 100 paid ..." names the issuer but not the card number
+      if (!card && parsed.billPaid) card = await soleCardOfBank(parsed.bank)
+      // A payment is often confirmed twice (once when received, once when posted): same card, same amount, a few hours apart.
+      // But two ₹100 payments are two payments if the bank's "available limit" differs between them
+      // (it rises by ₹100 with each one), so that figure decides whenever both messages carry it.
       const alreadyPaid = card && await db.transactions.where('cardId').equals(card.id)
-        .filter(t => t.kind === 'card_payment' && Math.abs(t.amount - (parsed.amount || 0)) < 0.01 && Math.abs(new Date(t.date) - receivedAt) < 24 * 60 * 60 * 1000).first()
+        .filter(t => {
+          if (t.kind !== 'card_payment' || Math.abs(t.amount - (parsed.amount || 0)) > 0.01) return false
+          if (Math.abs(new Date(t.date) - receivedAt) > 6 * 60 * 60 * 1000) return false
+          const theirs = extractAvailableLimit(t.rawSMS || '')
+          if (theirs != null && parsed.availableLimit != null) return Math.abs(theirs - parsed.availableLimit) < 0.01
+          return true
+        }).first()
       if (alreadyPaid) {
         await applyBankLimit(card.id, parsed.availableLimit)
         await log('duplicate', 'payment_received')

@@ -1,32 +1,18 @@
 import { db } from '../db/schema'
+import { DUP_WINDOW_MS, isSameTransaction, smsSignals } from './dedupeCore'
 
-// Banks often send two SMS for one transaction (e.g. "Update INR debited amount of 13387" and
-// "Payment Alert Deducted 13387"). Two transactions are treated as the SAME one when they have the
-// same direction and amount, land within a few minutes of each other, and nothing contradicts them:
-// different account digits, or two different merchants, mean they really are separate payments.
-export const DUP_WINDOW_MS = 5 * 60 * 1000
+export { DUP_WINDOW_MS, isSameTransaction }
+const DAY = 24 * 60 * 60 * 1000
 
-const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-const noMerchant = m => !m || /^unknown$/i.test(String(m).trim())
-
-export function isSameTransaction(a, b, windowMs = DUP_WINDOW_MS) {
-  if (a.type !== b.type) return false
-  if (Math.abs((a.amount || 0) - (b.amount || 0)) > 0.009) return false
-  if (Math.abs(new Date(a.date) - new Date(b.date)) > windowMs) return false
-  if (a.accountLast4 && b.accountLast4 && a.accountLast4 !== b.accountLast4) return false
-  // A loan EMI we recorded is named after the loan ("Car Loan EMI"), while the bank's own alert names
-  // whatever it likes ("towards SBI loan"), so names are not compared for those.
-  const loanEntry = a.kind === 'loan_payment' || b.kind === 'loan_payment' || a.kind === 'loan_received' || b.kind === 'loan_received'
-  if (!loanEntry && !noMerchant(a.merchant) && !noMerchant(b.merchant) && norm(a.merchant) !== norm(b.merchant)) return false
-  return true
-}
-
-// An existing, already-saved transaction that the new one duplicates (card payments are handled separately).
-export async function findDuplicate(candidate, windowMs = DUP_WINDOW_MS) {
+// An already-saved transaction that the new one duplicates (card payments are handled separately).
+// The decision (same reference number, same running balance, same time stamp...) lives in dedupeCore.
+export async function findDuplicate(candidate) {
   const t = new Date(candidate.date).getTime()
-  const near = await db.transactions.where('date').between(new Date(t - windowMs), new Date(t + windowMs), true, true).toArray()
-  return near.find(x => x.kind !== 'card_payment' && isSameTransaction(x, candidate, windowMs)) || null
+  const near = await db.transactions.where('date').between(new Date(t - DAY), new Date(t + DAY), true, true).toArray()
+  return near.find(x => x.kind !== 'card_payment' && isSameTransaction(x, candidate)) || null
 }
+
+const noMerchant = m => !m || /^unknown$/i.test(String(m).trim())
 
 // Folds the second SMS into the first: keeps one entry, but fills in anything the first one lacked.
 export async function mergeDuplicate(existing, extra, smsText) {
@@ -37,4 +23,18 @@ export async function mergeDuplicate(existing, extra, smsText) {
   if (!existing.bank && extra.bank) patch.bank = extra.bank
   if (existing.cardId == null && extra.cardId != null) patch.cardId = extra.cardId
   await db.transactions.update(existing.id, patch)
+}
+
+// Money moved between two of your own accounts shows up as a debit AND a credit that quote the same
+// reference number. Both are marked as a transfer and left out of the income / expense totals.
+export async function pairTransfer(txn) {
+  const mine = smsSignals(txn.rawSMS).refs
+  if (!mine.size) return false
+  const t = new Date(txn.date).getTime()
+  const near = await db.transactions.where('date').between(new Date(t - DAY), new Date(t + DAY), true, true).toArray()
+  const mate = near.find(x => x.id !== txn.id && x.type !== txn.type && Math.abs(x.amount - txn.amount) < 0.01 && [...smsSignals(x.rawSMS).refs].some(r => mine.has(r)))
+  if (!mate) return false
+  await db.transactions.update(txn.id, { kind: 'transfer', isExcluded: true })
+  await db.transactions.update(mate.id, { kind: 'transfer', isExcluded: true })
+  return true
 }

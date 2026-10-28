@@ -122,14 +122,17 @@ export default function Settings() {
             catch (e) { showNotification('Could not link: ' + e.message, 'error') }
           }}>Link unlinked transactions</button>
 
-          <div style={{ fontSize: 14, fontWeight: 700, marginTop: 16 }}>Duplicate transactions</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginTop: 16 }}>Duplicates and non-payments</div>
           <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 10px' }}>
-            When a bank sends two SMS for one payment you get two entries. This keeps one, and takes the extra one's effect off your card or account balance. New SMS are checked automatically.
+            Removes entries that were never real payments (OTPs, failed or declined payments, reminders, "bill generated" notices), merges one payment that several SMS reported, and turns "card bill paid" messages into card payments. Genuine repeats, like several ATM withdrawals of the same amount, are kept. New SMS are checked the same way automatically.
           </div>
           <button className="btn-secondary" style={{ width: '100%', height: 40 }} onClick={async () => {
-            try { const n = await removeDuplicateTransactions(); showNotification(n ? `${n} duplicate${n === 1 ? '' : 's'} removed` : 'No duplicates found', 'success') }
-            catch (e) { showNotification('Could not clean up: ' + e.message, 'error') }
-          }}>Remove duplicate transactions</button>
+            try {
+              const r = await removeDuplicateTransactions()
+              const parts = [r.removed && `${r.removed} not-a-payment removed`, r.merged && `${r.merged} duplicate${r.merged === 1 ? '' : 's'} merged`, r.converted && `${r.converted} card payment${r.converted === 1 ? '' : 's'} fixed`, r.transfers && `${r.transfers} own-account transfer${r.transfers === 1 ? '' : 's'} marked`].filter(Boolean)
+              showNotification(parts.length ? parts.join(' · ') : 'Nothing to clean up', 'success')
+            } catch (e) { showNotification('Could not clean up: ' + e.message, 'error') }
+          }}>Clean up duplicates</button>
         </div>
 
         <div className="card" style={{ marginBottom: 14, paddingTop: 4, paddingBottom: 4 }}>

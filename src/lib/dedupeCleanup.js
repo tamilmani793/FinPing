@@ -1,43 +1,47 @@
 import { db } from '../db/schema'
-import { DUP_WINDOW_MS, isSameTransaction, mergeDuplicate } from './dedupe'
+import { planCleanup } from './dedupeCore'
+import { mergeDuplicate } from './dedupe'
 import { applyTxnToCard } from './ingestSMS'
 
-const DAY = 24 * 60 * 60 * 1000
-
-// Finds transactions that are the same payment reported by two SMS and keeps just one of each.
-// The one removed is folded into the one kept (its SMS text is attached), and the effect it had on a
-// card's or linked account's balance is taken back. Returns how many entries were removed.
+// Tidies transactions that were saved wrongly or twice, using the same rules new SMS are held to:
+//   - messages that moved no money (OTPs, failed / declined payments, reminders, bill notices, requests) are removed
+//   - "SBI Card bill ... paid" confirmations become a payment on that card instead of a second spend
+//   - one payment reported by several SMS is merged into a single entry
+//   - a debit and a credit quoting the same reference (your own transfer) are marked as a transfer
+// Genuine repeats (4 ATM withdrawals of the same amount) are left alone: the SMS' own reference,
+// balance and time stamp tell them apart. Returns counts of what changed.
 export async function removeDuplicateTransactions() {
-  const all = (await db.transactions.toArray())
-    .filter(t => t.kind !== 'card_payment')
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-  const kept = []
-  let removed = 0
+  const [txns, cards] = await Promise.all([db.transactions.toArray(), db.creditCards.toArray()])
+  const plan = planCleanup(txns, cards)
+  const byId = new Map(txns.map(t => [t.id, t]))
 
-  for (const t of all) {
-    let keep = null
-    for (let i = kept.length - 1; i >= 0; i--) {
-      if (new Date(t.date) - new Date(kept[i].date) > DUP_WINDOW_MS) break // sorted by time: nothing older can match
-      if (isSameTransaction(kept[i], t)) { keep = kept[i]; break }
-    }
-    if (!keep) { kept.push(t); continue }
-
-    await mergeDuplicate(keep, t, t.rawSMS)
-    Object.assign(keep, await db.transactions.get(keep.id))
-    if (t.cardId != null && t.parsedBy !== 'manual') {
-      const card = await db.creditCards.get(t.cardId)
-      if (card && card.cardType !== 'account' && card.cardType !== 'unknown') await applyTxnToCard(card, t.type === 'debit' ? 'credit' : 'debit', t.amount)
-    }
-    await db.transactions.delete(t.id)
-    removed++
+  // take back what a saved row did to a card's / linked account's balance
+  const undo = async t => {
+    if (!t || t.cardId == null || t.parsedBy === 'manual') return
+    const card = await db.creditCards.get(t.cardId)
+    if (card && !['account', 'unknown'].includes(card.cardType)) await applyTxnToCard(card, t.type === 'debit' ? 'credit' : 'debit', t.amount)
   }
 
-  // A card payment confirmed twice (received, then posted): same card + amount within a day.
-  const payments = (await db.transactions.toArray()).filter(t => t.kind === 'card_payment').sort((a, b) => new Date(a.date) - new Date(b.date))
-  const seen = []
-  for (const p of payments) {
-    const twin = seen.find(s => s.cardId === p.cardId && Math.abs(s.amount - p.amount) < 0.01 && Math.abs(new Date(p.date) - new Date(s.date)) < DAY)
-    if (twin) { await db.transactions.delete(p.id); removed++ } else seen.push(p)
+  for (const id of plan.remove) { await undo(byId.get(id)); await db.transactions.delete(id) }
+
+  for (const { id, cardId } of plan.payments) {
+    await undo(byId.get(id))
+    await db.transactions.update(id, { type: 'credit', merchant: 'Card payment', category: 'Card Payment', kind: 'card_payment', paymentMode: 'Credit Card', cardId, isExcluded: true })
   }
-  return removed
+
+  for (const { keep, drop } of plan.merge) {
+    const k = await db.transactions.get(keep)
+    const d = byId.get(drop)
+    if (!k || !d) continue
+    await mergeDuplicate(k, d, d.rawSMS)
+    await undo(d)
+    await db.transactions.delete(drop)
+  }
+
+  for (const [a, b] of plan.transfers) {
+    await db.transactions.update(a, { kind: 'transfer', isExcluded: true })
+    await db.transactions.update(b, { kind: 'transfer', isExcluded: true })
+  }
+
+  return { removed: plan.remove.length, converted: plan.payments.length, merged: plan.merge.length, transfers: plan.transfers.length }
 }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { relinkTransactions } from './lib/relink'
+import { removeDuplicateTransactions } from './lib/dedupeCleanup'
 import { useStore } from './store'
 import BottomNav from './components/BottomNav'
 import { Notification } from './components/UI'
@@ -28,9 +29,16 @@ export default function App() {
   useEffect(() => {
     const first = !localStorage.getItem('finping_relink_v1')
     relinkTransactions({ create: first })
-      .then(n => {
+      .then(async n => {
         if (first) localStorage.setItem('finping_relink_v1', '1')
         if (n > 0) showNotification(`${n} transactions linked to your cards and accounts`, 'success')
+        // Once after this update: clear out entries that were never payments or were saved twice.
+        if (!localStorage.getItem('finping_cleanup_v2')) {
+          const r = await removeDuplicateTransactions()
+          localStorage.setItem('finping_cleanup_v2', '1')
+          const total = r.removed + r.merged + r.converted
+          if (total > 0) showNotification(`Tidied ${total} entries: ${r.removed} not payments, ${r.merged} duplicates, ${r.converted} card payments fixed`, 'success')
+        }
       })
       .catch(() => {})
   }, [])
