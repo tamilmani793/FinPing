@@ -9,6 +9,7 @@ export async function accountEntries(account) {
   // a bank account's statement also lists what its debit cards spent; a credit card's statement is that card alone
   const linked = isCard ? [] : allCards.filter(c => c.linkedAccountId === account.id)
   const ids = new Set([account.id, ...linked.map(c => c.id)])
+  const sameAccountRecord = new Set(allCards.filter(c => c.cardType === 'account' && c.id !== account.id && c.cardLast4 && c.cardLast4 === account.cardLast4).map(c => c.id))
   const unknownCards = new Set(allCards.filter(c => c.cardType === 'unknown').map(c => c.id))
   const debtLinked = new Set((await db.debtRepayments.toArray()).map(r => r.accountTxnId).filter(Boolean))
   const out = []
@@ -16,7 +17,8 @@ export async function accountEntries(account) {
     const mine = ids.has(t.cardId)
     // an SMS that named no card, or only an untyped one, may still be this account's: it is matched too,
     // but only ever removed when it duplicates a statement line. For a card, the last 4 digits must agree.
-    const loose = !mine && (t.cardId == null || unknownCards.has(t.cardId)) && (!isCard || (account.cardLast4 && t.accountLast4 === account.cardLast4))
+    const twin = !mine && !isCard && account.cardLast4 && t.accountLast4 === account.cardLast4 && sameAccountRecord.has(t.cardId) // another record of this same account
+    const loose = twin || (!mine && (t.cardId == null || unknownCards.has(t.cardId)) && (!isCard || (account.cardLast4 && t.accountLast4 === account.cardLast4)))
     if (!mine && !loose) continue
     out.push({ ...t, ...(loose ? { _loose: true } : {}), ...(debtLinked.has(t.id) ? { kind: t.kind || 'loan_payment' } : {}) })
   }

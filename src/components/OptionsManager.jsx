@@ -145,13 +145,19 @@ function ListPage({ listKey, onClose }) {
         {(
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <button className="btn-primary" style={{ flex: 1, height: 46 }} onClick={() => setDraft({ ...emptyDraft })}><Plus size={17} /> Add new</button>
-            {canReorder && <ReorderToggle on={reorder} onClick={() => { setReorder(v => !v); setQ('') }} />}
             {isCustomised(listKey) && <button className="btn-secondary" style={{ height: 46, display: 'flex', alignItems: 'center', gap: 6 }} onClick={reset}><RotateCcw size={14} /> Reset</button>}
           </div>
         )}
 
         {items.length > 8 && !draft && (
           <div className="picker-search"><Search size={16} color="var(--txt3)" /><input value={q} onChange={e => setQ(e.target.value)} placeholder={`Search ${items.length} items`} /></div>
+        )}
+
+        {canReorder && !draft && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 4px 8px' }}>
+            <span style={{ fontSize: 11.5, color: 'var(--txt3)' }}>{reorder ? 'Drag the handles to rearrange' : `${items.length} items`}</span>
+            <ReorderToggle on={reorder} onClick={() => { setReorder(v => !v); setQ('') }} />
+          </div>
         )}
 
         <div className="picker-list">

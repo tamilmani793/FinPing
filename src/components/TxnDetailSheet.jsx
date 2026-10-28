@@ -8,6 +8,7 @@ import { formatINR, getMerchantIcon } from './UI'
 import TxnEditSheet from './TxnEditSheet'
 import { isCardPayment, rewardStatus } from '../lib/cardStats'
 import { typeLabel, cardTitle } from '../lib/cardCatalog'
+import { txnName } from '../lib/txnName'
 import { entityIdFor } from '../lib/relink'
 
 function Row({ k, v, color }) {
@@ -53,7 +54,7 @@ export default function TxnDetailSheet({ txn, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
           <div style={{ width: 46, height: 46, borderRadius: 14, background: credit ? 'var(--mint-bg)' : 'var(--bg2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{payment ? '✓' : getMerchantIcon(t.merchant)}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, overflowWrap: 'anywhere' }}>{t.merchant || 'Unknown'}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, overflowWrap: 'anywhere' }}>{txnName(t) || 'Unknown'}</div>
             <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{format(new Date(t.date), 'EEE, d MMM yyyy · h:mm a')}</div>
           </div>
         </div>

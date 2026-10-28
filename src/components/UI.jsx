@@ -184,5 +184,5 @@ export function formatINR(amount, decimals = 0) {
 }
 
 export function formatDate(date) {
-  return format(new Date(date), 'd MMM')
+  return format(new Date(date), 'd MMM yyyy')
 }

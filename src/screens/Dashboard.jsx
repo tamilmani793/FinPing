@@ -12,6 +12,7 @@ import { TopBar, TxnRow, formatINR, getMerchantIcon, formatDate } from '../compo
 import { useStore } from '../store'
 import { getUserName } from '../lib/profile'
 import { cardTitle } from '../lib/cardCatalog'
+import { txnName } from '../lib/txnName'
 import { orderCards } from '../lib/sortOrder'
 
 function greeting(now) {
@@ -174,7 +175,7 @@ export default function Dashboard() {
             <TxnRow
               key={t.id}
               icon={getMerchantIcon(t.merchant)}
-              merchant={t.merchant}
+              merchant={txnName(t)}
               meta={`${t.bank ? t.bank.split(' ')[0] : ''}${t.accountLast4 ? ` ••${t.accountLast4}` : ''} · ${formatDate(t.date)}`}
               amount={t.amount}
               isCredit={t.type === 'credit'}

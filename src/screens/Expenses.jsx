@@ -11,6 +11,7 @@ import { useOptions, categoryIcon } from '../lib/options'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { cardTitle } from '../lib/cardCatalog'
+import { txnName } from '../lib/txnName'
 
 const FILTERS = ['All', 'Food', 'Shopping', 'Utilities', 'Travel', 'Fuel', 'Excluded']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -199,7 +200,7 @@ export default function Expenses() {
                     <TxnRow
                       key={t.id}
                       icon={getMerchantIcon(t.merchant)}
-                      merchant={t.merchant}
+                      merchant={txnName(t)}
                       meta={`${formatDate(t.date)} · ${t.paymentMode}${t.rawSMS ? ' · SMS' : ' · Manual'}`}
                       amount={t.amount}
                       isCredit={t.type === 'credit'}

@@ -339,6 +339,7 @@ export function correction(row, txn) {
   fields.parsedBy = txn.parsedBy === 'manual' ? 'manual' : (txn.userEdited ? txn.parsedBy : 'statement')
   if (mine.includes('date')) delete fields.date
   if (!txn.notes && row.note && !mine.includes('notes')) fields.notes = row.note
+  if (unnamed && row.merchant && row.merchant !== 'Unknown') fields.merchant = row.merchant // never leave a nameless entry nameless
   if (!PROTECTED(txn) && txn.parsedBy !== 'manual') {
     if (row.merchant && row.merchant !== 'Unknown' && (!mine.includes('merchant') || unnamed)) fields.merchant = row.merchant
     if ((!txn.category || ['General', 'Other', 'Unknown'].includes(txn.category)) && !mine.includes('category')) fields.category = row.category

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { format, startOfMonth } from 'date-fns'
-import { ChevronLeft, ChevronRight, CreditCard, FileText, Gift, Landmark, Pencil } from 'lucide-react'
+import { format, startOfMonth, endOfMonth, startOfDay, endOfDay, subDays, subMonths } from 'date-fns'
+import { Calendar, ChevronLeft, ChevronRight, CreditCard, FileText, Gift, Landmark, Pencil } from 'lucide-react'
 import StatementImportSheet from '../components/StatementImportSheet'
 import { db } from '../db/schema'
 import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../components/UI'
@@ -15,6 +15,8 @@ import { typeLabel, networkLabel, excludedFor, cardTitle } from '../lib/cardCata
 import CardEditSheet from '../components/CardEditSheet'
 import TxnDetailSheet from '../components/TxnDetailSheet'
 import { entityIdFor } from '../lib/relink'
+import { txnName } from '../lib/txnName'
+import { Segmented, TextField, Picker } from '../components/Fields'
 import Sortable from '../components/Sortable'
 import { bySortOrder, saveOrder } from '../lib/sortOrder'
 
@@ -200,8 +202,8 @@ function TxnList({ card, list, emptyText, cards = [] }) {
           <TxnRow
             key={t.id}
             icon={getMerchantIcon(t.merchant)}
-            merchant={t.merchant}
-            meta={`${fmtS(t.date)} · ${t.category}${via ? ` · via ${via.name}` : ''}`}
+            merchant={txnName(t)}
+            meta={`${fmtD(t.date)} · ${t.category}${via ? ` · via ${via.name}` : ''}`}
             amount={t.amount}
             isCredit={t.type === 'credit'}
             onClick={() => setEdit(t)}
@@ -215,6 +217,58 @@ function TxnList({ card, list, emptyText, cards = [] }) {
       })}
       {!sorted.length && <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--txt2)', fontSize: 12 }}>{emptyText}</div>}
       {edit && <TxnDetailSheet txn={edit} onClose={() => setEdit(null)} />}
+    </>
+  )
+}
+
+// Transactions of one card or account with a filter: period (7 days, this / last month, 3 months, your own dates)
+// and direction (money in, money out or both). The totals under it follow the filter.
+const PERIODS = [
+  { value: 'all', label: 'All time' }, { value: '7d', label: 'Last 7 days' }, { value: 'month', label: 'This month' },
+  { value: 'lastmonth', label: 'Last month' }, { value: '3m', label: 'Last 3 months' }, { value: 'custom', label: 'Custom dates' },
+]
+function periodRange(period, from, to, now = new Date()) {
+  if (period === '7d') return [startOfDay(subDays(now, 6)), endOfDay(now)]
+  if (period === 'month') return [startOfMonth(now), endOfDay(now)]
+  if (period === 'lastmonth') { const m = subMonths(now, 1); return [startOfMonth(m), endOfMonth(m)] }
+  if (period === '3m') return [startOfDay(subMonths(now, 3)), endOfDay(now)]
+  if (period === 'custom') return [from ? startOfDay(new Date(from + 'T12:00:00')) : null, to ? endOfDay(new Date(to + 'T12:00:00')) : null]
+  return [null, null]
+}
+export function filterTxns(list, { period, from, to, dir }, now = new Date()) {
+  const [a, b] = periodRange(period, from, to, now)
+  return list.filter(t => {
+    const d = new Date(t.date)
+    if (a && d < a) return false
+    if (b && d > b) return false
+    if (dir === 'in' && t.type !== 'credit') return false
+    if (dir === 'out' && t.type !== 'debit') return false
+    return true
+  })
+}
+function FilteredTxnList({ card, list, cards, emptyText }) {
+  const [f, setF] = useState({ period: 'all', from: '', to: '', dir: 'both' })
+  const shown = filterTxns(list, f)
+  const money = shown.filter(t => !t.isExcluded)
+  const inn = money.filter(t => t.type === 'credit').reduce((a, t) => a + t.amount, 0)
+  const out = money.filter(t => t.type === 'debit').reduce((a, t) => a + t.amount, 0)
+  return (
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
+        <Picker value={f.period} options={PERIODS} onChange={v => setF({ ...f, period: v })} title="Show transactions from" icon={<Calendar size={17} />} />
+        {f.period === 'custom' && (
+          <div className="form-grid">
+            <TextField icon={<Calendar size={17} />} type="date" value={f.from} max={f.to || undefined} onChange={e => setF({ ...f, from: e.target.value })} placeholder="From" aria-label="From date" />
+            <TextField icon={<Calendar size={17} />} type="date" value={f.to} min={f.from || undefined} onChange={e => setF({ ...f, to: e.target.value })} placeholder="To" aria-label="To date" />
+          </div>
+        )}
+        <Segmented value={f.dir} options={[{ value: 'both', label: 'Both' }, { value: 'in', label: 'Money in' }, { value: 'out', label: 'Money out' }]} onChange={v => setF({ ...f, dir: v })} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--txt2)', padding: '0 4px' }}>
+          <span>{shown.length} transaction{shown.length === 1 ? '' : 's'}</span>
+          <span>{f.dir !== 'out' && <>In <b style={{ color: 'var(--mint-dim)' }}>{formatINR(inn)}</b></>}{f.dir === 'both' && ' · '}{f.dir !== 'in' && <>Out <b style={{ color: 'var(--red-dim)' }}>{formatINR(out)}</b></>}</span>
+        </div>
+      </div>
+      <TxnList card={card} list={shown} cards={cards} emptyText={list.length ? 'No transactions match this filter' : emptyText} />
     </>
   )
 }
@@ -439,7 +493,13 @@ function Detail({ card, cards, byCard, onBack }) {
 
         {!credit && (
           <Section title={card.cardType === 'account' ? 'Account transactions' : 'Transactions'}>
-            <TxnList card={card} list={spends} cards={cards} emptyText="No transactions yet for this card" />
+            <FilteredTxnList card={card} list={spends} cards={cards} emptyText="No transactions yet for this card" />
+          </Section>
+        )}
+
+        {credit && (
+          <Section title="All transactions">
+            <FilteredTxnList card={card} list={txns} cards={cards} emptyText="No transactions yet for this card" />
           </Section>
         )}
       </div>
