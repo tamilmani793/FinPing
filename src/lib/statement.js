@@ -162,21 +162,40 @@ export const refsOf = (...texts) => {
   return out
 }
 
-// "UPI-AMAZON PAY-AMAZONPAY@APL-...", "NEFT DR-...", "ATW-...", "POS ...", "ACH D- LIC..." -> mode + who
+// Who the money went to / came from, read out of the bank's narration. Banks write it many ways:
+//   UPI-AMAZON PAY-AMAZONPAY@APL-629294174012-Payment        (HDFC)
+//   UPI/P2A/629294174012/RAHUL KUMAR/HDFC BANK/note          (Axis, ICICI)
+//   TO TRANSFER-UPI/DR/629294174012/RAHUL K/SBIN/rahul@sbi/note   (SBI)
+//   NEFT CR-SBIN0001234-ACME LTD-SALARY-SBIN123456789        IMPS-629294174012-RAHUL KUMAR-HDFC-XXXXXX1234-note
+//   ATW-512345XXXXXX1234-ATM ONE,  POS 512345XXXXXX1234 SWIGGY,  ACH D- LIC OF INDIA-123456
+const BANKY = /^(sbin|hdfc|icic|utib|kkbk|yesb|punb|barb|canb|ubin|idib|indb|bkid|fdrl|ratn|upi|neft|rtgs|imps|ach|nach|ecs|p2a|p2m|p2p|dr|cr|to|by|from|transfer|trf|xxxx?|bank|ltd|pvt)$/i
+const isRef = x => /^\d{6,}$/.test(x) || /^[A-Z]{4}0[A-Z0-9]{6}$/i.test(x) || /^[A-Z]{3,5}\d{9,}$/i.test(x) || /^x{2,}\d{2,}$/i.test(x) || /^\d{4,}x+\d*$/i.test(x)
+const KEEP_UP = /\b(Llp|Lic|Hdfc|Sbi|Icici|Upi|Atm|Emi|Irctc|Bsnl|Nse|Bse|Gst|Epfo|Nps|Sip)\b/g
+const nice = t => t.toLowerCase().replace(/(^|[\s.&'(-])([a-z])/g, (_, p, c) => p + c.toUpperCase()).replace(KEEP_UP, w => w.toUpperCase())
 export function narrationInfo(n) {
   const s = String(n || '').replace(/\s+/g, ' ').trim()
   const up = s.toUpperCase()
-  const parts = s.split(/\s*-\s*/)
-  let mode = 'Bank', merchant = ''
-  if (/^UPI/.test(up)) { mode = 'UPI'; merchant = parts[1] || '' }
-  else if (/^(NEFT|RTGS)/.test(up)) { mode = 'NetBanking'; merchant = parts[2] || parts[1] || '' }
-  else if (/^IMPS/.test(up)) { mode = 'NetBanking'; merchant = parts[2] || parts[1] || '' }
-  else if (/^(ATW|ATM|NWD|CASH WDL|PCI\/ATM)/.test(up)) { mode = 'Cash'; merchant = parts[parts.length - 1] || 'ATM withdrawal' }
-  else if (/^(POS|ECOM|PUR)/.test(up)) { mode = 'Card'; merchant = s.replace(/^(POS|ECOM|PUR)\s*\d*[xX*\d]*\s*/i, '') }
-  else if (/^(ACH|NACH|ECS|SI )/.test(up)) { mode = 'Bank'; merchant = parts.slice(1).join(' ').replace(/\d{6,}.*$/, '') }
-  else merchant = parts[0] || ''
-  merchant = merchant.replace(/\d{9,}.*$/, '').replace(/@[a-z]+$/i, '').replace(/[_]+/g, ' ').trim().slice(0, 30)
-  return { mode, merchant: merchant || 'Unknown' }
+  const segs = s.split(/\s*\/\s*|\s*-\s+|\s+-\s*|-(?=\S)/).map(x => x.trim()).filter(Boolean)
+  const vpa = (s.match(/[\w.+]+@[a-z][a-z.]*/i) || [])[0] || ''
+  // the first segment that reads like a name: letters, not a reference / bank code / VPA
+  const nameSeg = list => list.find(x => /[a-z]{3}/i.test(x) && !x.includes('@') && !isRef(x) && !BANKY.test(x) && !/^(payment|upi|ref|txn)$/i.test(x))
+  let mode = 'Bank', name = '', note = ''
+  if (/^(TO TRANSFER|BY TRANSFER)?\W*UPI/.test(up)) {
+    mode = 'UPI'
+    const rest = segs.filter(x => !/^(to transfer|by transfer|transfer|upi)$/i.test(x))
+    name = nameSeg(rest) || ''
+    note = rest.slice(rest.indexOf(name) + 1).filter(x => x && !isRef(x) && !x.includes('@') && !BANKY.test(x)).join(' ').trim()
+  } else if (/^(NEFT|RTGS|IMPS)/.test(up)) {
+    mode = 'NetBanking'
+    const rest = segs.filter(x => !/^(neft|rtgs|imps)( cr| dr)?$/i.test(x))
+    name = nameSeg(rest) || ''
+    note = rest.slice(rest.indexOf(name) + 1).filter(x => !isRef(x) && !BANKY.test(x)).join(' ').trim()
+  } else if (/^(ATW|ATM|NWD|CASH WDL|PCI\/ATM|EAW)/.test(up)) { mode = 'Cash'; name = 'ATM Withdrawal'; note = nameSeg(segs.slice(1)) || '' }
+  else if (/^(POS|ECOM|PUR)\b/.test(up)) { mode = 'Card'; name = s.replace(/^(POS|ECOM|PUR)\s*/i, '').replace(/\b\d{4,}[xX*\d]*\b/g, '').replace(/^[-\s]+/, '') }
+  else if (/^(ACH|NACH|ECS|SI )/.test(up)) { mode = 'Bank'; name = nameSeg(segs.slice(1)) || '' }
+  else name = nameSeg(segs) || segs[0] || ''
+  name = nice(name.replace(/\d{9,}.*$/, '').replace(/@.*$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 40)
+  return { mode, merchant: name || 'Unknown', vpa, note: note.slice(0, 60) }
 }
 
 export function statementRows(table) {
@@ -201,7 +220,7 @@ export function statementRows(table) {
     rows.push({
       date, type, amount, narration, merchant: info.merchant, mode: info.mode,
       category: classifyCategory(info.merchant, narration),
-      ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
+      vpa: info.vpa, note: info.note, ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
       balance: c.balance >= 0 ? parseMoney(r[c.balance]) : null,
       key: `${date.toISOString().slice(0, 10)}|${type}|${amount}|${c.balance >= 0 ? parseMoney(r[c.balance]) : ''}|${norm(narration).slice(0, 60)}`,
     })
@@ -268,7 +287,8 @@ export function reconcile(rows, saved) {
 export function correction(row, txn) {
   const old = new Date(txn.date)
   const date = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate(), old.getHours() || 12, old.getMinutes(), old.getSeconds())
-  const fields = { date, stmtKey: row.stmtKey, bankNarration: row.narration, refNo: row.ref || [...row.refs][0] || txn.refNo || null, stmtBalance: row.balance, parsedBy: txn.parsedBy === 'manual' ? 'manual' : 'statement' }
+  const fields = { date, stmtKey: row.stmtKey, bankNarration: row.narration, refNo: row.ref || [...row.refs][0] || txn.refNo || null, stmtBalance: row.balance, counterparty: row.merchant !== 'Unknown' ? row.merchant : null, vpa: row.vpa || null, parsedBy: txn.parsedBy === 'manual' ? 'manual' : 'statement' }
+  if (!txn.notes && row.note) fields.notes = row.note
   if (!PROTECTED(txn) && txn.parsedBy !== 'manual') {
     if (row.merchant && row.merchant !== 'Unknown') fields.merchant = row.merchant
     if (!txn.category || ['General', 'Other', 'Unknown'].includes(txn.category)) fields.category = row.category
@@ -281,8 +301,8 @@ export function newEntry(row, accountId, account) {
   return {
     date: row.date, amount: row.amount, type: row.type, merchant: row.merchant, category: cardBill ? 'Card Payment' : row.category,
     paymentMode: row.mode, bank: account?.bank || '', accountLast4: account?.cardLast4 || null, cardId: accountId, rawSMS: null,
-    parsedBy: 'statement', stmtKey: row.stmtKey, bankNarration: row.narration, refNo: row.ref || [...row.refs][0] || null, stmtBalance: row.balance,
-    tags: [], notes: '', isExcluded: cardBill, createdAt: new Date(),
+    parsedBy: 'statement', counterparty: row.merchant !== 'Unknown' ? row.merchant : null, vpa: row.vpa || null, stmtKey: row.stmtKey, bankNarration: row.narration, refNo: row.ref || [...row.refs][0] || null, stmtBalance: row.balance,
+    tags: [], notes: row.note || '', isExcluded: cardBill, createdAt: new Date(),
   }
 }
 

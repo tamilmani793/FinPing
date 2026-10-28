@@ -71,7 +71,17 @@ export default function TxnDetailSheet({ txn, onClose }) {
         <Row k="Counted in totals" v={t.isExcluded ? 'No — excluded' : 'Yes'} />
         <Row k="Tags" v={t.tags?.length ? t.tags.join(', ') : null} />
         <Row k="Notes" v={t.notes} />
-        <Row k="Source" v={t.rawSMS ? 'Read from an SMS' : t.parsedBy === 'manual' ? 'Added by you' : 'Imported from an SMS'} />
+        <Row k={t.type === 'debit' ? 'Paid to' : 'Received from'} v={t.counterparty} />
+        <Row k="UPI ID" v={t.vpa} />
+        <Row k="Reference no." v={t.refNo} />
+        <Row k="Source" v={t.stmtKey ? 'Corrected from your bank statement' : t.rawSMS ? 'Read from an SMS' : t.parsedBy === 'manual' ? 'Added by you' : 'Imported from an SMS'} />
+
+        {t.bankNarration && (
+          <>
+            <div className="label-caps" style={{ margin: '12px 0 4px' }}>Bank statement says</div>
+            <div className="sms-raw">{t.bankNarration}</div>
+          </>
+        )}
 
         {t.rawSMS && (
           <>
