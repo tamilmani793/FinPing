@@ -11,11 +11,11 @@ import Home from './screens/Dashboard'
 import Cards from './screens/Cards'
 import Expenses from './screens/Expenses'
 import Charts from './screens/Charts'
-import Settings from './screens/Settings'
+import Profile from './screens/Profile'
 import Debt from './screens/Debt'
 import Wealth from './screens/Wealth'
 
-const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, settings: Settings, debt: Debt, wealth: Wealth }
+const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, debt: Debt, wealth: Wealth }
 const FAB_TABS = ['home', 'history']
 
 export default function App() {

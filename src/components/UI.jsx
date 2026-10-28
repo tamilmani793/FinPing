@@ -1,5 +1,6 @@
 import { format } from 'date-fns'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, User } from 'lucide-react'
+import { useProfile, initialsOf } from '../lib/profile'
 import { useStore } from '../store'
 import { SyncPill } from './SmsSync'
 
@@ -36,9 +37,14 @@ export function SMSPill() {
   )
 }
 
-export function Avatar({ initials = 'TS' }) {
+// The user's profile picture (or initials); tapping it opens the Profile screen
+export function Avatar({ size = 28, onClick, fontSize }) {
+  const { name, photo } = useProfile()
+  const { setActiveTab } = useStore()
   return (
-    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--gold-bg)', border: '1.5px solid var(--gold-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--gold-dim)' }}>{initials}</div>
+    <div onClick={onClick || (() => setActiveTab('profile'))} style={{ width: size, height: size, borderRadius: '50%', background: 'var(--gold-bg)', border: '1.5px solid var(--gold-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fontSize || Math.max(10, Math.round(size * 0.36)), fontWeight: 700, color: 'var(--gold-dim)', overflow: 'hidden', cursor: 'pointer', flexShrink: 0 }}>
+      {photo ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (initialsOf(name) || <User size={Math.round(size * 0.55)} />)}
+    </div>
   )
 }
 

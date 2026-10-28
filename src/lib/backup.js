@@ -3,9 +3,9 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { db } from '../db/schema'
 
-// Everything the app keeps lives in IndexedDB (+ two small localStorage keys). A full backup is
+// Everything the app keeps lives in IndexedDB (+ a few small localStorage keys: name, picture, theme). A full backup is
 // one JSON file with all of it, so it can be restored on a fresh install.
-const LOCAL_KEYS = ['finping_user_name', 'finping_last_sms_sync']
+const LOCAL_KEYS = ['finping_user_name', 'finping_profile_photo', 'finping_palette', 'finping_mode', 'finping_last_sms_sync']
 const LAST_BACKUP_KEY = 'finping_last_backup'
 
 // Dates become { $date: ISO } so they come back as real Date objects.
@@ -59,12 +59,6 @@ export async function exportBackup() {
   }
   localStorage.setItem(LAST_BACKUP_KEY, String(Date.now()))
   return how
-}
-
-export async function copyBackup() {
-  const { json } = await buildFullBackup()
-  await navigator.clipboard.writeText(json)
-  localStorage.setItem(LAST_BACKUP_KEY, String(Date.now()))
 }
 
 // Reads a backup without applying it, so the UI can show what it contains.

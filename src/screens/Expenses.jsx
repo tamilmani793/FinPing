@@ -54,6 +54,8 @@ export default function Expenses() {
     if (!catMap[t.category]) catMap[t.category] = []
     catMap[t.category].push(t)
   }
+  // inside a category the latest transaction comes first
+  for (const list of Object.values(catMap)) list.sort((a, b) => new Date(b.date) - new Date(a.date) || b.id - a.id)
   const cats = Object.entries(catMap).sort((a, b) => b[1].reduce((s, t) => s + t.amount, 0) - a[1].reduce((s, t) => s + t.amount, 0))
 
   const filterMap = { 1: 'Food Delivery', 2: 'E-Commerce', 3: 'Utilities & Bills', 4: 'Travel Online', 5: 'Fuel', 6: 'excluded' }
@@ -217,7 +219,7 @@ export default function Expenses() {
               </div>
               {isExpanded && (
                 <>
-                  <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 9999, marginBottom: 8, overflow: 'hidden' }}>
+                  <div style={{ height: 3, background: 'var(--track)', borderRadius: 9999, marginBottom: 8, overflow: 'hidden' }}>
                     <div style={{ width: `${pct}%`, height: '100%', background: isExcluded ? 'var(--red)' : 'var(--mint)', borderRadius: 9999 }} />
                   </div>
                   {txns.map(t => (

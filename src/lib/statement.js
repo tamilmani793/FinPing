@@ -210,7 +210,7 @@ export function narrationInfo(n) {
   }
   else if (/^(ACH|NACH|ECS|SI )/.test(up)) { mode = 'Bank'; name = nameSeg(segs.slice(1)) || '' }
   else name = nameSeg(segs) || segs[0] || ''
-  name = nice(name.replace(/\d{9,}.*$/, '').replace(/@.*$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 40)
+  name = nice(name.replace(/\s+IN$/, '').replace(/\d{9,}.*$/, '').replace(/@.*$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 40)
   return { mode, merchant: name || 'Unknown', vpa, note: note.slice(0, 60) }
 }
 
@@ -229,9 +229,9 @@ export function statementRows(table) {
       const dir = (c.type >= 0 ? r[c.type] : r[c.amount]) || ''
       const bal = c.balance >= 0 ? parseMoney(r[c.balance]) : null
       // one amount column and no Dr / Cr marker: the balance says which way the money moved
-      const marked = /\b(cr|dr)\b|cr$|dr$/i.test(dir)
+      const marked = /\b(cr|dr)\b|cr$|dr$/i.test(dir) || (c.type >= 0 && /^[cd]$/i.test(dir.trim()))
       if (a != null) {
-        if (marked) { if (/cr/i.test(dir) || isCr(r[c.amount])) credit = a; else debit = a }
+        if (marked) { if (/cr|^\s*c\s*$|credit/i.test(dir) || isCr(r[c.amount])) credit = a; else debit = a }
         else if (bal != null && prevBal != null) { if (bal > prevBal) credit = a; else debit = a }
         else debit = a
       }
@@ -267,7 +267,7 @@ const dayKey = d => { const x = new Date(d); return Math.round(new Date(x.getFul
 const cents = n => Math.round(Number(n) * 100)
 const tokens = s => new Set(norm(s).split(' ').filter(w => w.length >= 3 && !/^(upi|neft|imps|ach|pos|the|pvt|ltd|bank|payment|txn)$/.test(w)))
 // entries that must keep their own name / category: loan postings, transfers, card bill payments
-const PROTECTED = t => !!t.debtId || ['loan_payment', 'loan_received', 'transfer', 'card_payment'].includes(t.kind)
+const PROTECTED = t => !!t.debtId || t.category === 'Cashback' || ['loan_payment', 'loan_received', 'transfer', 'card_payment'].includes(t.kind)
 
 export function reconcile(rows, saved) {
   const ordered = [...rows].map((r, seq) => ({ ...r, seq })).sort((a, b) => a.date - b.date || a.seq - b.seq)
@@ -291,7 +291,7 @@ export function reconcile(rows, saved) {
       const gap = Math.abs(dayKey(t.date) - dayKey(r.date))
       const shared = [...refsOf(t.rawSMS, t.refNo)].some(x => r.refs.has(x))
       if (gap > (shared ? 4 : 2)) continue
-      let score = (shared ? 10 : 0) - gap
+      let score = (shared ? 10 : 0) - gap - (t._loose ? 0.5 : 0)
       for (const w of tokens(t.merchant)) if (rt.has(w)) { score += 3; break }
       candidates.push({ r, t, score })
     }
@@ -307,6 +307,7 @@ export function reconcile(rows, saved) {
   for (const r of ordered) { const t = pairs.get(r.stmtKey); t ? matched.push({ row: r, txn: t }) : toAdd.push(r) }
   const extras = saved.filter(t => !claimed.has(t.id) && (!t.stmtKey || stale(t)) && dayKey(t.date) >= first && dayKey(t.date) <= last)
     .map(t => ({ txn: t, keep: t.parsedBy === 'manual' || PROTECTED(t), duplicateOf: matched.find(m => m.txn.type === t.type && cents(m.txn.amount) === cents(t.amount) && Math.abs(dayKey(m.txn.date) - dayKey(t.date)) <= 2)?.txn.id ?? null }))
+    .filter(x => !x.txn._loose || x.duplicateOf != null)
   const closing = [...ordered].reverse().find(r => r.balance != null)
   return { matched, toAdd, extras, closingBalance: closing ? closing.balance : null, from: ordered[0].date, to: ordered[ordered.length - 1].date }
 }
@@ -325,12 +326,17 @@ export function correction(row, txn) {
 }
 
 export function newEntry(row, accountId, account) {
-  const cardBill = /\b(cred|cc payment|credit card|cardpay|card bill)\b/i.test(row.narration)
+  const isCard = account && account.cardType !== 'account'
+  // on a credit card statement a credit is either the bill being paid (not income) or a refund / cashback
+  const billPaid = isCard && row.type === 'credit' && /(payment|paid|received|thank you|bbps|neft|imps|upi)/i.test(row.narration) && !/(refund|reversal|cashback)/i.test(row.narration)
+  const cardBill = !isCard && /\b(cred|cc payment|credit card|cardpay|card bill)\b/i.test(row.narration)
   return {
-    date: row.date, amount: row.amount, type: row.type, merchant: row.merchant, category: cardBill ? 'Card Payment' : row.category,
-    paymentMode: row.mode, bank: account?.bank || '', accountLast4: account?.cardLast4 || null, cardId: accountId, rawSMS: null,
+    date: row.date, amount: row.amount, type: row.type, merchant: billPaid ? 'Card payment' : row.merchant,
+    category: billPaid || cardBill ? 'Card Payment' : row.category,
+    paymentMode: isCard ? 'Credit Card' : row.mode, bank: account?.bank || '', accountLast4: account?.cardLast4 || null, cardId: accountId, rawSMS: null,
     parsedBy: 'statement', counterparty: row.merchant !== 'Unknown' ? row.merchant : null, vpa: row.vpa || null, stmtKey: row.stmtKey, bankNarration: row.narration, refNo: row.ref || [...row.refs][0] || null, stmtBalance: row.balance,
-    tags: [], notes: row.note || '', isExcluded: cardBill, createdAt: new Date(),
+    ...(billPaid ? { kind: 'card_payment' } : {}),
+    tags: [], notes: row.note || '', isExcluded: billPaid || cardBill, createdAt: new Date(),
   }
 }
 

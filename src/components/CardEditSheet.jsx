@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { db } from '../db/schema'
 import { useStore } from '../store'
-import { saveCardEdit, groupOf } from '../lib/cards'
+import { saveCardEdit, groupOf, nextAnniversary } from '../lib/cards'
 import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import { BtnPrimary } from './UI'
 import { relinkTransactions } from '../lib/relink'
@@ -45,7 +45,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
     billingCycleDate: card.cycleSet ? str(card.billingCycleDate) : '', paymentDueDays: card.cycleSet ? str(card.paymentDueDays) : '',
     status: isStatementPaid(card) ? 'paid' : 'pending',
     excludedCategories: excludedFor(card),
-    annualFeeDate: dateStr(card.annualFeeDate), interestRate: str(card.interestRate), rewardPoints: str(card.rewardPoints), notes: card.notes || '',
+    issueDate: dateStr(card.issueDate || card.annualFeeDate), interestRate: str(card.interestRate), rewardPoints: str(card.rewardPoints), notes: card.notes || '',
     annualFee: str(card.annualFee > 0 ? card.annualFee : card.totalAnnualFee), feeWaiverThreshold: str(card.feeWaiverThreshold),
   })
   const isCredit = form.cardType === 'credit'
@@ -257,9 +257,10 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <Field label="Annual fee before GST (₹)"><input {...num('annualFee')} /></Field>
             <Field label="Fee waiver spend (₹)"><input {...num('feeWaiverThreshold')} /></Field>
-            <Field label="Annual fee date"><input className="input" type="date" value={form.annualFeeDate} onChange={set('annualFeeDate')} /></Field>
+            <Field label="Card issued on"><input className="input" type="date" value={form.issueDate} onChange={set('issueDate')} /></Field>
             <Field label="Interest rate (% / month)"><input {...num('interestRate')} /></Field>
           </div>
+          {form.issueDate && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>The annual fee is charged on this date every year. Next: <b style={{ color: 'var(--txt)' }}>{fmt(nextAnniversary(form.issueDate))}</b></div>}
           {Number(form.annualFee) > 0 && (
             <div style={{ fontSize: 12, color: 'var(--txt2)' }}>
               ₹{Number(form.annualFee).toLocaleString('en-IN')} + 18% GST ₹{(Number(form.annualFee) * 0.18).toLocaleString('en-IN', { maximumFractionDigits: 2 })} = <b style={{ color: 'var(--txt)' }}>₹{(Number(form.annualFee) * 1.18).toLocaleString('en-IN', { maximumFractionDigits: 2 })} a year</b>

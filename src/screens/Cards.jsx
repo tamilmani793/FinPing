@@ -6,7 +6,7 @@ import StatementImportSheet from '../components/StatementImportSheet'
 import { db } from '../db/schema'
 import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../components/UI'
 import { useStore } from '../store'
-import { groupOf, totalAvailableCredit, recordPayment, removePayment } from '../lib/cards'
+import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary } from '../lib/cards'
 import { cardStats, rewardStatus, isCardPayment } from '../lib/cardStats'
 import { ordinal } from '../lib/cycle'
 import { typeLabel, networkLabel, excludedFor } from '../lib/cardCatalog'
@@ -259,7 +259,7 @@ function Detail({ card, cards, byCard, onBack }) {
       <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div onClick={onBack} style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</div>
-        {card.cardType === 'account' && <button className="btn-secondary" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setStmtOpen(true)}><FileText size={13} /> Statement</button>}
+        {(card.cardType === 'account' || credit) && <button className="btn-secondary" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setStmtOpen(true)}><FileText size={13} /> Statement</button>}
         <button className="btn-secondary" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setEditOpen(true)}><Pencil size={13} /> Edit</button>
       </div>
 
@@ -392,7 +392,8 @@ function Detail({ card, cards, byCard, onBack }) {
               <div className="divider" />
               <Row k="Annual fee" sub={!card.isLTF && card.annualFee > 0 ? `${formatINR(card.annualFee)} + 18% GST ${formatINR(card.annualFeeGST || 0)}` : undefined} v={card.isLTF ? 'Lifetime free' : `${formatINR(card.totalAnnualFee || 0)} / yr`} />
               {!card.isLTF && card.feeWaiverThreshold > 0 && <Row k="Fee waiver spend" v={`${formatINR(card.totalPaidThisYear || 0)} / ${formatINR(card.feeWaiverThreshold)}`} />}
-              {card.annualFeeDate && <Row k="Annual fee date" v={fmtD(card.annualFeeDate)} />}
+              {(card.issueDate || card.annualFeeDate) && <Row k="Card issued on" v={fmtD(card.issueDate || card.annualFeeDate)} />}
+              {!card.isLTF && (card.issueDate || card.annualFeeDate) && <Row k="Next annual fee" v={fmtD(nextAnniversary(card.issueDate || card.annualFeeDate))} sub="on the card's issue date every year" />}
               {card.interestRate > 0 && <Row k="Interest rate" v={`${card.interestRate}% / month`} />}
               {card.notes && <Row k="Notes" v={card.notes} />}
             </Section>

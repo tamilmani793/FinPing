@@ -47,6 +47,19 @@ export const annualFeeFields = base => ({
 })
 
 const num = v => (v === '' || v == null ? 0 : Number(v) || 0)
+// The annual fee falls on the card's issue anniversary: the first one on or after `from`.
+export function nextAnniversary(issued, from = new Date()) {
+  if (!issued) return null
+  const m = typeof issued === 'string' && issued.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3], 12) : new Date(issued)
+  if (Number.isNaN(+d)) return null
+  const at = y => new Date(y, d.getMonth(), Math.min(d.getDate(), new Date(y, d.getMonth() + 1, 0).getDate()), 12)
+  const today = new Date(from.getFullYear(), from.getMonth(), from.getDate())
+  let n = at(today.getFullYear())
+  if (new Date(n.getFullYear(), n.getMonth(), n.getDate()) < today) n = at(today.getFullYear() + 1)
+  return n
+}
+
 const toDate = v => (v ? new Date(v) : null)
 
 // Saves everything on the edit form. `form` holds strings straight from the inputs.
@@ -129,7 +142,8 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
     linkedAccountId: null,
     ...annualFeeFields(num(form.annualFee)),
     feeWaiverThreshold: num(form.feeWaiverThreshold),
-    annualFeeDate: toDate(form.annualFeeDate),
+    issueDate: toDate(form.issueDate),
+    annualFeeDate: nextAnniversary(toDate(form.issueDate)),
     interestRate: num(form.interestRate),
     rewardPoints: num(form.rewardPoints),
     notes: form.notes || '',

@@ -13,7 +13,7 @@ const MODES = [
   { id: 'pie', label: 'Pie', Icon: PieIcon },
 ]
 const PERIODS = ['This Month', '7D', '1M', '3M']
-const tooltipStyle = { background: '#fff', border: '1px solid rgba(90,60,20,0.18)', borderRadius: 10, fontSize: 12, color: '#2A2119' }
+const tooltipStyle = { background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 10, fontSize: 12, color: 'var(--txt)' }
 
 function rangeFor(i, now) {
   if (i === 0) return startOfMonth(now)
@@ -111,7 +111,7 @@ export default function Charts() {
             <div style={{ height: 240, position: 'relative' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={cats} dataKey="value" nameKey="name" innerRadius={62} outerRadius={95} paddingAngle={1} stroke="#fff" strokeWidth={2}>
+                  <Pie data={cats} dataKey="value" nameKey="name" innerRadius={62} outerRadius={95} paddingAngle={1} stroke="var(--bg1)" strokeWidth={2}>
                     {cats.map((d, i) => <Cell key={d.name} fill={colorOf(i)} />)}
                   </Pie>
                   <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [formatINR(v), n]} />
@@ -127,9 +127,9 @@ export default function Charts() {
               <ResponsiveContainer width="100%" height="100%">
                 {mode === 'bar' ? (
                   <BarChart data={buckets} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-                    <CartesianGrid stroke="rgba(90,60,20,0.08)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: '#A89A8B', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                    <YAxis tick={{ fill: '#A89A8B', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={fmtTick} />
+                    <CartesianGrid stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: 'var(--txt3)', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: 'var(--txt3)', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={fmtTick} />
                     <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(214,69,93,0.06)' }} formatter={v => [formatINR(v), 'Spent']} />
                     <Bar dataKey="spend" fill="#E8466C" radius={[5, 5, 0, 0]} />
                   </BarChart>
@@ -141,9 +141,9 @@ export default function Charts() {
                         <stop offset="100%" stopColor="#E8466C" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="rgba(90,60,20,0.08)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: '#A89A8B', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                    <YAxis tick={{ fill: '#A89A8B', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={fmtTick} />
+                    <CartesianGrid stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: 'var(--txt3)', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: 'var(--txt3)', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={fmtTick} />
                     <Tooltip contentStyle={tooltipStyle} formatter={v => [formatINR(v), 'Spent']} />
                     <Area type="monotone" dataKey="spend" stroke="#E8466C" strokeWidth={2} fill="url(#trendFill)" />
                   </AreaChart>

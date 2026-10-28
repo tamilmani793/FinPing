@@ -52,7 +52,7 @@ export default function StatementImportSheet({ account, onClose }) {
       <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28, maxHeight: '88vh', overflowY: 'auto' }}>
         <div className="sheet-handle" />
         <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 4 }}>Import bank statement</div>
-        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>{account.name} · your statement is treated as the truth. The file is read on this phone and never uploaded.</div>
+        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>{account.name} · your {account.cardType === 'account' ? 'statement' : 'card statement (spends are debits; payments and refunds are credits)'} is treated as the truth. The file is read on this phone and never uploaded.</div>
 
         {!plan && needPw && (
           <>
@@ -103,7 +103,7 @@ export default function StatementImportSheet({ account, onClose }) {
               </div>
             )}
 
-            {plan.closingBalance != null && (
+            {plan.closingBalance != null && account.cardType === 'account' && (
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginBottom: 12 }}>
                 <input type="checkbox" checked={setBal} onChange={e => setSetBal(e.target.checked)} />
                 Set the account balance to the statement's {formatINR(plan.closingBalance)}

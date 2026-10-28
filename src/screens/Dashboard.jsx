@@ -36,10 +36,10 @@ function Delta({ cur, prev, goodWhenUp }) {
 
 function Tile({ Icon, tone, label, value, extra, onClick }) {
   const tones = {
-    orange: ['#FCE6D6', '#D9701F'], green: ['#DDF3E7', '#2E9E6B'], blue: ['#E2E8FB', '#4A5FD0'],
-    gold: ['#F6EBCF', '#A57C2A'], red: ['#FBDDE0', '#D6455D'],
-  }
-  const [bg, fg] = tones[tone]
+      orange: ['rgba(217,112,31,0.16)', '#D9701F'], green: ['rgba(46,158,107,0.16)', '#2E9E6B'], blue: ['rgba(74,95,208,0.16)', '#6B7BE0'],
+      gold: ['var(--gold-bg)', 'var(--gold-dim)'], red: ['rgba(214,69,93,0.16)', '#D6455D'],
+    }
+    const [bg, fg] = tones[tone]
   return (
     <div className="stat-tile" onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
