@@ -23,7 +23,7 @@ const FAB_TABS = ['home', 'history']
 export default function App() {
   const { activeTab, notification, requestCompose, showNotification } = useStore()
   const sms = useSmsSync()
-  const { exitPrompt, setExitPrompt } = useStore()
+  const { exitPrompt, setExitPrompt, confirmReq, answerConfirm } = useStore()
   useEffect(() => initBackNav(), [])
   // The header pill and the Home permission card read the sync state from the store.
   useEffect(() => { useStore.setState({ smsSync: { state: sms.state, enable: sms.enable } }) }, [sms.state])
@@ -70,6 +70,18 @@ export default function App() {
         </div>
       )}
       <BottomNav />
+      {confirmReq && (
+        <div className="overlay" style={{ zIndex: 90, alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => answerConfirm(false)}>
+          <div className="card" style={{ width: '100%', maxWidth: 340, padding: 22, borderRadius: 26 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{confirmReq.title}</div>
+            {confirmReq.message && <div style={{ fontSize: 13, color: 'var(--txt2)', margin: '6px 0 0', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{confirmReq.message}</div>}
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button className="btn-ghost" style={{ flex: 1, height: 48, fontSize: 14 }} onClick={() => answerConfirm(false)}>Cancel</button>
+              <button className="btn-primary" style={{ flex: 1, height: 48, ...(confirmReq.danger ? { background: 'var(--red)', color: '#fff', borderColor: 'var(--red)', boxShadow: 'none' } : {}) }} onClick={() => answerConfirm(true)}>{confirmReq.confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {exitPrompt && (
         <div className="overlay" style={{ zIndex: 80, alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setExitPrompt(false)}>
           <div className="card" style={{ width: '100%', maxWidth: 340, padding: 22, borderRadius: 26 }} onClick={e => e.stopPropagation()}>

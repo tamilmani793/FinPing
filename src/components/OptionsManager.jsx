@@ -3,6 +3,8 @@ import { Search, ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Lock, RotateCc
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
+import { askConfirm } from '../lib/confirm'
+import Sortable, { ReorderToggle } from './Sortable'
 import { Field, TextField, Picker, Segmented } from './Fields'
 import {
   OPTION_LISTS, LOCKED_CATEGORIES, useOptions, useOptionNames, setList, resetList, isCustomised,
@@ -27,6 +29,8 @@ function ListPage({ listKey, onClose }) {
   const emptyDraft = { idx: null, name: '', icon: '', bank: '', partner: '', insurer: '', type: '', cover: '' }
   const [draft, setDraft] = useState(null) // null = closed
   const [q, setQ] = useState('')
+  const [reorder, setReorder] = useState(false)
+  const canReorder = items.length > 1 && items.length <= 80 // the long built-in card lists are searched, not sorted
 
   const nameOf = it => (typeof it === 'string' ? it : listKey === 'debtTypes' ? it.label : it.name)
   const iconOf = it => (typeof it === 'string' ? '' : it.icon || '')
@@ -76,7 +80,7 @@ function ListPage({ listKey, onClose }) {
       if (locked(it)) throw new Error(`“${it.name}” is used by the app and cannot be removed`)
       if (listKey === 'categories') {
         const n = await db.transactions.where('category').equals(it.name).count()
-        if (!window.confirm(`Remove “${it.name}”?${n ? `\n\n${n} transaction${n === 1 ? '' : 's'} will move to General.` : ''}`)) return
+        if (!(await askConfirm({ title: `Remove “${it.name}”?`, confirmLabel: 'Remove', message: n ? `${n} transaction${n === 1 ? '' : 's'} will move to General.` : 'It is taken out of the dropdown lists.' }))) return
         await removeCategory(it.name)
         return
       }
@@ -84,13 +88,13 @@ function ListPage({ listKey, onClose }) {
         const n = await db.debts.where('type').equals(it.id).count().catch(() => db.debts.filter(d => d.type === it.id).count())
         if (n) throw new Error(`${n} debt${n === 1 ? ' uses' : 's use'} “${it.label}”, so it cannot be removed`)
       }
-      if (!window.confirm(`Remove “${nameOf(it)}” from the list?`)) return
+      if (!(await askConfirm({ title: `Remove “${nameOf(it)}”?`, message: `It is taken out of ${meta.title.toLowerCase()}.`, confirmLabel: 'Remove' }))) return
       setList(listKey, items.filter((_, i) => i !== idx))
     } catch (e) { showNotification(e.message, 'error') }
   }
 
-  const reset = () => {
-    if (!window.confirm(`Put “${meta.title}” back to the built-in list? Your changes to it will be lost${listKey === 'categories' ? ' (transactions keep the names they have now)' : ''}.`)) return
+  const reset = async () => {
+    if (!(await askConfirm({ title: `Reset ${meta.title}?`, confirmLabel: 'Reset', message: `The built-in list comes back and your changes to it are lost${listKey === 'categories' ? ' (transactions keep the names they have now)' : ''}.` }))) return
     resetList(listKey)
   }
 
@@ -100,9 +104,12 @@ function ListPage({ listKey, onClose }) {
       <div style={{ padding: '0 18px' }}>
         <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '0 2px 14px' }}>{meta.hint}</div>
 
-        {draft ? (
-          <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 20, padding: 14, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 800 }}>{draft.idx == null ? 'Add to the list' : 'Edit'}</div>
+        {draft && (
+          <div className="overlay" style={{ zIndex: 60 }} onClick={() => setDraft(null)}>
+          <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+          <div className="sheet-handle" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{draft.idx == null ? `Add to ${meta.title.toLowerCase()}` : `Edit ${meta.title.toLowerCase()}`}</div>
             {CARD_LISTS.includes(listKey) && (
               <Field label="Bank"><Picker value={draft.bank} options={banks} onChange={v => setDraft({ ...draft, bank: v })} allowCustom title="Bank" placeholder="Choose the bank" /></Field>
             )}
@@ -132,9 +139,13 @@ function ListPage({ listKey, onClose }) {
               <button className="btn-primary" style={{ flex: 1, height: 46 }} onClick={save}><Check size={16} /> {draft.idx == null ? 'Add' : 'Save'}</button>
             </div>
           </div>
-        ) : (
+          </div>
+          </div>
+        )}
+        {(
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <button className="btn-primary" style={{ flex: 1, height: 46 }} onClick={() => setDraft({ ...emptyDraft })}><Plus size={17} /> Add new</button>
+            {canReorder && <ReorderToggle on={reorder} onClick={() => { setReorder(v => !v); setQ('') }} />}
             {isCustomised(listKey) && <button className="btn-secondary" style={{ height: 46, display: 'flex', alignItems: 'center', gap: 6 }} onClick={reset}><RotateCcw size={14} /> Reset</button>}
           </div>
         )}
@@ -144,7 +155,16 @@ function ListPage({ listKey, onClose }) {
         )}
 
         <div className="picker-list">
-          {shown.map(({ it, idx }) => (
+          {reorder && canReorder ? (
+            <Sortable items={items.map((it, idx) => ({ it, idx }))} getId={x => x.idx + ':' + nameOf(x.it)} enabled onReorder={list => setList(listKey, list.map(x => x.it))}
+              renderItem={({ it }, { handle, dragging }) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', margin: '4px 0', background: 'var(--bg1)', border: '1px solid ' + (dragging ? 'var(--gold)' : 'var(--border)'), borderRadius: 14 }}>
+                  {rich && !CARD_LISTS.includes(listKey) && listKey !== POLICY_LIST && <span style={{ fontSize: 19, width: 26, textAlign: 'center' }}>{iconOf(it)}</span>}
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nameOf(it)}</div>
+                  {handle}
+                </div>
+              )} />
+          ) : shown.map(({ it, idx }) => (
             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 6px', borderBottom: '1px solid var(--border)' }}>
               {rich && !CARD_LISTS.includes(listKey) && listKey !== POLICY_LIST && <span style={{ fontSize: 19, width: 26, textAlign: 'center' }}>{iconOf(it)}</span>}
               <div style={{ flex: 1, minWidth: 0 }} onClick={() => startEdit(it, idx)}>

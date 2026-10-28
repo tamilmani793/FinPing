@@ -8,6 +8,10 @@ export const useStore = create((set, get) => ({
   setActiveTab: (tab) => set(s => (tab === s.activeTab ? {} : { activeTab: tab, tabStack: [...s.tabStack, s.activeTab].slice(-20) })),
   goBackTab: () => set(s => (s.tabStack.length ? { activeTab: s.tabStack[s.tabStack.length - 1], tabStack: s.tabStack.slice(0, -1) } : {})),
   // "Leave the app?" question shown by the back button on Home
+  // a question waiting for Delete / Cancel (see lib/confirm.js)
+  confirmReq: null,
+  askConfirm: (opts) => new Promise(resolve => set({ confirmReq: { danger: true, confirmLabel: 'Delete', ...opts, resolve } })),
+  answerConfirm: (ok) => set(s => { s.confirmReq?.resolve(!!ok); return { confirmReq: null } }),
   exitPrompt: false,
   setExitPrompt: (v) => set({ exitPrompt: v }),
 

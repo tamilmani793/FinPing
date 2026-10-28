@@ -172,7 +172,9 @@ export default function Wealth() {
         </div>
 
         {addOpen && (
-          <Card style={{ marginBottom: 10 }}>
+          <div className="overlay" onClick={() => setAddOpen(false)}>
+<div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+<div className="sheet-handle" />
             <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 14 }}>Log an investment</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <Field label="Fund / stock name"><TextField icon={<TrendingUp size={17} />} placeholder="e.g. Nifty 50 index fund" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
@@ -189,11 +191,14 @@ export default function Wealth() {
                 <BtnPrimary onClick={handleAddManual} style={{ flex: 1 }}>Save</BtnPrimary>
               </div>
             </div>
-          </Card>
+          </div>
+          </div>
         )}
 
         {smsOpen && (
-          <Card style={{ marginBottom: 10 }}>
+          <div className="overlay" onClick={() => setSmsOpen(false)}>
+<div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+<div className="sheet-handle" />
             <LabelCaps style={{ marginBottom: 6 }}>Parse Investment SMS</LabelCaps>
             <textarea className="input" style={{ height: 70, marginBottom: 8, fontSize: 12 }} placeholder="Paste MF SIP / FD / Demat SMS..." value={smsText} onChange={e => { setSmsText(e.target.value); setParsed(null) }} />
             <button className="btn-primary" style={{ width: '100%', height: 36, fontSize: 12, marginBottom: parsed ? 8 : 0 }} onClick={handleParseSMS}>Parse</button>
@@ -207,7 +212,8 @@ export default function Wealth() {
                 </div>
               </div>
             )}
-          </Card>
+          </div>
+          </div>
         )}
 
         {/* Live SMS Parser Feed */}

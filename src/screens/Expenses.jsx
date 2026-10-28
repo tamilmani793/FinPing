@@ -135,7 +135,9 @@ export default function Expenses() {
 
         {/* Manual Add Form */}
         {showAddForm && (
-          <Card style={{ marginBottom: 12, padding: 16 }}>
+          <div className="overlay" onClick={() => setShowAddForm(false)}>
+<div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+<div className="sheet-handle" />
             <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>Add a transaction</div>
             <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '2px 0 14px' }}>Cash spends and anything the SMS sync missed.</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -164,7 +166,8 @@ export default function Expenses() {
                 <BtnPrimary onClick={handleAddManual} style={{ flex: 1 }}>Save</BtnPrimary>
               </div>
             </div>
-          </Card>
+          </div>
+          </div>
         )}
 
         {/* Category Accordions */}

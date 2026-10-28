@@ -11,6 +11,7 @@ import { dailyInterest, splitPayment, lastRepaymentDate } from '../lib/loanMath'
 import { projectSchedule, defaultMode, nextEmiAmount, accrualUntil, FIXED_TYPES } from '../lib/loanSchedule'
 import { parseEmiSchedule } from '../lib/scheduleImport'
 import { cardTitle } from '../lib/cardCatalog'
+import { askConfirm } from '../lib/confirm'
 import { postDueEmis } from '../lib/emiEngine'
 import { Landmark, Wallet, Calendar, IndianRupee, Percent, Hash, User, FileText, Clock, Building2 } from 'lucide-react'
 import { Field, FormHeading, Segmented, TextField, Picker } from '../components/Fields'
@@ -144,8 +145,7 @@ export default function Debt() {
     })
     setEditId(d.id)
     setSched(d.schedule?.length ? { fromDebt: true } : null)
-    setAddOpen(true)
-    document.querySelector('.screen')?.scrollTo({ top: 0, behavior: 'smooth' })
+    setAddOpen(true) // the form slides up over the page, so the page itself stays where it is
   }
 
   // The loan as the form describes it right now (also drives the live preview).
@@ -222,7 +222,7 @@ export default function Debt() {
   }
 
   const handleDeleteDebt = async d => {
-    if (!window.confirm(`Delete "${d.name}" and its payment history? This cannot be undone.`)) return
+    if (!(await askConfirm({ title: `Delete ${d.name}?`, message: 'Its payment history is deleted too. This cannot be undone.' }))) return
     await db.debtRepayments.where('debtId').equals(d.id).delete()
     await db.debts.delete(d.id)
     showNotification('Debt deleted', 'success')
@@ -305,8 +305,10 @@ export default function Debt() {
 
           {/* Add / edit form */}
           {addOpen && (
-            <Card style={{ marginBottom: 10 }}>
-              <LabelCaps style={{ marginBottom: 8 }}>{editId ? 'Edit debt' : 'Add new debt'}</LabelCaps>
+            <div className="overlay" onClick={closeForm}>
+            <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+              <div className="sheet-handle" />
+              <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 14 }}>{editId ? 'Edit debt' : 'Add new debt'}</div>
 
               {/* A bank's own EMI schedule (debit / credit card EMI): paste it and every instalment is loaded exactly as printed */}
               {!editId && !sched && (
@@ -405,7 +407,8 @@ export default function Debt() {
                 <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={closeForm}>Cancel</button>
                 <BtnPrimary onClick={handleSaveDebt} style={{ flex: 1 }}>{editId ? 'Save changes' : 'Save debt'}</BtnPrimary>
               </div>
-            </Card>
+            </div>
+            </div>
           )}
 
           {/* Active liabilities */}
@@ -519,7 +522,7 @@ export default function Debt() {
                           key: r.id, date: fmtS(r.date), dim: false, incoming,
                           tag: incoming ? (d.type === 'FriendLent' ? 'received back' : 'received') : r.installmentNo ? `EMI #${r.installmentNo}${r.statementDate ? ` · stmt ${fmtS(r.statementDate)}` : ''}` : manual ? 'payment' : '',
                           emi: r.amount, interest: incoming ? 0 : r.interest, principal: incoming ? 0 : r.principal, balance: r.outstandingAfter ?? null,
-                          onClick: manual ? () => { if (window.confirm('Remove this entry and put the balance back?')) handleUndo(r.id) } : undefined,
+                          onClick: manual ? async () => { if (await askConfirm({ title: 'Remove this entry?', message: 'The balance is put back as it was.', confirmLabel: 'Remove' })) handleUndo(r.id) } : undefined,
                         }
                       })} footer={<div style={{ fontSize: 10, color: 'var(--txt3)', paddingTop: 6 }}>EMIs post themselves on their due date. Tap an extra payment or received entry to remove it.</div>} />
                     ) : <div style={{ fontSize: 12, color: 'var(--txt2)', padding: '8px 0 12px' }}>Nothing posted yet. The first EMI posts on {fmtD(d.nextEmiDate)}.</div>)}
@@ -534,7 +537,9 @@ export default function Debt() {
                       const split = splitOf(d, repayForm)
                       const accrued = d.interestRate > 0 && !Array.isArray(d.schedule) ? Math.round(accrualUntil(d, repayForm.date || new Date()) + (d.accruedInterest || 0)) : 0
                       return (
-                      <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 22, padding: 14, marginBottom: 10 }}>
+                      <div className="overlay" onClick={() => setRepayFor(null)}>
+<div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+<div className="sheet-handle" />
                         <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>Make a payment</div>
                         <div style={{ fontSize: 12, color: 'var(--txt2)', margin: '2px 0 4px' }}>Still owed <b style={{ color: 'var(--txt)' }}>{formatINR(d.currentOutstanding)}</b></div>
                         <div style={{ fontSize: 11.5, color: 'var(--txt2)', margin: '0 0 12px', lineHeight: 1.5 }}>Enter what you paid and how it splits. Only the principal part lowers what you owe, from the date you choose; interest after that date is charged on the lower balance. With no split, all of it is principal. Regular EMIs post themselves.</div>
@@ -564,10 +569,13 @@ export default function Debt() {
                           <BtnPrimary onClick={handleSaveRepay} style={{ flex: 1 }}>Save payment</BtnPrimary>
                         </div>
                       </div>
+                      </div>
                       )
                     })()}
                     {receiveFor === d.id && (
-                      <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 22, padding: 14, marginBottom: 10 }}>
+                      <div className="overlay" onClick={() => setReceiveFor(null)}>
+<div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+<div className="sheet-handle" />
                         <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>{d.type === 'FriendLent' ? 'Amount received back' : 'Amount received from lender'}</div>
                         <div style={{ fontSize: 11.5, color: 'var(--txt2)', margin: '4px 0 12px', lineHeight: 1.5 }}>
                           {d.type === 'FriendLent' ? 'It lowers what you are still owed and is added to the account it reached.' : 'A disbursal or top-up: it adds to what you owe and to the amount borrowed, and is added to the account it reached.'}
@@ -584,6 +592,7 @@ export default function Debt() {
                           <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={() => setReceiveFor(null)}>Cancel</button>
                           <BtnPrimary onClick={handleSaveReceipt} style={{ flex: 1 }}>Save received</BtnPrimary>
                         </div>
+                      </div>
                       </div>
                     )}
 

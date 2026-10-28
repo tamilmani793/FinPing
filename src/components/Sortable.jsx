@@ -120,3 +120,12 @@ export default function Sortable({ items, getId, enabled, onReorder, renderItem 
     </>
   )
 }
+
+// The small pill that switches a list into drag-to-reorder mode and back
+export function ReorderToggle({ on, onClick }) {
+  return (
+    <button onClick={onClick} style={{ height: 28, padding: '0 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', border: '1px solid var(--gold-border)', background: on ? 'var(--gold-grad)' : 'var(--gold-bg)', color: on ? 'var(--on-accent)' : 'var(--gold-dim)' }}>
+      {on ? 'Done' : '⇅ Reorder'}
+    </button>
+  )
+}

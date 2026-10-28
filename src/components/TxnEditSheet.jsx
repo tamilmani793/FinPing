@@ -5,6 +5,7 @@ import { IndianRupee, Calendar, Store, Wallet, CreditCard } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { cardTitle } from '../lib/cardCatalog'
+import { askConfirm } from '../lib/confirm'
 import { useOptions } from '../lib/options'
 import { BtnPrimary } from './UI'
 import { Field, Segmented, TextField, Picker } from './Fields'
@@ -50,7 +51,7 @@ export default function TxnEditSheet({ txn, onClose }) {
   }
 
   const remove = async () => {
-    if (!window.confirm('Delete this transaction? Card balances are not changed.')) return
+    if (!(await askConfirm({ title: 'Delete this transaction?', message: 'Card and account balances are not changed. A bank statement import will not bring it back.' }))) return
     await db.deletedTxns.add({ stmtKey: txn.stmtKey || null, day: format(new Date(txn.date), 'yyyy-MM-dd'), type: txn.type, amount: txn.amount, cardId: txn.cardId ?? null, deletedAt: new Date() })
     await db.transactions.delete(txn.id)
     showNotification('Transaction deleted', 'success')

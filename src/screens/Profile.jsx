@@ -10,6 +10,7 @@ import { exportBackup, inspectBackup, restoreBackup, lastBackupAt } from '../lib
 import { relinkTransactions } from '../lib/relink'
 import { removeDuplicateTransactions } from '../lib/dedupeCleanup'
 import { importDebts } from '../lib/debtBackup'
+import { askConfirm } from '../lib/confirm'
 
 function Row({ Icon, title, sub, onClick, right }) {
   return (
@@ -66,7 +67,7 @@ export default function Profile() {
       let raw = null
       try { raw = JSON.parse(text) } catch (e) { /* inspectBackup reports invalid files */ }
       if (raw && raw.kind === 'debts') {
-        if (!window.confirm(`Add ${raw.debts?.length || 0} debts and ${raw.debtRepayments?.length || 0} payments from this older debts backup?\n\nWhat you already have is kept; duplicates are skipped.`)) return
+        if (!(await askConfirm({ title: 'Add debts from this file?', danger: false, confirmLabel: 'Add', message: `Add ${raw.debts?.length || 0} debts and ${raw.debtRepayments?.length || 0} payments from this older debts backup?\n\nWhat you already have is kept; duplicates are skipped.` }))) return
         const { addedDebts, addedRepayments } = await importDebts(text)
         showNotification(`Added ${addedDebts} debt(s) and ${addedRepayments} payment(s)`, 'success')
         return
@@ -78,7 +79,7 @@ export default function Profile() {
         (summary.dropdowns.length ? `Dropdown options you edited: ${summary.dropdowns.map(d => `${d.title} (${d.count})`).join(', ')}${summary.renamedCategories ? `; ${summary.renamedCategories} category rename${summary.renamedCategories === 1 ? '' : 's'}` : ''}.\n` : 'Dropdown options: the built-in lists.\n') +
         `Profile: ${summary.name || 'no name'}, ${summary.hasPhoto ? 'with picture' : 'no picture'}${summary.palette ? `, ${summary.palette} theme` : ''}${summary.mode ? `, ${summary.mode} mode` : ''}.\n\n` +
         'This REPLACES everything currently in the app.'
-      if (!window.confirm(msg)) return
+      if (!(await askConfirm({ title: 'Replace everything with this backup?', message: msg, confirmLabel: 'Restore' }))) return
       setBusy(true)
       await restoreBackup(text)
       showNotification('Backup restored', 'success')
@@ -110,7 +111,7 @@ export default function Profile() {
           <input ref={photoInput} type="file" accept="image/*" onChange={onPhoto} style={{ display: 'none' }} />
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 14 }}>
             <button className="btn-secondary" onClick={() => photoInput.current?.click()}>{photo ? 'Change picture' : 'Upload picture'}</button>
-            {photo && <button className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => { setProfilePhoto(''); showNotification('Picture removed') }}><Trash2 size={13} /> Remove</button>}
+            {photo && <button className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 5 }} onClick={async () => { if (!(await askConfirm({ title: 'Remove your picture?', confirmLabel: 'Remove' }))) return; setProfilePhoto(''); showNotification('Picture removed') }}><Trash2 size={13} /> Remove</button>}
           </div>
           <div className="label-caps" style={{ textAlign: 'left', marginBottom: 6 }}>Your name</div>
           {editingName ? (

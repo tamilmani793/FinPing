@@ -7,6 +7,7 @@ import { db } from '../db/schema'
 import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../components/UI'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
+import { askConfirm } from '../lib/confirm'
 import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary } from '../lib/cards'
 import { cardStats, rewardStatus, isCardPayment, feeWaiverSpend } from '../lib/cardStats'
 import { ordinal } from '../lib/cycle'
@@ -251,7 +252,7 @@ function PaymentDetails({ card, s }) {
           </div>
           <div className="txn-amt"><div className="amt-credit">{formatINR(p.amount)}</div></div>
           {p.parsedBy === 'manual' && (
-            <div title="Remove" style={{ cursor: 'pointer', color: 'var(--txt3)', padding: 6 }} onClick={async () => { await removePayment(p.id); showNotification('Payment removed', 'success') }}>✕</div>
+            <div title="Remove" style={{ cursor: 'pointer', color: 'var(--txt3)', padding: 6 }} onClick={async () => { if (!(await askConfirm({ title: 'Remove this payment?', message: 'The card balance goes back up by this amount.', confirmLabel: 'Remove' }))) return; await removePayment(p.id); showNotification('Payment removed', 'success') }}>✕</div>
           )}
         </div>
       ))}

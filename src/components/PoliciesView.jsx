@@ -5,6 +5,9 @@ import { ShieldCheck, IndianRupee, Calendar, Building2, FileText, Hash, StickyNo
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
+import { askConfirm } from '../lib/confirm'
+import Sortable, { ReorderToggle } from './Sortable'
+import { bySortOrder, saveOrder } from '../lib/sortOrder'
 import { BtnPrimary, formatINR } from './UI'
 import { Field, Segmented, TextField, Picker } from './Fields'
 import { useOptionNames, useOptions } from '../lib/options'
@@ -43,6 +46,8 @@ export default function PoliciesView() {
   const [open, setOpen] = useState(false)
   useBackHandler(open, () => setOpen(false))
   const [editId, setEditId] = useState(null)
+  const [reorder, setReorder] = useState(false)
+  const ordered = bySortOrder(policies)
   const [form, setForm] = useState(EMPTY)
   const set = k => e => setForm({ ...form, [k]: e.target.value })
 
@@ -58,7 +63,6 @@ export default function PoliciesView() {
       nextDueDate: day(p.nextDueDate), endDate: day(p.endDate), maturityAmount: p.maturityAmount ? String(p.maturityAmount) : '', notes: p.notes || '', coverType: p.coverType || '',
     })
     setEditId(p.id); setOpen(true)
-    document.querySelector('.screen')?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const save = async () => {
@@ -85,7 +89,7 @@ export default function PoliciesView() {
   }
 
   const remove = async p => {
-    if (!window.confirm(`Delete "${p.name}"?`)) return
+    if (!(await askConfirm({ title: `Delete ${p.name}?`, message: 'The policy and its premium reminder are removed from this phone.' }))) return
     await db.policies.delete(p.id)
     showNotification('Policy deleted', 'success')
   }
@@ -105,8 +109,14 @@ export default function PoliciesView() {
 
       <button className="btn-primary" style={{ width: '100%', height: 42, marginBottom: 12 }} onClick={() => (open && !editId ? close() : (setEditId(null), setForm(EMPTY), setOpen(true)))}>＋ Add policy</button>
 
+      {policies.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-4px 2px 10px' }}><ReorderToggle on={reorder} onClick={() => setReorder(v => !v)} /></div>
+      )}
+
       {open && (
-        <div className="card" style={{ marginBottom: 12, padding: 16 }}>
+        <div className="overlay" onClick={close}>
+        <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+          <div className="sheet-handle" />
           <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 14 }}>{editId ? 'Edit policy' : 'Add a policy'}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <Field label="Policy name" hint="Pick a known policy to fill in its insurer and type, or type your own."><Picker value={form.name} options={nameOptions} onChange={pickName} allowCustom icon={<ShieldCheck size={17} />} title="Policy name" placeholder="Choose or type" /></Field>
@@ -142,9 +152,22 @@ export default function PoliciesView() {
             </div>
           </div>
         </div>
+        </div>
       )}
 
-      {policies.map(p => {
+      {reorder && ordered.length > 1 ? (
+        <Sortable items={ordered} getId={p => p.id} enabled onReorder={list => saveOrder('policies', list)}
+          renderItem={(p, { handle, dragging }) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg1)', border: '1px solid ' + (dragging ? 'var(--gold)' : 'var(--border)'), borderRadius: 14, padding: '10px 12px', margin: '6px 0' }}>
+              <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--indigo-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShieldCheck size={19} color="var(--indigo-dim)" /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[p.insurer, formatINR(p.premium)].filter(Boolean).join(' · ')}</div>
+              </div>
+              {handle}
+            </div>
+          )} />
+      ) : ordered.map(p => {
         const liveNow = isLive(p)
         return (
           <div key={p.id} className="card" style={{ marginBottom: 10, opacity: liveNow ? 1 : 0.6 }}>

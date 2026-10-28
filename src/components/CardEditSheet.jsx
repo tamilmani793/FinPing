@@ -8,6 +8,7 @@ import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import { BtnPrimary } from './UI'
 import { Field, FormHeading, Segmented, TextField, Picker } from './Fields'
 import { relinkTransactions } from '../lib/relink'
+import { askConfirm } from '../lib/confirm'
 import { CARD_TYPES, excludedFor, variantsFor, cardTitle } from '../lib/cardCatalog'
 import { useOptions, useOptionNames, isCustomised } from '../lib/options'
 
@@ -91,7 +92,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
   }
 
   const remove = async () => {
-    if (!window.confirm(`Remove ${card.name}? Its transactions stay in History.`)) return
+    if (!(await askConfirm({ title: `Remove ${cardTitle(card, { last4: false })}?`, message: 'Its transactions stay in History.', confirmLabel: 'Remove' }))) return
     await db.creditCards.delete(card.id)
     // Debit cards that drew on a removed account are no longer linked to anything.
     await db.creditCards.filter(c => c.linkedAccountId === card.id).modify({ linkedAccountId: null })
