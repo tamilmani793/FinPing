@@ -2,6 +2,9 @@ import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { db } from '../db/schema'
+import { OPTION_LISTS, reloadOptions } from './options'
+import { applyTheme } from './theme'
+import { profileChanged } from './profile'
 
 // Everything the app keeps lives in IndexedDB (+ a few small localStorage keys: name, picture, theme). A full backup is
 // one JSON file with all of it, so it can be restored on a fresh install.
@@ -29,7 +32,7 @@ export async function buildFullBackup() {
   const local = {}
   for (const k of LOCAL_KEYS) { const v = localStorage.getItem(k); if (v != null) local[k] = v }
   return {
-    json: stringify({ app: 'FinPing', kind: 'full', version: 1, dbVersion: db.verno, exportedAt: new Date(), localStorage: local, tables }),
+    json: stringify({ app: 'FinPing', kind: 'full', version: 1, format: 2, dbVersion: db.verno, exportedAt: new Date(), localStorage: local, tables }),
     counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.length])),
   }
 }
@@ -69,7 +72,12 @@ export function inspectBackup(text) {
     throw new Error('This is not a FinPing backup file')
   }
   if (data.dbVersion > db.verno) throw new Error('This backup is from a newer version of the app. Update the app first.')
-  return { data, counts: Object.fromEntries(Object.entries(data.tables).map(([k, v]) => [k, v.length])), exportedAt: data.exportedAt }
+  const local = data.localStorage || {}
+  let opts = {}
+  try { opts = JSON.parse(local.finping_options || '{}') || {} } catch (e) { /* ignore */ }
+  const dropdowns = Object.keys(OPTION_LISTS).filter(k => Array.isArray(opts[k])).map(k => ({ key: k, title: OPTION_LISTS[k].title, count: opts[k].length }))
+  const summary = { name: local.finping_user_name || '', hasPhoto: !!local.finping_profile_photo, palette: local.finping_palette || '', mode: local.finping_mode || '', dropdowns, renamedCategories: Object.keys(opts.categoryAliases || {}).length }
+  return { data, summary, counts: Object.fromEntries(Object.entries(data.tables).map(([k, v]) => [k, v.length])), exportedAt: data.exportedAt }
 }
 
 // Replaces ALL current data with the backup (original ids are kept, so links between records survive).
@@ -84,6 +92,9 @@ export async function restoreBackup(text) {
   })
   for (const k of LOCAL_KEYS) {
     if (data.localStorage?.[k] != null) localStorage.setItem(k, data.localStorage[k])
+    // a file made by this version lists every setting it had: the ones it lacks go back to the defaults
+    else if (data.format >= 2 && k !== 'finping_last_sms_sync') localStorage.removeItem(k)
   }
+  reloadOptions(); applyTheme(); profileChanged()
   localStorage.setItem(LAST_BACKUP_KEY, String(Date.now()))
 }

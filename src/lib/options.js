@@ -54,8 +54,16 @@ const BRAND = { 'HDFC Bank': 'HDFC', 'ICICI Bank': 'ICICI', 'State Bank of India
 const DEBIT_CARD_NAMES = Object.entries(DEBIT_NAMES).flatMap(([bank, names]) => names.map(n => ({ bank, name: `${BRAND[bank] || bank} ${n} Debit`, partner: '' })))
 const VARIANTS = [...new Set(variantsFor('', 'credit').concat(variantsFor('', 'debit')))]
 
+// who you borrow from: the banks plus finance companies, card and pay-later lenders, and people
+const LENDERS_EXTRA = [
+  'Bajaj Finance', 'LIC Housing Finance', 'HDFC Ltd', 'Tata Capital', 'Aditya Birla Finance', 'Mahindra Finance', 'Shriram Finance', 'L&T Finance',
+  'PNB Housing Finance', 'Home First Finance', 'Piramal Finance', 'Hero FinCorp', 'Poonawalla Fincorp', 'Muthoot Finance', 'Manappuram Finance',
+  'IIFL Finance', 'Navi', 'KreditBee', 'Money View', 'Paytm Postpaid', 'LazyPay', 'Simpl', 'Amazon Pay Later', 'Employer', 'Friend / family', 'Chit fund',
+]
+
 export const OPTION_LISTS = {
   banks: { title: 'Bank names', hint: 'Banks and issuers offered when you add a card or account', kind: 'text', icon: '🏦', defaults: () => [...new Set([...BANKS, ...INDIAN_CARDS.map(b => b.bank)])] },
+  lenders: { title: 'Lenders', hint: 'Banks, finance companies and people you borrow from or lend to', kind: 'text', icon: '🏛', defaults: () => [...new Set([...BANKS, ...INDIAN_CARDS.map(b => b.bank), ...LENDERS_EXTRA])] },
   cardNames: { title: 'Credit card names', hint: 'The cards you can pick from when adding a credit card', kind: 'rich', icon: '💳', defaults: () => CARD_NAMES },
   debitCardNames: { title: 'Debit card names', hint: 'The cards you can pick from when adding a debit card', kind: 'rich', icon: '💳', defaults: () => DEBIT_CARD_NAMES },
   networks: { title: 'Card networks', hint: 'Visa, Mastercard, RuPay…', kind: 'text', icon: '🌐', defaults: () => [...NETWORKS] },

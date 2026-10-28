@@ -11,6 +11,8 @@ import { db } from '../db/schema'
 import { TopBar, TxnRow, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
 import { getUserName } from '../lib/profile'
+import { cardTitle } from '../lib/cardCatalog'
+import { orderCards } from '../lib/sortOrder'
 
 function greeting(now) {
   const h = now.getHours()
@@ -138,7 +140,7 @@ export default function Dashboard() {
             <div className="section-title">Accounts &amp; Wallets</div>
             <div style={{ fontSize: 12, color: 'var(--gold-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => setActiveTab('cards')}>View all</div>
           </div>
-          {cards.length ? cards.slice(0, 4).map(c => {
+          {cards.length ? orderCards(cards).slice(0, 4).map(c => {
             // What each row shows depends on what it is: a bank balance, a card's outstanding, or just the type.
             const credit = !c.cardType || c.cardType === 'credit'
             const out = credit ? cardStats(c, cardTxns.filter(t => t.cardId === c.id)).outstanding : 0
@@ -150,8 +152,8 @@ export default function Dashboard() {
               <div key={c.id} onClick={() => openCard(c.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
                 <div className="stat-icon" style={{ width: 34, height: 34, background: 'var(--bg2)', color: 'var(--gold-dim)' }}>{c.cardType === 'account' ? <Landmark size={17} /> : <CreditCard size={17} />}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{c.bank} •• {c.cardLast4}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardTitle(c, { last4: false })}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{c.cardType === 'account' ? 'Bank account' : c.cardType === 'debit' ? 'Debit card' : 'Credit card'}{c.cardLast4 ? ` •• ${c.cardLast4}` : ''}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   {amount && <div style={{ fontSize: 13, fontWeight: 700, color }}>{amount}</div>}

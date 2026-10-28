@@ -215,6 +215,12 @@ export function narrationInfo(n) {
   return { mode, merchant: name || 'Unknown', vpa, note: note.slice(0, 60) }
 }
 
+// the first readable words of a narration, for lines whose name could not be picked out
+export function fallbackName(narration) {
+  const t = String(narration || '').replace(/\b[A-Za-z]*\d{5,}[A-Za-z0-9]*\b/g, ' ').replace(/[*_/\\|:;,]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return t ? nice(t).slice(0, 40) : ''
+}
+
 export function statementRows(table) {
   const c = detectColumns(table)
   if (!c) throw new Error("Couldn't find the transaction table. The file needs a header row with a Date, a description (Narration / Particulars / Remarks) and Debit & Credit (or Withdrawal & Deposit) columns.")
@@ -244,7 +250,7 @@ export function statementRows(table) {
     const type = debit > 0 ? 'debit' : 'credit'
     const amount = debit > 0 ? debit : credit
     rows.push({
-      date, type, amount, narration, merchant: info.merchant, mode: info.mode,
+      date, type, amount, narration, merchant: info.merchant === 'Unknown' ? (fallbackName(narration) || 'Unknown') : info.merchant, mode: info.mode,
       category: canonCategory(classifyCategory(info.merchant, narration)),
       vpa: info.vpa, note: info.note, ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
       balance: c.balance >= 0 ? parseMoney(r[c.balance]) : null,
@@ -318,7 +324,7 @@ export function reconcile(rows, saved, deleted = []) {
     .map(t => ({ txn: t, keep: t.parsedBy === 'manual' || t.userEdited || PROTECTED(t), duplicateOf: matched.find(m => m.txn.type === t.type && cents(m.txn.amount) === cents(t.amount) && Math.abs(dayKey(m.txn.date) - dayKey(t.date)) <= 2)?.txn.id ?? null }))
     .filter(x => !x.txn._loose || x.duplicateOf != null)
   const closing = [...ordered].reverse().find(r => r.balance != null)
-  return { matched, toAdd, skipped, extras, closingBalance: closing ? closing.balance : null, from: ordered[0].date, to: ordered[ordered.length - 1].date }
+  return { total: ordered.length, sample: ordered.slice(0, 4).map(r => ({ date: r.date, merchant: r.merchant, amount: r.amount, type: r.type, narration: r.narration })), unnamed: ordered.filter(r => r.merchant === 'Unknown').length, matched, toAdd, skipped, extras, closingBalance: closing ? closing.balance : null, from: ordered[0].date, to: ordered[ordered.length - 1].date }
 }
 
 // what to change on a saved entry so it agrees with the statement line
@@ -326,11 +332,16 @@ export function correction(row, txn) {
   const old = new Date(txn.date)
   const date = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate(), old.getHours() || 12, old.getMinutes(), old.getSeconds())
   const fields = { date, stmtKey: row.stmtKey, bankNarration: row.narration, refNo: row.ref || [...row.refs][0] || txn.refNo || null, stmtBalance: row.balance, counterparty: row.merchant !== 'Unknown' ? row.merchant : null, vpa: row.vpa || null, parsedBy: txn.parsedBy === 'manual' ? 'manual' : 'statement' }
-  if (txn.userEdited || txn.parsedBy === 'manual') { delete fields.date; fields.parsedBy = txn.parsedBy; return fields } // yours: only link it
-  if (!txn.notes && row.note) fields.notes = row.note
+  // what you set yourself wins: all of it for an entry you added by hand, only the changed fields for one you edited.
+  // A name that is still blank / Unknown / NA was never set by you, so the statement can always fill it in.
+  const mine = txn.parsedBy === 'manual' ? ['merchant', 'category', 'notes', 'date'] : (txn.userEdited ? (txn.editedFields || ['merchant', 'category', 'notes']) : [])
+  const unnamed = !txn.merchant || /^(unknown|na|n\/a|-+)$/i.test(String(txn.merchant).trim())
+  fields.parsedBy = txn.parsedBy === 'manual' ? 'manual' : (txn.userEdited ? txn.parsedBy : 'statement')
+  if (mine.includes('date')) delete fields.date
+  if (!txn.notes && row.note && !mine.includes('notes')) fields.notes = row.note
   if (!PROTECTED(txn) && txn.parsedBy !== 'manual') {
-    if (row.merchant && row.merchant !== 'Unknown') fields.merchant = row.merchant
-    if (!txn.category || ['General', 'Other', 'Unknown'].includes(txn.category)) fields.category = row.category
+    if (row.merchant && row.merchant !== 'Unknown' && (!mine.includes('merchant') || unnamed)) fields.merchant = row.merchant
+    if ((!txn.category || ['General', 'Other', 'Unknown'].includes(txn.category)) && !mine.includes('category')) fields.category = row.category
   }
   return fields
 }

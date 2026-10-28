@@ -124,6 +124,7 @@ export function linesToTable(lines) {
 // them, and the reference / value date / amounts sit on whichever line is level with the middle of the cell, so
 // the lines above AND below them belong to the same transaction. A new transaction starts at a line whose DATE
 // column holds a date (a value date in another column does not count). Lines are then joined cell by cell.
+const DATE_ONLY = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ -,]*\d{2,4})$/
 const DATE_AT_START = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ -,]*\d{2,4})/
 const FOOTER = /(statement summary|end of statement|generated (on|by)|this is a computer|registered office|closing balance\s*:|page \d+ of \d+|gstin|state account branch)/i
 
@@ -146,6 +147,11 @@ function foldContinuations(table, c, pages) {
       else if (k !== c.date && !MONEY.test(v)) cur[k] = `${cur[k]} ${v}`.trim()
     })
   })
+  // a transaction whose narration column stayed empty takes the leftover text cells as its description
+  for (const row of out.slice(1)) {
+    if (String(row[c.narration] || '').trim()) continue
+    row[c.narration] = row.filter((v, k) => v && k !== c.date && !MONEY.test(v) && !(c.balance === k) && k !== c.ref && !DATE_ONLY.test(v)).join(' ')
+  }
   return out
 }
 

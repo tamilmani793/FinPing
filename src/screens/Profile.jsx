@@ -71,10 +71,12 @@ export default function Profile() {
         showNotification(`Added ${addedDebts} debt(s) and ${addedRepayments} payment(s)`, 'success')
         return
       }
-      const { counts, exportedAt } = inspectBackup(text)
+      const { counts, exportedAt, summary } = inspectBackup(text)
       const n = k => counts[k] || 0
       const msg = `Restore backup from ${exportedAt ? format(new Date(exportedAt), 'd MMM yyyy, h:mm a') : 'unknown date'}?\n\n` +
-        `${n('transactions')} transactions, ${n('creditCards')} cards, ${n('debts')} debts, ${n('investments')} investments.\n\n` +
+        `${n('transactions')} transactions, ${n('creditCards')} cards, ${n('debts')} debts, ${n('investments')} investments.\n` +
+        (summary.dropdowns.length ? `Dropdown options you edited: ${summary.dropdowns.map(d => `${d.title} (${d.count})`).join(', ')}${summary.renamedCategories ? `; ${summary.renamedCategories} category rename${summary.renamedCategories === 1 ? '' : 's'}` : ''}.\n` : 'Dropdown options: the built-in lists.\n') +
+        `Profile: ${summary.name || 'no name'}, ${summary.hasPhoto ? 'with picture' : 'no picture'}${summary.palette ? `, ${summary.palette} theme` : ''}${summary.mode ? `, ${summary.mode} mode` : ''}.\n\n` +
         'This REPLACES everything currently in the app.'
       if (!window.confirm(msg)) return
       setBusy(true)
@@ -167,7 +169,7 @@ export default function Profile() {
         <div className="card" style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 14, fontWeight: 700 }}>Backup &amp; restore</div>
           <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 10px' }}>
-            Your data lives only on this phone, so uninstalling the app erases it. Save a backup file (to Drive, Files or send it to yourself) and import it again after reinstalling.
+            Your data lives only on this phone, so uninstalling the app erases it. Save a backup file (to Drive, Files or send it to yourself) and import it again after reinstalling. It includes your transactions, cards, loans, policies and investments, your name and picture, theme, and every dropdown option you changed.
           </div>
           <div style={{ fontSize: 12, marginBottom: 10 }}>Last backup: <b>{last ? format(last, 'd MMM yyyy, h:mm a') : 'never'}</b></div>
           <div style={{ display: 'flex', gap: 8 }}>

@@ -6,6 +6,7 @@ import { TopBar, Card, SectionHdr, Badge, ProgressBar, Divider, LabelCaps, MonoL
 import { IndianRupee, TrendingUp, StickyNote } from 'lucide-react'
 import { Field, TextField, Picker } from '../components/Fields'
 import { useStore } from '../store'
+import { useBackHandler } from '../lib/backNav'
 import { parseSMS } from '../lib/smsParser'
 
 const TYPE_ICONS = { MutualFund: '📈', Stock: '📊', PPF: '🏛', NPS: '🏦', Gold: '🪙', FD: '🔐', Other: '💰' }
@@ -15,6 +16,7 @@ const FILTERS = ['#ALL', '#MUTUALFUNDS', '#STOCKS', '#GOLD', '#RETIREMENT']
 export default function Wealth() {
   const [activeFilter, setActiveFilter] = useState(0)
   const [addOpen, setAddOpen] = useState(false)
+  useBackHandler(addOpen, () => setAddOpen(false))
   const [smsOpen, setSmsOpen] = useState(false)
   const [smsText, setSmsText] = useState('')
   const [parsed, setParsed] = useState(null)

@@ -4,6 +4,7 @@ import { relinkTransactions } from './lib/relink'
 import { removeDuplicateTransactions } from './lib/dedupeCleanup'
 import { postDueEmis } from './lib/emiEngine'
 import { useStore } from './store'
+import { initBackNav, exitApp } from './lib/backNav'
 import BottomNav from './components/BottomNav'
 import { Notification } from './components/UI'
 import { useSmsSync } from './components/SmsSync'
@@ -22,6 +23,8 @@ const FAB_TABS = ['home', 'history']
 export default function App() {
   const { activeTab, notification, requestCompose, showNotification } = useStore()
   const sms = useSmsSync()
+  const { exitPrompt, setExitPrompt } = useStore()
+  useEffect(() => initBackNav(), [])
   // The header pill and the Home permission card read the sync state from the store.
   useEffect(() => { useStore.setState({ smsSync: { state: sms.state, enable: sms.enable } }) }, [sms.state])
 
@@ -67,6 +70,18 @@ export default function App() {
         </div>
       )}
       <BottomNav />
+      {exitPrompt && (
+        <div className="overlay" style={{ zIndex: 80, alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setExitPrompt(false)}>
+          <div className="card" style={{ width: '100%', maxWidth: 340, padding: 22, borderRadius: 26 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>Leave FinPing?</div>
+            <div style={{ fontSize: 13, color: 'var(--txt2)', margin: '6px 0 18px' }}>Your data stays safe on this phone.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn-ghost" style={{ flex: 1, height: 48, fontSize: 14 }} onClick={() => setExitPrompt(false)}>Stay</button>
+              <button className="btn-primary" style={{ flex: 1, height: 48 }} onClick={exitApp}>Exit</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

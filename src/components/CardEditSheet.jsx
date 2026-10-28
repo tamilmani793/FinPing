@@ -8,7 +8,7 @@ import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import { BtnPrimary } from './UI'
 import { Field, FormHeading, Segmented, TextField, Picker } from './Fields'
 import { relinkTransactions } from '../lib/relink'
-import { CARD_TYPES, excludedFor, variantsFor } from '../lib/cardCatalog'
+import { CARD_TYPES, excludedFor, variantsFor, cardTitle } from '../lib/cardCatalog'
 import { useOptions, useOptionNames, isCustomised } from '../lib/options'
 
 const dateStr = d => (d ? format(new Date(d), 'yyyy-MM-dd') : '')
@@ -105,7 +105,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
     ...cardNames.map(c => ({ value: keyOf(c), label: c.name, sub: c.partner || undefined, group: c.bank })),
     { value: '__manual', label: 'Not in the list — type it myself', group: 'Other' },
   ]
-  const accountOptions = accounts.map(a => ({ value: String(a.id), label: a.name + (a.cardLast4 && !a.name.includes('••') ? ` ••${a.cardLast4}` : ''), sub: a.accountBalance != null ? `₹${Number(a.accountBalance).toLocaleString('en-IN')}` : undefined }))
+  const accountOptions = accounts.map(a => ({ value: String(a.id), label: cardTitle(a), sub: a.accountBalance != null ? `₹${Number(a.accountBalance).toLocaleString('en-IN')}` : undefined }))
 
   return (
     <div className="overlay" onClick={() => close()}>
@@ -142,7 +142,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
           ) : (
             <div className="form-grid">
               <Field label="Bank"><Picker value={form.bank} options={banks} onChange={v => upd({ bank: v })} allowCustom icon={<Landmark size={I} />} title="Bank" placeholder="HDFC Bank" /></Field>
-              <Field label="Account name"><TextField value={form.name} onChange={set('name')} icon={<CreditCard size={I} />} placeholder="e.g. HDFC Savings" /></Field>
+              <Field label="Account name"><TextField value={form.name} onChange={set('name')} icon={<CreditCard size={I} />} placeholder="e.g. Savings account (the bank is added in front)" /></Field>
             </div>
           )}
 
@@ -184,7 +184,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
                   {others.map(c => (
                     <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13.5 }}>
                       <input type="checkbox" checked={shared.has(c.id)} onChange={() => toggle(c.id)} style={{ width: 18, height: 18, accentColor: 'var(--gold)' }} />
-                      {c.name}{c.cardLast4 ? ` ••${c.cardLast4}` : ''}
+                      {cardTitle(c)}
                     </label>
                   ))}
                 </div>

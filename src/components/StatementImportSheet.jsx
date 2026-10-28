@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { format } from 'date-fns'
 import { useStore } from '../store'
 import { BtnPrimary, formatINR } from './UI'
+import { cardTitle } from '../lib/cardCatalog'
 import { readStatement } from '../lib/statement'
 import { planStatement, applyStatement } from '../lib/statementImport'
 
@@ -52,7 +53,7 @@ export default function StatementImportSheet({ account, onClose }) {
       <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28, maxHeight: '88vh', overflowY: 'auto' }}>
         <div className="sheet-handle" />
         <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 4 }}>Import bank statement</div>
-        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>{account.name} · your {account.cardType === 'account' ? 'statement' : 'card statement (spends are debits; payments and refunds are credits)'} is treated as the truth. The file is read on this phone and never uploaded.</div>
+        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>{cardTitle(account, { last4: false })}{account.cardLast4 ? ` ••${account.cardLast4}` : ''} · your {account.cardType === 'account' ? 'statement' : 'card statement (spends are debits; payments and refunds are credits)'} is treated as the truth. The file is read on this phone and never uploaded.</div>
 
         {!plan && needPw && (
           <>
@@ -81,6 +82,10 @@ export default function StatementImportSheet({ account, onClose }) {
           <>
             <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: '10px 12px', fontSize: 12, lineHeight: 1.7, marginBottom: 10 }}>
               <div style={{ fontWeight: 700, marginBottom: 2 }}>{fmtD(plan.from)} → {fmtD(plan.to)}</div>
+              <div style={{ color: 'var(--txt2)', fontSize: 11.5, marginBottom: 6 }}>
+                Read <b style={{ color: 'var(--txt)' }}>{plan.total}</b> lines{plan.unnamed > 0 ? `, ${plan.unnamed} without a readable name` : ', every one with a name'}. First lines:
+                {plan.sample.map((r, i) => <div key={i} style={{ display: 'flex', gap: 8, marginTop: 2 }}><span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--txt)' }}>{fmtD(r.date)} · {r.merchant}</span><b style={{ color: r.type === 'debit' ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{r.type === 'debit' ? '−' : '+'}{formatINR(r.amount)}</b></div>)}
+              </div>
               <div><b style={{ color: 'var(--mint-dim)' }}>{plan.matched.length}</b> saved entries matched · corrected with the bank's details</div>
               <div><b style={{ color: 'var(--gold-dim)' }}>{plan.toAdd.length}</b> on the statement but missing · will be added</div>
               {plan.skipped?.length > 0 && <div><b style={{ color: 'var(--txt)' }}>{plan.skipped.length}</b> line{plan.skipped.length === 1 ? '' : 's'} you deleted earlier stay deleted</div>}

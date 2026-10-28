@@ -7,7 +7,7 @@ import { useStore } from '../store'
 import { formatINR, getMerchantIcon } from './UI'
 import TxnEditSheet from './TxnEditSheet'
 import { isCardPayment, rewardStatus } from '../lib/cardStats'
-import { typeLabel } from '../lib/cardCatalog'
+import { typeLabel, cardTitle } from '../lib/cardCatalog'
 import { entityIdFor } from '../lib/relink'
 
 function Row({ k, v, color }) {
@@ -41,7 +41,7 @@ export default function TxnDetailSheet({ txn, onClose }) {
   const credit = t.type === 'credit'
   const kind = payment ? 'Card payment' : credit ? 'Income / money in' : 'Expense / money out'
   const paidVia = card
-    ? `${card.name}${card.cardLast4 && !card.name.includes('••') ? ` ••${card.cardLast4}` : ''} · ${typeLabel(card)}`
+    ? `${cardTitle(card)} · ${typeLabel(card)}`
     : t.accountLast4 ? `${t.bank || 'Bank'} ••${t.accountLast4} (not linked to an account yet)` : null
   const reward = card && (!card.cardType || card.cardType === 'credit') && !payment && t.type === 'debit' ? rewardStatus(card, t) : null
 

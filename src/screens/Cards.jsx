@@ -1,25 +1,28 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format, startOfMonth } from 'date-fns'
-import { ChevronLeft, ChevronRight, CreditCard, FileText, Gift, Pencil } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CreditCard, FileText, Gift, Landmark, Pencil } from 'lucide-react'
 import StatementImportSheet from '../components/StatementImportSheet'
 import { db } from '../db/schema'
 import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../components/UI'
 import { useStore } from '../store'
+import { useBackHandler } from '../lib/backNav'
 import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary } from '../lib/cards'
 import { cardStats, rewardStatus, isCardPayment, feeWaiverSpend } from '../lib/cardStats'
 import { ordinal } from '../lib/cycle'
-import { typeLabel, networkLabel, excludedFor } from '../lib/cardCatalog'
+import { typeLabel, networkLabel, excludedFor, cardTitle } from '../lib/cardCatalog'
 import CardEditSheet from '../components/CardEditSheet'
 import TxnDetailSheet from '../components/TxnDetailSheet'
 import { entityIdFor } from '../lib/relink'
+import Sortable from '../components/Sortable'
+import { bySortOrder, saveOrder } from '../lib/sortOrder'
 
 const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 const fmtS = d => (d ? format(new Date(d), 'd MMM') : '—')
 const isCredit = c => !c.cardType || c.cardType === 'credit'
 // what the card costs each year, shown as a small tag
 const feeTag = c => (c.isLTF === false && c.totalAnnualFee > 0 ? `₹${Math.round(c.totalAnnualFee).toLocaleString('en-IN')} / yr` : 'Lifetime free')
-const cardLabel = c => `${c.name}${c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''}`
+const cardLabel = c => cardTitle(c)
 
 // A bank account's activity also includes what the debit cards linked to it spent.
 const txnsFor = (card, cards, byCard) => (card.cardType === 'account'
@@ -67,9 +70,8 @@ function CardTile({ card, txns, onOpen }) {
         <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(145deg,#2D2A28,#1A1918)', color: '#E8D29A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={18} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardLabel(card)}</div>
-          <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[card.bank, networkLabel(card), card.partner].filter(Boolean).join(' · ')}</div>
+          <div style={{ fontSize: 11, color: 'var(--txt2)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span>{[card.bank, networkLabel(card), card.partner].filter(Boolean).join(' · ')}</span>{credit && <span className={`badge ${card.isLTF === false && card.totalAnnualFee > 0 ? 'badge-amber' : 'badge-mint'}`}>{feeTag(card)}</span>}</div>
         </div>
-        {credit && <span className={`badge ${card.isLTF === false && card.totalAnnualFee > 0 ? 'badge-amber' : 'badge-mint'}`}>{feeTag(card)}</span>}
         <ChevronRight size={18} color="var(--txt3)" />
       </div>
 
@@ -113,7 +115,12 @@ function CardTile({ card, txns, onOpen }) {
   )
 }
 
+const reorderPill = (on, toggle) => (
+  <button onClick={toggle} style={{ height: 28, padding: '0 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', border: '1px solid var(--gold-border)', background: on ? 'var(--gold-grad)' : 'var(--gold-bg)', color: on ? 'var(--on-accent)' : 'var(--gold-dim)' }}>{on ? 'Done' : '⇅ Reorder'}</button>
+)
+
 function Portfolio({ cards, byCard, onOpen, onAdd }) {
+  const [editing, setEditing] = useState(null) // title of the group being rearranged
   const credit = cards.filter(isCredit)
   const debit = cards.filter(c => c.cardType === 'debit')
   const accounts = cards.filter(c => c.cardType === 'account')
@@ -121,7 +128,7 @@ function Portfolio({ cards, byCard, onOpen, onAdd }) {
   const stats = credit.map(c => cardStats(c, byCard[c.id] || []))
   const totalOut = stats.reduce((s, x) => s + x.outstanding, 0)
   const totalDue = stats.reduce((s, x) => s + x.totalDue, 0)
-  const groups = [['Credit cards', credit], ['Debit cards', debit], ['Bank accounts', accounts], ['Type not set', unknown]]
+  const groups = [['Credit cards', bySortOrder(credit)], ['Debit cards', bySortOrder(debit)], ['Bank accounts', bySortOrder(accounts)], ['Type not set', bySortOrder(unknown)]]
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
@@ -147,8 +154,23 @@ function Portfolio({ cards, byCard, onOpen, onAdd }) {
 
         {groups.map(([title, list]) => list.length > 0 && (
           <div key={title}>
-            <div className="label-caps" style={{ margin: '4px 2px 8px' }}>{title} · {list.length}</div>
-            {list.map(c => <CardTile key={c.id} card={c} txns={txnsFor(c, cards, byCard)} onOpen={() => onOpen(c.id)} />)}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 2px 8px' }}>
+              <div className="label-caps">{title} · {list.length}</div>
+              {list.length > 1 && reorderPill(editing === title, () => setEditing(editing === title ? null : title))}
+            </div>
+            {editing === title && list.length > 1 ? (
+              <Sortable items={list} getId={c => c.id} enabled onReorder={items => saveOrder('creditCards', items)}
+                renderItem={(c, { handle, dragging }) => (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg1)', border: '1px solid ' + (dragging ? 'var(--gold)' : 'var(--border)'), borderRadius: 16, padding: '10px 14px', marginBottom: 10 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(145deg,#2D2A28,#1A1918)', color: '#E8D29A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{c.cardType === 'account' ? <Landmark size={18} /> : <CreditCard size={18} />}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardLabel(c)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[c.bank, typeLabel(c)].filter(Boolean).join(' · ')}</div>
+                    </div>
+                    {handle}
+                  </div>
+                )} />
+            ) : list.map(c => <CardTile key={c.id} card={c} txns={txnsFor(c, cards, byCard)} onOpen={() => onOpen(c.id)} />)}
           </div>
         ))}
 
@@ -261,7 +283,7 @@ function Detail({ card, cards, byCard, onBack }) {
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
       <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div onClick={onBack} style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={19} /></div>
-        <div style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</div>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardTitle(card, { last4: false })}</div>
         {(card.cardType === 'account' || credit) && <button className="btn-secondary" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setStmtOpen(true)}><FileText size={13} /> Statement</button>}
         <button className="btn-secondary" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setEditOpen(true)}><Pencil size={13} /> Edit</button>
       </div>
@@ -280,8 +302,8 @@ function Detail({ card, cards, byCard, onBack }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <div style={{ width: 34, height: 34, borderRadius: 17, background: 'rgba(232,210,154,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8D29A' }}><CreditCard size={18} /></div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{card.name}</div>
-              <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.bank} •• {card.cardLast4}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{cardTitle(card, { last4: false })}</div>
+              <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.cardType === 'account' ? (card.variant || 'Bank account') : card.bank}{card.cardLast4 ? ` •• ${card.cardLast4}` : ''}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#E8D29A' }}>{networkLabel(card) || typeLabel(card)}</div>
@@ -441,6 +463,7 @@ export default function Accounts() {
     if (openCardId != null) { setOpenId(openCardId); clearOpenCard() }
   }, [openCardId])
 
+  useBackHandler(openId != null, () => setOpenId(null)) // before the early return: hooks keep their order
   if (!cards || !allTxns) return <div style={{ padding: 20, color: 'var(--txt2)' }}>Loading...</div>
 
   const visible = cards.filter(c => !c.draft)

@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { IndianRupee, Calendar, Store, Wallet, CreditCard } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
+import { cardTitle } from '../lib/cardCatalog'
 import { useOptions } from '../lib/options'
 import { BtnPrimary } from './UI'
 import { Field, Segmented, TextField, Picker } from './Fields'
@@ -31,12 +32,18 @@ export default function TxnEditSheet({ txn, onClose }) {
     if (!(amount > 0)) { showNotification('Enter a valid amount', 'error'); return }
     const [y, m, d] = f.date.split('-').map(Number)
     const old = new Date(txn.date)
+    const next = { merchant: f.merchant.trim() || 'Unknown', amount, type: f.type, category: f.category, paymentMode: f.paymentMode, notes: f.notes, isExcluded: f.isExcluded }
+    // only what you actually changed counts as "yours" (and so beats the bank statement)
+    const changed = ['merchant', 'amount', 'type', 'category', 'paymentMode', 'notes', 'isExcluded'].filter(k => next[k] !== (txn[k] ?? (k === 'notes' ? '' : txn[k])))
+    if (f.date !== format(new Date(txn.date), 'yyyy-MM-dd')) changed.push('date')
+    if (String(f.cardId) !== String(txn.cardId ?? '')) changed.push('cardId')
+    const editedFields = [...new Set([...(txn.editedFields || []), ...changed])]
     await db.transactions.update(txn.id, {
       merchant: f.merchant.trim() || 'Unknown', amount, type: f.type, category: f.category, paymentMode: f.paymentMode,
       date: new Date(y, m - 1, d, old.getHours(), old.getMinutes()),
       cardId: f.cardId === '' ? null : Number(f.cardId), notes: f.notes, isExcluded: f.isExcluded,
       parsedBy: txn.parsedBy === 'auto' ? 'auto-edited' : txn.parsedBy,
-      userEdited: true, // your changes win over the bank statement and over any SMS
+      userEdited: true, editedFields, // your changes win over the bank statement and over any SMS
     })
     showNotification('Transaction updated', 'success')
     onClose()
@@ -71,7 +78,7 @@ export default function TxnEditSheet({ txn, onClose }) {
             </Field>
           </div>
           <Field label="Card or account">
-            <Picker value={String(f.cardId)} options={cards.map(c => ({ value: String(c.id), label: c.name + (c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : '') }))}
+            <Picker value={String(f.cardId)} options={cards.map(c => ({ value: String(c.id), label: cardTitle(c) }))}
               onChange={v => setF({ ...f, cardId: v })} icon={<CreditCard size={I} />} title="Card or account" placeholder="None (cash / other)" clearLabel="None (bank account / cash)" />
           </Field>
           <Field label="Notes"><TextField value={f.notes} onChange={set('notes')} placeholder="Optional" /></Field>

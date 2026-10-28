@@ -4,15 +4,19 @@ import { addMonths, format } from 'date-fns'
 import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, ProgressBar, Divider, LabelCaps, MonoLg, BtnPrimary, formatINR } from '../components/UI'
 import { useStore } from '../store'
+import { useBackHandler } from '../lib/backNav'
 import PoliciesView from '../components/PoliciesView'
 import { addManualRepayment, recordReceipt, undoRepayment } from '../lib/debtBackup'
 import { dailyInterest, splitPayment, lastRepaymentDate } from '../lib/loanMath'
 import { projectSchedule, defaultMode, nextEmiAmount, accrualUntil, FIXED_TYPES } from '../lib/loanSchedule'
 import { parseEmiSchedule } from '../lib/scheduleImport'
+import { cardTitle } from '../lib/cardCatalog'
 import { postDueEmis } from '../lib/emiEngine'
 import { Landmark, Wallet, Calendar, IndianRupee, Percent, Hash, User, FileText, Clock, Building2 } from 'lucide-react'
 import { Field, FormHeading, Segmented, TextField, Picker } from '../components/Fields'
-import { useDebtTypes } from '../lib/options'
+import { useDebtTypes, useOptionNames } from '../lib/options'
+import Sortable from '../components/Sortable'
+import { bySortOrder, saveOrder } from '../lib/sortOrder'
 
 const EMPTY_DEBT = {
   name: '', type: 'PersonalLoan', lender: '', loanAccountNo: '', debitAccountId: '',
@@ -39,6 +43,9 @@ function splitOf(d, f) {
   }
   return { p: amt > 0 ? p : '', i: amt > 0 ? i : '', error }
 }
+const reorderPill = (on, toggle) => (
+  <button onClick={toggle} style={{ height: 28, padding: '0 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', border: '1px solid var(--gold-border)', background: on ? 'var(--gold-grad)' : 'var(--gold-bg)', color: on ? 'var(--on-accent)' : 'var(--gold-dim)' }}>{on ? 'Done' : '⇅ Reorder'}</button>
+)
 const EMPTY_REPAY = { amount: '', principal: '', interest: '', date: today(), notes: '', accountId: '' }
 const EMPTY_RECEIPT = { amount: '', date: today(), notes: '', accountId: '' }
 
@@ -71,6 +78,7 @@ function ScheduleTable({ rows, footer }) {
 export default function Debt() {
   const [addOpen, setAddOpen] = useState(false)
   const [expandedId, setExpandedId] = useState(null)
+  const [reorderDebts, setReorderDebts] = useState(false)
   const [tab, setTab] = useState({})            // per loan: 'ledger' | 'upcoming'
   const [showAll, setShowAll] = useState({})    // per loan: show the whole upcoming schedule
   const [repayFor, setRepayFor] = useState(null)
@@ -84,16 +92,18 @@ export default function Debt() {
   const [paste, setPaste] = useState({ open: false, text: '', dueDay: '5' })
   const { showNotification, debtSegment, setDebtSegment } = useStore()
   const accounts = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => c.cardType === 'account' && !c.draft)
-  const acctLabel = a => `${a.name}${a.cardLast4 && !a.name.includes('••') ? ` ••${a.cardLast4}` : ''}`
+  const acctLabel = a => cardTitle(a)
   const { list: debtTypes, icons: DEBT_ICONS, labels: DEBT_LABELS } = useDebtTypes()
   const typeOptions = debtTypes.map(t => ({ value: t.id, label: t.label, icon: t.icon }))
   const accountOptions = accounts.map(a => ({ value: String(a.id), label: acctLabel(a), sub: a.accountBalance != null ? formatINR(a.accountBalance) : undefined }))
 
   const debts = useLiveQuery(() => db.debts.toArray())
+  const lenderNames = useOptionNames('lenders')
+  const lenderOptions = [...new Set([...(form.lender ? [form.lender] : []), ...lenderNames, ...((debts || []).map(d => d.lender).filter(Boolean))])]
   const allRepayments = useLiveQuery(() => db.debtRepayments.toArray()) || []
   const lastPaid = debtId => lastRepaymentDate(allRepayments.filter(r => r.debtId === debtId))
 
-  const active = (debts || []).filter(d => d.status === 'active')
+  const active = bySortOrder((debts || []).filter(d => d.status === 'active'))
   const closed = (debts || []).filter(d => d.status === 'closed')
   const totalOutstanding = active.reduce((s, d) => s + d.currentOutstanding, 0)
   const totalPrincipal = active.reduce((s, d) => s + (d.principal || 0), 0)
@@ -101,6 +111,7 @@ export default function Debt() {
   const totalEMI = active.filter(d => d.emiAmount > 0).reduce((s, d) => s + nextEmiAmount(d), 0)
   const nextUp = active.filter(d => d.emiAmount > 0 && d.nextEmiDate).sort((a, b) => new Date(a.nextEmiDate) - new Date(b.nextEmiDate))[0]
 
+  useBackHandler(addOpen, () => closeForm())
   const closeForm = () => { setAddOpen(false); setEditId(null); setForm(EMPTY_DEBT); setSched(null); setPaste({ open: false, text: '', dueDay: '5' }) }
 
   // Reads the pasted bank schedule and fills in everything the bank already told us
@@ -341,7 +352,7 @@ export default function Debt() {
                   <Picker value={form.type} options={typeOptions} onChange={setType} title="Type of debt" placeholder="Choose a type" />
                 </Field>
                 <Field label="Name" span><TextField icon={<FileText size={17} />} placeholder="e.g. HDFC Home Loan, Phone EMI" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
-                <Field label="Lender"><TextField icon={<Building2 size={17} />} value={form.lender} onChange={e => setForm({ ...form, lender: e.target.value })} /></Field>
+                <Field label="Lender"><Picker value={form.lender} options={lenderOptions} onChange={v => setForm({ ...form, lender: v })} allowCustom icon={<Building2 size={17} />} title="Lender" placeholder="Choose or type" clearLabel="Not set" /></Field>
                 <Field label="Loan account no."><TextField icon={<Hash size={17} />} value={form.loanAccountNo} onChange={e => setForm({ ...form, loanAccountNo: e.target.value })} /></Field>
                 <Field label="EMI debited from" span>
                   <Picker value={form.debitAccountId} options={accountOptions} onChange={v => setForm({ ...form, debitAccountId: v })} icon={<Landmark size={17} />} title="EMI debited from" placeholder="Not set" clearLabel="Not set" />
@@ -398,9 +409,21 @@ export default function Debt() {
           )}
 
           {/* Active liabilities */}
-          <SectionHdr title="Active liabilities" />
+          <SectionHdr title="Active liabilities" right={active.length > 1 ? reorderPill(reorderDebts, () => setReorderDebts(v => !v)) : null} />
 
-          {active.map(d => {
+          {reorderDebts && active.length > 1 ? (
+            <Sortable items={active} getId={d => d.id} enabled onReorder={items => saveOrder('debts', items)}
+              renderItem={(d, { handle, dragging }) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg1)', border: '1px solid ' + (dragging ? 'var(--gold)' : 'var(--border)'), borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--indigo-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{DEBT_ICONS[d.type] || '💳'}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[d.lender, formatINR(d.currentOutstanding)].filter(Boolean).join(' · ')}</div>
+                  </div>
+                  {handle}
+                </div>
+              )} />
+          ) : active.map(d => {
             // Principal paid = what has come off the original principal, however it got there.
             const principalPaid = Math.max(0, (d.principal || 0) - (d.currentOutstanding || 0))
             const paidPct = d.principal > 0 ? Math.min(100, Math.round(principalPaid / d.principal * 100)) : 0

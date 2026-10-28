@@ -9,6 +9,8 @@ import TxnDetailSheet from '../components/TxnDetailSheet'
 import { applyTxnToCard } from '../lib/ingestSMS'
 import { useOptions, categoryIcon } from '../lib/options'
 import { useStore } from '../store'
+import { useBackHandler } from '../lib/backNav'
+import { cardTitle } from '../lib/cardCatalog'
 
 const FILTERS = ['All', 'Food', 'Shopping', 'Utilities', 'Travel', 'Fuel', 'Excluded']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -19,6 +21,7 @@ export default function Expenses() {
   const [activeFilter, setActiveFilter] = useState(0)
   const [expandedCats, setExpandedCats] = useState(new Set(['Food Delivery']))
   const [showAddForm, setShowAddForm] = useState(false)
+  useBackHandler(showAddForm, () => setShowAddForm(false))
   const [editTxn, setEditTxn] = useState(null)
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth())
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
@@ -86,7 +89,7 @@ export default function Expenses() {
   }
 
   const cardOptions = accountList.map(c => ({
-    value: String(c.id), label: c.name + (c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''),
+    value: String(c.id), label: cardTitle(c),
     sub: c.cardType === 'account' ? 'bank account' : c.cardType === 'debit' ? 'debit card' : 'credit card',
   }))
 

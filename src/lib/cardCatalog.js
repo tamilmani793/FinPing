@@ -70,3 +70,25 @@ export const EXCLUSION_CATEGORIES = [
 ]
 export const DEFAULT_EXCLUSIONS = ['Fuel', 'Rent', 'Wallet Load', 'Government & Tax', 'Insurance', 'Jewellery & Gold']
 export const excludedFor = card => (Array.isArray(card?.excludedCategories) ? card.excludedCategories : DEFAULT_EXCLUSIONS)
+
+// ── how a card or account is named everywhere: "HDFC Savings account ••2919", "HDFC Regalia Gold ••4321" ──
+const BRANDS = {
+  'HDFC Bank': 'HDFC', 'ICICI Bank': 'ICICI', 'State Bank of India': 'SBI', 'Axis Bank': 'Axis', 'Kotak Bank': 'Kotak', 'Kotak Mahindra Bank': 'Kotak',
+  'IDFC First Bank': 'IDFC First', 'Yes Bank': 'Yes Bank', 'IndusInd Bank': 'IndusInd', 'Bank of Baroda': 'BoB', 'Punjab National Bank': 'PNB', PNB: 'PNB',
+  'Federal Bank': 'Federal', 'Standard Chartered': 'Standard Chartered', 'RBL Bank': 'RBL', 'AU Small Finance Bank': 'AU', 'American Express': 'Amex',
+}
+// "HDFC Bank" -> "HDFC", "State Bank of India" -> "SBI", anything else: the name without a trailing "Bank"
+export const bankBrand = bank => {
+  const b = String(bank || '').trim()
+  return BRANDS[b] || b.replace(/\s+bank$/i, '').trim()
+}
+// The name with the bank in front when it is missing, and the last four digits at the end.
+export function cardTitle(card, { last4 = true } = {}) {
+  if (!card) return ''
+  const base = String(card.name || '').replace(/\s*••\s*\d{2,4}\s*$/, '').trim()
+  const brand = bankBrand(card.bank)
+  const low = base.toLowerCase()
+  const hasBank = brand && (low.includes(brand.toLowerCase()) || (card.bank && low.includes(String(card.bank).toLowerCase())))
+  const title = !brand ? base : !base ? `${brand} ${card.cardType === 'account' ? 'account' : card.cardType === 'debit' ? 'debit card' : 'credit card'}` : hasBank ? base : `${brand} ${base}`
+  return last4 && card.cardLast4 ? `${title} ••${card.cardLast4}` : title
+}

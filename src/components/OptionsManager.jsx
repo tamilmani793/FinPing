@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Search, ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Lock, RotateCcw, X, Check } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
+import { useBackHandler } from '../lib/backNav'
 import { Field, TextField, Picker } from './Fields'
 import {
   OPTION_LISTS, LOCKED_CATEGORIES, useOptions, useOptionNames, setList, resetList, isCustomised,
@@ -163,6 +164,7 @@ function PageHeader({ title, icon, onBack }) {
 export default function OptionsPage() {
   const { setActiveTab } = useStore()
   const [open, setOpen] = useState(null)
+  useBackHandler(!!open, () => setOpen(null))
   if (open) return <ListPage listKey={open} onClose={() => setOpen(null)} />
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 110 }}>

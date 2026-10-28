@@ -3,11 +3,17 @@ import { create } from 'zustand'
 export const useStore = create((set, get) => ({
   // Navigation
   activeTab: 'home',
-  setActiveTab: (tab) => set({ activeTab: tab }),
+  // the tabs you came from, so the back button returns to them
+  tabStack: [],
+  setActiveTab: (tab) => set(s => (tab === s.activeTab ? {} : { activeTab: tab, tabStack: [...s.tabStack, s.activeTab].slice(-20) })),
+  goBackTab: () => set(s => (s.tabStack.length ? { activeTab: s.tabStack[s.tabStack.length - 1], tabStack: s.tabStack.slice(0, -1) } : {})),
+  // "Leave the app?" question shown by the back button on Home
+  exitPrompt: false,
+  setExitPrompt: (v) => set({ exitPrompt: v }),
 
   // Floating "+" button: bumps a counter the History screen listens to
   composeRequest: 0,
-  requestCompose: () => set(s => ({ activeTab: 'history', composeRequest: s.composeRequest + 1 })),
+  requestCompose: () => set(s => ({ activeTab: 'history', tabStack: s.activeTab === 'history' ? s.tabStack : [...s.tabStack, s.activeTab].slice(-20), composeRequest: s.composeRequest + 1 })),
 
   // SMS Sheet
   smsSheetOpen: false,
@@ -23,7 +29,7 @@ export const useStore = create((set, get) => ({
 
   // Accounts screen: open a particular card / account (from Home, a transaction detail...)
   openCardId: null,
-  openCard: (id) => set({ activeTab: 'cards', openCardId: id }),
+  openCard: (id) => set(s => ({ activeTab: 'cards', openCardId: id, tabStack: s.activeTab === 'cards' ? s.tabStack : [...s.tabStack, s.activeTab].slice(-20) })),
   clearOpenCard: () => set({ openCardId: null }),
 
   // Cards

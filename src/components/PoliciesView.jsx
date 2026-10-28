@@ -4,6 +4,7 @@ import { differenceInCalendarDays, format } from 'date-fns'
 import { ShieldCheck, IndianRupee, Calendar, Building2, FileText, Hash, StickyNote, Repeat, BadgeCheck } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
+import { useBackHandler } from '../lib/backNav'
 import { BtnPrimary, formatINR } from './UI'
 import { Field, Segmented, TextField, Picker } from './Fields'
 import { useOptionNames } from '../lib/options'
@@ -32,6 +33,7 @@ export default function PoliciesView() {
   const policyTypes = useOptionNames('policyTypes')
   const policies = useLiveQuery(() => db.policies.toArray()) || []
   const [open, setOpen] = useState(false)
+  useBackHandler(open, () => setOpen(false))
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY)
   const set = k => e => setForm({ ...form, [k]: e.target.value })
