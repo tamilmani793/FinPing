@@ -74,13 +74,39 @@ export function linesToTable(lines) {
   const numericCols = head.cells.map((c, i) => i).filter(i => [head.cols.debit, head.cols.credit, head.cols.amount, head.cols.balance].includes(i))
   const table = [headerText]
   const start = head.index + 1
-  for (const cells of lines.slice(start)) {
+  const body = lines.slice(start)
+
+  // Headings are often centred over their column (a wide "Narration" column whose text starts far left of its
+  // heading), so where the text columns really start is read from the rows themselves: the left edges that
+  // many cells share. With one such edge per text heading they are matched left to right.
+  const textCols = head.cells.map((c, i) => i).filter(i => !numericCols.includes(i))
+  const edges = []
+  // only lines inside the transaction rows count (not page titles, address blocks or footers)
+  const isDateLine = cells => cells.some(c => DATE_AT_START.test(c.text))
+  const inRows = body.filter((cells, i) => {
+    const same = body.filter(l => l.page === cells.page)
+    return same.indexOf(cells) >= same.findIndex(isDateLine) && same.indexOf(cells) <= same.length - 1 - [...same].reverse().findIndex(isDateLine)
+  })
+  for (const cells of inRows) for (const c of cells) {
+    if (MONEY.test(c.text)) continue
+    const e = edges.find(e => Math.abs(e.x - c.x0) <= 2.5)
+    e ? (e.n++, e.x = (e.x * (e.n - 1) + c.x0) / e.n) : edges.push({ x: c.x0, n: 1 })
+  }
+  const dateRows = body.filter(cells => cells.some(c => DATE_AT_START.test(c.text))).length
+  const anchors = edges.filter(e => e.n >= Math.max(3, dateRows * 0.1)).sort((a, b) => a.x - b.x).map(e => e.x)
+  const useAnchors = anchors.length === textCols.length
+
+  for (const cells of body) {
     const row = headerText.map(() => '')
     for (const c of cells) {
       let col
       if (MONEY.test(c.text) && numericCols.length) {
         // amounts are right-aligned under their heading: pick the numeric column whose right edge is nearest
         col = numericCols.reduce((best, i) => (Math.abs(head.cells[i].x1 - c.x1) < Math.abs(head.cells[best].x1 - c.x1) ? i : best), numericCols[0])
+      } else if (useAnchors) {
+        let k = 0
+        for (let i = 0; i < anchors.length; i++) if (c.x0 >= anchors[i] - 3) k = i
+        col = textCols[k]
       } else {
         const lefts = head.cells.map(h => h.x0 - 3)
         col = 0

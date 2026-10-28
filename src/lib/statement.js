@@ -170,28 +170,44 @@ export const refsOf = (...texts) => {
 //   ATW-512345XXXXXX1234-ATM ONE,  POS 512345XXXXXX1234 SWIGGY,  ACH D- LIC OF INDIA-123456
 const BANKY = /^(sbin|hdfc|icic|utib|kkbk|yesb|punb|barb|canb|ubin|idib|indb|bkid|fdrl|ratn|upi|neft|rtgs|imps|ach|nach|ecs|p2a|p2m|p2p|dr|cr|to|by|from|transfer|trf|xxxx?|bank|ltd|pvt)$/i
 const isRef = x => /^\d{6,}$/.test(x) || /^[A-Z]{4}0[A-Z0-9]{6}$/i.test(x) || /^[A-Z]{3,5}\d{9,}$/i.test(x) || /^x{2,}\d{2,}$/i.test(x) || /^\d{4,}x+\d*$/i.test(x)
-const KEEP_UP = /\b(Llp|Lic|Hdfc|Sbi|Icici|Upi|Atm|Emi|Irctc|Bsnl|Nse|Bse|Gst|Epfo|Nps|Sip)\b/g
+const KEEP_UP = /\b(Llp|Lic|Hdfc|Sbi|Icici|Upi|Atm|Emi|Irctc|Bsnl|Nse|Bse|Gst|Epfo|Nps|Sip|Cbdc)\b/g
 const nice = t => t.toLowerCase().replace(/(^|[\s.&'(-])([a-z])/g, (_, p, c) => p + c.toUpperCase()).replace(KEEP_UP, w => w.toUpperCase())
+// words that are the payer's remark or the app used, not a name
+const REMARK = /^(sent using|paid via|payment (to|from)|request from|no remark|upi$|repayment|unload|load|payment$)/i
+const POS_NOISE = [/\b\d{4,}[xX*]+\d*\b/g, /\b\d{1,2}\s?[A-Z]{3}\s?\d\s?\d?\b/gi, /\b\d{1,2}:\d{2}(:\d{2})?\b/g, /\b\d{5,}\b/g]
 export function narrationInfo(n) {
   const s = String(n || '').replace(/\s+/g, ' ').trim()
   const up = s.toUpperCase()
-  const segs = s.split(/\s*\/\s*|\s*-\s+|\s+-\s*|-(?=\S)/).map(x => x.trim()).filter(Boolean)
+  // the name is read from the narration without long reference numbers, which a wrapped line can leave in the middle of it
+  const clean = s.replace(/\b[A-Za-z]*\d{6,}[A-Za-z0-9]*\b/g, ' ')
+  const segs = clean.split(/\s*\/\s*|\s*-\s+|\s+-\s*|-(?=\S)/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean)
   const vpa = (s.match(/[\w.+]+@[a-z][a-z.]*/i) || [])[0] || ''
-  // the first segment that reads like a name: letters, not a reference / bank code / VPA
-  const nameSeg = list => list.find(x => /[a-z]{3}/i.test(x) && !x.includes('@') && !isRef(x) && !BANKY.test(x) && !/^(payment|upi|ref|txn)$/i.test(x))
+  // the first segment that reads like a name: letters, not a reference / bank code / VPA / remark
+  const nameSeg = list => list.find(x => /[a-z]{3}/i.test(x) && !x.includes('@') && !isRef(x) && !BANKY.test(x) && !REMARK.test(x))
+  const tail = (list, name) => list.slice(list.indexOf(name) + 1).filter(x => x && !isRef(x) && !x.includes('@') && !BANKY.test(x)).join(' ').trim()
+  const masked = (s.match(/x{4,}(\d{3,4})\b/i) || [])[1]
   let mode = 'Bank', name = '', note = ''
-  if (/^(TO TRANSFER|BY TRANSFER)?\W*UPI/.test(up)) {
+  if (/^DC\s+\d+\s+AUTOPAY/.test(up)) { name = 'Debit Card EMI (AutoPay)'; note = 'Standing instruction' }
+  else if (/^CBDC/.test(up)) { mode = 'Bank'; name = 'Digital Rupee (CBDC)'; note = /unload/i.test(s) ? 'Moved back to the bank' : '' }
+  else if (/^INTEREST (PAID|CREDIT)/.test(up)) { name = 'Savings Interest'; note = s.replace(/^INTEREST\s*/i, '') }
+  else if (/^(TO TRANSFER|BY TRANSFER)?\W*UPI/.test(up)) {
     mode = 'UPI'
     const rest = segs.filter(x => !/^(to transfer|by transfer|transfer|upi)$/i.test(x))
     name = nameSeg(rest) || ''
-    note = rest.slice(rest.indexOf(name) + 1).filter(x => x && !isRef(x) && !x.includes('@') && !BANKY.test(x)).join(' ').trim()
+    // paid to a bare masked account number with no name: say so
+    if (!name || (masked && /^x{4,}\d{3,4}$/i.test(rest[0] || ''))) { name = masked ? `Account ••${masked}` : ''; note = rest.filter(x => REMARK.test(x)).join(' ') }
+    else note = tail(rest, name)
   } else if (/^(NEFT|RTGS|IMPS)/.test(up)) {
     mode = 'NetBanking'
     const rest = segs.filter(x => !/^(neft|rtgs|imps)( cr| dr)?$/i.test(x))
     name = nameSeg(rest) || ''
-    note = rest.slice(rest.indexOf(name) + 1).filter(x => !isRef(x) && !BANKY.test(x)).join(' ').trim()
+    note = tail(rest, name)
   } else if (/^(ATW|ATM|NWD|CASH WDL|PCI\/ATM|EAW)/.test(up)) { mode = 'Cash'; name = 'ATM Withdrawal'; note = nameSeg(segs.slice(1)) || '' }
-  else if (/^(POS|ECOM|PUR)\b/.test(up)) { mode = 'Card'; name = s.replace(/^(POS|ECOM|PUR)\s*/i, '').replace(/\b\d{4,}[xX*\d]*\b/g, '').replace(/^[-\s]+/, '') }
+  else if (/^(CRV\s+)?(POS|ECOM|PUR)\b/.test(up)) {
+    mode = 'Card'
+    name = POS_NOISE.reduce((t, re) => t.replace(re, ' '), s.replace(/^(CRV\s+)?(POS|ECOM|PUR)\s*/i, '')).replace(/\s+/g, ' ').replace(/^[-\s]+|[-\s]+$/g, '')
+    if (/^CRV/.test(up)) note = 'Refund'
+  }
   else if (/^(ACH|NACH|ECS|SI )/.test(up)) { mode = 'Bank'; name = nameSeg(segs.slice(1)) || '' }
   else name = nameSeg(segs) || segs[0] || ''
   name = nice(name.replace(/\d{9,}.*$/, '').replace(/@.*$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 40)
