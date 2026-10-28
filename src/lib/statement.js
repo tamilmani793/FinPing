@@ -287,12 +287,15 @@ export function newEntry(row, accountId, account) {
 }
 
 // File or pasted text -> statement rows
-export async function readStatement({ file, text }) {
+export async function readStatement({ file, text, password }) {
   let table
   if (file) {
-    if (/\.xlsx$/i.test(file.name) || file.type.includes('spreadsheetml')) table = await parseXlsx(await file.arrayBuffer())
-    else if (/\.xls$/i.test(file.name)) throw new Error('This is an old Excel (.xls) file. Open it and use Save As → CSV (or .xlsx), then import that.')
-    else if (/\.pdf$/i.test(file.name)) throw new Error('PDF statements are not supported. Download the statement as CSV or Excel instead.')
+    const head = new Uint8Array(await file.slice(0, 8).arrayBuffer())
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf' || String.fromCharCode(...head.slice(0, 4)) === '%PDF'
+    const isOle = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0 // old .xls, or an encrypted .xlsx
+    if (isPdf) table = await (await import('./statementPdf')).parsePdf(await file.arrayBuffer(), password)
+    else if (isOle) throw new Error('This Excel file is old-format or password-protected, which cannot be read here. Open it in Excel, enter the password, use Save As → CSV (or .xlsx without a password), then import that. Or import the bank\'s PDF, which can be opened with its password here.')
+    else if (/\.xlsx$/i.test(file.name) || file.type.includes('spreadsheetml')) table = await parseXlsx(await file.arrayBuffer())
     else table = parseDelimited(await file.text())
   } else table = parseDelimited(text)
   return statementRows(table)

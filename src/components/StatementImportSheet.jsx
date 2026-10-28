@@ -17,14 +17,22 @@ export default function StatementImportSheet({ account, onClose }) {
   const [drop, setDrop] = useState({})
   const [setBal, setSetBal] = useState(true)
 
-  const read = async file => {
+  const [file, setFile] = useState(null)       // a chosen file waiting for its password
+  const [needPw, setNeedPw] = useState(false)
+  const [pw, setPw] = useState('')
+
+  const read = async (f = file, password = pw) => {
     setBusy(true)
     try {
-      const rows = await readStatement({ file, text })
+      const rows = await readStatement({ file: f, text, password })
       const p = await planStatement(account, rows)
       setPlan(p)
       setDrop(Object.fromEntries(p.extras.map(x => [x.txn.id, !x.keep])))
-    } catch (e) { showNotification(e.message || 'Could not read that statement', 'error') }
+      setFile(null); setNeedPw(false); setPw('') // the password is not kept
+    } catch (e) {
+      if (e.needPassword) { setFile(f); setNeedPw(true); setPw(''); showNotification(e.message, e.wrong ? 'error' : undefined) }
+      else showNotification(e.message || 'Could not read that statement', 'error')
+    }
     setBusy(false)
   }
 
@@ -46,11 +54,22 @@ export default function StatementImportSheet({ account, onClose }) {
         <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 4 }}>Import bank statement</div>
         <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>{account.name} · your statement is treated as the truth. The file is read on this phone and never uploaded.</div>
 
-        {!plan && (
+        {!plan && needPw && (
+          <>
+            <div style={{ fontSize: 12, marginBottom: 8 }}>🔒 <b>{file?.name}</b> is password-protected. The password is used only on this device to open the file and is forgotten right after.</div>
+            <input className="input" type="password" autoFocus placeholder="PDF password" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && pw) read() }} style={{ marginBottom: 10 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-secondary" style={{ flex: 1 }} onClick={() => { setNeedPw(false); setFile(null); setPw('') }}>Back</button>
+              <BtnPrimary onClick={() => read()} style={{ flex: 2 }}>{busy ? 'Opening…' : 'Open'}</BtnPrimary>
+            </div>
+          </>
+        )}
+
+        {!plan && !needPw && (
           <>
             <label className="btn-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 42, marginBottom: 10, cursor: 'pointer' }}>
-              Choose CSV or Excel (.xlsx) file
-              <input type="file" accept=".csv,.xlsx,.txt,.tsv,text/csv" style={{ display: 'none' }} disabled={busy} onChange={e => { const f = e.target.files?.[0]; if (f) read(f) }} />
+              Choose PDF, CSV or Excel (.xlsx) file
+              <input type="file" accept=".pdf,.csv,.xlsx,.txt,.tsv,application/pdf,text/csv" style={{ display: 'none' }} disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) read(f, '') }} />
             </label>
             <div style={{ fontSize: 11, color: 'var(--txt2)', textAlign: 'center', margin: '6px 0' }}>or paste the rows (with the header line)</div>
             <textarea className="input" style={{ height: 120, fontSize: 11, marginBottom: 10 }} placeholder="Date,Narration,Withdrawal Amt.,Deposit Amt.,Closing Balance" value={text} onChange={e => setText(e.target.value)} />
