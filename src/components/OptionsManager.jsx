@@ -3,7 +3,7 @@ import { Search, ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Lock, RotateCc
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
-import { Field, TextField, Picker } from './Fields'
+import { Field, TextField, Picker, Segmented } from './Fields'
 import {
   OPTION_LISTS, LOCKED_CATEGORIES, useOptions, useOptionNames, setList, resetList, isCustomised,
   addCategory, renameCategory, removeCategory, debtTypeId, getList,
@@ -12,6 +12,7 @@ import {
 // Profile -> Dropdown options: every list that feeds a dropdown, editable on this phone.
 
 const CARD_LISTS = ['cardNames', 'debitCardNames']
+const POLICY_LIST = 'policyNames'
 const EMOJI = ['🍔', '🛍', '⚡', '🚗', '💊', '⛽', '🏠', '🥦', '✈️', '🎬', '🛡', '🏦', '📈', '📲', '💼', '🎓', '🎁', '🐾', '🧾', '💳']
 
 function ListPage({ listKey, onClose }) {
@@ -19,9 +20,11 @@ function ListPage({ listKey, onClose }) {
   const items = useOptions(listKey)
   const banks = useOptionNames('banks')
   const partners = useOptionNames('partners')
+  const insurers = useOptionNames('insurers')
+  const policyTypes = useOptionNames('policyTypes')
   const { showNotification } = useStore()
   const rich = meta.kind === 'rich'
-  const emptyDraft = { idx: null, name: '', icon: '', bank: '', partner: '' }
+  const emptyDraft = { idx: null, name: '', icon: '', bank: '', partner: '', insurer: '', type: '', cover: '' }
   const [draft, setDraft] = useState(null) // null = closed
   const [q, setQ] = useState('')
 
@@ -32,7 +35,7 @@ function ListPage({ listKey, onClose }) {
 
   const startEdit = (it, idx) => {
     if (locked(it)) return showNotification(`“${it.name}” is used by the app and cannot be changed`, 'error')
-    setDraft({ idx, name: nameOf(it), icon: iconOf(it), bank: it.bank || '', partner: it.partner || '' })
+    setDraft({ idx, name: nameOf(it), icon: iconOf(it), bank: it.bank || '', partner: it.partner || '', insurer: it.insurer || '', type: it.type || '', cover: it.cover || '' })
   }
 
   const save = async () => {
@@ -52,6 +55,11 @@ function ListPage({ listKey, onClose }) {
         if (draft.idx == null) next.push({ id: debtTypeId(name, items), label: name, icon: draft.icon || '📄' })
         else next[draft.idx] = { ...next[draft.idx], label: name, icon: draft.icon || next[draft.idx].icon }
         setList(listKey, next)
+      } else if (listKey === POLICY_LIST) {
+        if (!draft.insurer.trim()) throw new Error('Choose the insurer')
+        if (!draft.type) throw new Error('Choose the policy type')
+        const entry = { name, insurer: draft.insurer.trim(), type: draft.type, ...(draft.type === 'Vehicle insurance' ? { cover: draft.cover || 'Comprehensive' } : {}) }
+        setList(listKey, draft.idx == null ? [...items, entry] : items.map((it, i) => (i === draft.idx ? entry : it)))
       } else if (CARD_LISTS.includes(listKey)) {
         if (!draft.bank.trim()) throw new Error('Choose the bank')
         const entry = { bank: draft.bank.trim(), name, partner: draft.partner || '' }
@@ -101,10 +109,17 @@ function ListPage({ listKey, onClose }) {
             <Field label={CARD_LISTS.includes(listKey) ? 'Card name' : 'Name'}>
               <TextField autoFocus value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') save() }} placeholder={listKey === 'categories' ? 'e.g. Pets' : 'Type a name'} />
             </Field>
+            {listKey === POLICY_LIST && (
+              <>
+                <Field label="Insurer"><Picker value={draft.insurer} options={insurers} onChange={v => setDraft({ ...draft, insurer: v })} allowCustom title="Insurer" placeholder="Choose the insurer" /></Field>
+                <Field label="Policy type"><Picker value={draft.type} options={policyTypes} onChange={v => setDraft({ ...draft, type: v })} title="Policy type" placeholder="Choose the type" /></Field>
+                {draft.type === 'Vehicle insurance' && <Field label="Cover"><Segmented value={draft.cover || 'Comprehensive'} options={['Comprehensive', 'Third party']} onChange={v => setDraft({ ...draft, cover: v })} /></Field>}
+              </>
+            )}
             {CARD_LISTS.includes(listKey) && (
               <Field label="Co-brand partner (optional)"><Picker value={draft.partner} options={partners} onChange={v => setDraft({ ...draft, partner: v })} allowCustom title="Co-brand partner" placeholder="None" clearLabel="None" /></Field>
             )}
-            {rich && !CARD_LISTS.includes(listKey) && (
+            {rich && !CARD_LISTS.includes(listKey) && listKey !== POLICY_LIST && (
               <Field label="Icon">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {EMOJI.map(e => <span key={e} onClick={() => setDraft({ ...draft, icon: e })} style={{ width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, cursor: 'pointer', background: draft.icon === e ? 'var(--gold-bg)' : 'var(--bg2)', border: `1.5px solid ${draft.icon === e ? 'var(--gold)' : 'transparent'}` }}>{e}</span>)}
@@ -131,9 +146,10 @@ function ListPage({ listKey, onClose }) {
         <div className="picker-list">
           {shown.map(({ it, idx }) => (
             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 6px', borderBottom: '1px solid var(--border)' }}>
-              {rich && !CARD_LISTS.includes(listKey) && <span style={{ fontSize: 19, width: 26, textAlign: 'center' }}>{iconOf(it)}</span>}
+              {rich && !CARD_LISTS.includes(listKey) && listKey !== POLICY_LIST && <span style={{ fontSize: 19, width: 26, textAlign: 'center' }}>{iconOf(it)}</span>}
               <div style={{ flex: 1, minWidth: 0 }} onClick={() => startEdit(it, idx)}>
                 <div style={{ fontSize: 14.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nameOf(it)}</div>
+                {listKey === POLICY_LIST && <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>{it.insurer} · {it.type}{it.cover ? ` · ${it.cover}` : ''}</div>}
                 {CARD_LISTS.includes(listKey) && <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>{it.bank}{it.partner ? ` · ${it.partner}` : ''}</div>}
               </div>
               {locked(it)

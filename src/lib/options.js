@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { db } from '../db/schema'
 import { BANKS, NETWORKS, PARTNERS, EXCLUSION_CATEGORIES, variantsFor } from './cardCatalog'
 import { INDIAN_CARDS, catalogEntries } from './indianCards'
-import { POLICY_TYPES, INSURERS } from './policies'
+import { POLICY_TYPES, INSURERS, POLICY_CATALOG } from './policies'
 
 // Every dropdown in the app reads its choices from here. The built-in choices are the starting point; anything
 // you change in Profile -> Dropdown options is kept on this phone (and in your backup) and replaces the built-in list.
@@ -73,6 +73,7 @@ export const OPTION_LISTS = {
   debtTypes: { title: 'Debt types', hint: 'Kinds of loans and EMIs', kind: 'rich', icon: '🏦', defaults: () => DEBT_TYPES },
   categories: { title: 'Transaction categories', hint: 'Renaming a category also renames it on every transaction', kind: 'rich', icon: '🏷', defaults: () => CATEGORIES },
   insurers: { title: 'Insurers', hint: 'Insurance companies offered when you add a policy', kind: 'text', icon: '🛡', defaults: () => [...INSURERS] },
+  policyNames: { title: 'Policy names', hint: 'Known policies: picking one in the form fills in its insurer and type', kind: 'rich', icon: '📋', defaults: () => POLICY_CATALOG },
   policyTypes: { title: 'Policy types', hint: 'Term, health, vehicle…', kind: 'text', icon: '📄', defaults: () => [...POLICY_TYPES] },
 }
 

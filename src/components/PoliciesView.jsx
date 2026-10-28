@@ -7,12 +7,12 @@ import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { BtnPrimary, formatINR } from './UI'
 import { Field, Segmented, TextField, Picker } from './Fields'
-import { useOptionNames } from '../lib/options'
-import { FREQUENCIES, freqLabel, monthlyEquivalent, isLive, advanceDue, dueState } from '../lib/policies'
+import { useOptionNames, useOptions } from '../lib/options'
+import { VEHICLE_TYPE, COVER_TYPES, FREQUENCIES, freqLabel, monthlyEquivalent, isLive, advanceDue, dueState } from '../lib/policies'
 
 const EMPTY = {
   name: '', insurer: '', type: 'Term insurance', policyNo: '', sumAssured: '', premium: '', frequency: 'monthly',
-  nextDueDate: '', endDate: '', maturityAmount: '', notes: '',
+  nextDueDate: '', endDate: '', maturityAmount: '', notes: '', coverType: '',
 }
 const day = v => (v ? format(new Date(v), 'yyyy-MM-dd') : '')
 const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
@@ -31,6 +31,14 @@ export default function PoliciesView() {
   const { showNotification } = useStore()
   const insurers = useOptionNames('insurers')
   const policyTypes = useOptionNames('policyTypes')
+  const catalog = useOptions('policyNames')
+  // the policy name dropdown: known policies grouped by insurer
+  const nameOptions = catalog.map(c => ({ value: c.name, label: c.name, sub: c.type, group: c.insurer }))
+  const pickName = v => {
+    const hit = catalog.find(c => c.name === v)
+    if (!hit) { setForm(f => ({ ...f, name: v })); return }
+    setForm(f => ({ ...f, name: hit.name, insurer: hit.insurer, type: hit.type, coverType: hit.type === VEHICLE_TYPE ? (hit.cover || f.coverType || 'Comprehensive') : '' }))
+  }
   const policies = useLiveQuery(() => db.policies.toArray()) || []
   const [open, setOpen] = useState(false)
   useBackHandler(open, () => setOpen(false))
@@ -47,7 +55,7 @@ export default function PoliciesView() {
     setForm({
       name: p.name || '', insurer: p.insurer || '', type: p.type || 'Other', policyNo: p.policyNo || '',
       sumAssured: p.sumAssured ? String(p.sumAssured) : '', premium: String(p.premium ?? ''), frequency: p.frequency || 'monthly',
-      nextDueDate: day(p.nextDueDate), endDate: day(p.endDate), maturityAmount: p.maturityAmount ? String(p.maturityAmount) : '', notes: p.notes || '',
+      nextDueDate: day(p.nextDueDate), endDate: day(p.endDate), maturityAmount: p.maturityAmount ? String(p.maturityAmount) : '', notes: p.notes || '', coverType: p.coverType || '',
     })
     setEditId(p.id); setOpen(true)
     document.querySelector('.screen')?.scrollTo({ top: 0, behavior: 'smooth' })
@@ -62,6 +70,7 @@ export default function PoliciesView() {
       sumAssured: parseFloat(form.sumAssured) || 0, premium, frequency: form.frequency,
       nextDueDate: form.nextDueDate ? new Date(form.nextDueDate) : null, endDate: form.endDate ? new Date(form.endDate) : null,
       maturityAmount: parseFloat(form.maturityAmount) || 0, notes: form.notes,
+      coverType: form.type === VEHICLE_TYPE ? (form.coverType || 'Comprehensive') : '',
     }
     if (editId) await db.policies.update(editId, fields)
     else await db.policies.add({ ...fields, status: 'active', createdAt: new Date() })
@@ -100,11 +109,16 @@ export default function PoliciesView() {
         <div className="card" style={{ marginBottom: 12, padding: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 14 }}>{editId ? 'Edit policy' : 'Add a policy'}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <Field label="Policy name"><TextField icon={<ShieldCheck size={17} />} value={form.name} onChange={set('name')} placeholder="e.g. LIC Jeevan Anand" /></Field>
+            <Field label="Policy name" hint="Pick a known policy to fill in its insurer and type, or type your own."><Picker value={form.name} options={nameOptions} onChange={pickName} allowCustom icon={<ShieldCheck size={17} />} title="Policy name" placeholder="Choose or type" /></Field>
             <div className="form-grid">
               <Field label="Insurer"><Picker value={form.insurer} options={insurers} onChange={v => setForm({ ...form, insurer: v })} allowCustom icon={<Building2 size={17} />} title="Insurer" placeholder="LIC" clearLabel="Not set" /></Field>
               <Field label="Policy type"><Picker value={form.type} options={policyTypes} onChange={v => setForm({ ...form, type: v })} icon={<FileText size={17} />} title="Policy type" /></Field>
             </div>
+            {form.type === VEHICLE_TYPE && (
+              <Field label="Cover" hint={(form.coverType || 'Comprehensive') === 'Third party' ? 'Third party covers damage you cause to others, not your own vehicle.' : 'Comprehensive covers your own vehicle as well as third party.'}>
+                <Segmented value={form.coverType || 'Comprehensive'} options={COVER_TYPES} onChange={v => setForm({ ...form, coverType: v })} />
+              </Field>
+            )}
             <Field label="Premium paid"><Segmented value={form.frequency} options={FREQUENCIES.map(f => ({ value: f.id, label: f.label }))} onChange={v => setForm({ ...form, frequency: v })} /></Field>
             <div className="form-grid">
               <Field label="Premium"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" value={form.premium} onChange={set('premium')} placeholder="0" /></Field>
@@ -138,7 +152,7 @@ export default function PoliciesView() {
               <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--indigo-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShieldCheck size={19} color="var(--indigo-dim)" /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{p.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[p.insurer, p.type, p.policyNo && `#${p.policyNo}`].filter(Boolean).join(' · ')}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[p.insurer, p.type, p.coverType, p.policyNo && `#${p.policyNo}`].filter(Boolean).join(' · ')}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 15, fontWeight: 800 }}>{formatINR(p.premium)}</div>
