@@ -202,6 +202,7 @@ export function statementRows(table) {
   const c = detectColumns(table)
   if (!c) throw new Error("Couldn't find the transaction table. The file needs a header row with a Date, a description (Narration / Particulars / Remarks) and Debit & Credit (or Withdrawal & Deposit) columns.")
   const rows = []
+  let prevBal = null
   for (const r of table.slice(c.header + 1)) {
     const date = parseStatementDate(r[c.date])
     if (!date) continue
@@ -210,8 +211,16 @@ export function statementRows(table) {
     if (c.amount >= 0 && debit == null && credit == null) {
       const a = parseMoney(r[c.amount])
       const dir = (c.type >= 0 ? r[c.type] : r[c.amount]) || ''
-      if (a != null) { if (/cr/i.test(dir) || isCr(r[c.amount])) credit = a; else debit = a }
+      const bal = c.balance >= 0 ? parseMoney(r[c.balance]) : null
+      // one amount column and no Dr / Cr marker: the balance says which way the money moved
+      const marked = /\b(cr|dr)\b|cr$|dr$/i.test(dir)
+      if (a != null) {
+        if (marked) { if (/cr/i.test(dir) || isCr(r[c.amount])) credit = a; else debit = a }
+        else if (bal != null && prevBal != null) { if (bal > prevBal) credit = a; else debit = a }
+        else debit = a
+      }
     }
+    if (c.balance >= 0) { const b = parseMoney(r[c.balance]); if (b != null) prevBal = b }
     if (!(debit > 0) && !(credit > 0)) continue
     const narration = r[c.narration] || ''
     const info = narrationInfo(narration)
@@ -222,7 +231,7 @@ export function statementRows(table) {
       category: classifyCategory(info.merchant, narration),
       vpa: info.vpa, note: info.note, ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
       balance: c.balance >= 0 ? parseMoney(r[c.balance]) : null,
-      key: `${date.toISOString().slice(0, 10)}|${type}|${amount}|${c.balance >= 0 ? parseMoney(r[c.balance]) : ''}|${norm(narration).slice(0, 60)}`,
+      key: `${date.toISOString().slice(0, 10)}|${type}|${amount}|${c.balance >= 0 ? parseMoney(r[c.balance]) : norm(narration).slice(0, 60)}`,
     })
   }
   if (!rows.length) throw new Error('The table was found, but no dated rows with an amount were readable in it.')
@@ -250,7 +259,10 @@ export function reconcile(rows, saved) {
   // a line already imported earlier keeps its entry (so importing the same file twice changes nothing)
   const seen = {}
   for (const r of ordered) { const n = (seen[r.key] = (seen[r.key] || 0) + 1); r.stmtKey = `${r.key}#${n}` }
-  const byKey = new Map(saved.filter(t => t.stmtKey).map(t => [t.stmtKey, t]))
+  // an entry stamped by an earlier import whose line is no longer in this statement (or was read differently) is free to be matched again
+  const live = new Set(ordered.map(r => r.stmtKey))
+  const stale = t => t.stmtKey && !live.has(t.stmtKey)
+  const byKey = new Map(saved.filter(t => t.stmtKey && live.has(t.stmtKey)).map(t => [t.stmtKey, t]))
   const claimed = new Set(), pairs = new Map()
   for (const r of ordered) { const t = byKey.get(r.stmtKey); if (t) { pairs.set(r.stmtKey, t); claimed.add(t.id) } }
 
@@ -259,7 +271,7 @@ export function reconcile(rows, saved) {
     if (pairs.has(r.stmtKey)) continue
     const rt = tokens(r.narration)
     for (const t of saved) {
-      if (claimed.has(t.id) || t.stmtKey || t.type !== r.type || cents(t.amount) !== cents(r.amount)) continue
+      if (claimed.has(t.id) || (t.stmtKey && !stale(t)) || t.type !== r.type || cents(t.amount) !== cents(r.amount)) continue
       const gap = Math.abs(dayKey(t.date) - dayKey(r.date))
       const shared = [...refsOf(t.rawSMS, t.refNo)].some(x => r.refs.has(x))
       if (gap > (shared ? 4 : 2)) continue
@@ -277,7 +289,7 @@ export function reconcile(rows, saved) {
 
   const matched = [], toAdd = []
   for (const r of ordered) { const t = pairs.get(r.stmtKey); t ? matched.push({ row: r, txn: t }) : toAdd.push(r) }
-  const extras = saved.filter(t => !claimed.has(t.id) && !t.stmtKey && dayKey(t.date) >= first && dayKey(t.date) <= last)
+  const extras = saved.filter(t => !claimed.has(t.id) && (!t.stmtKey || stale(t)) && dayKey(t.date) >= first && dayKey(t.date) <= last)
     .map(t => ({ txn: t, keep: t.parsedBy === 'manual' || PROTECTED(t), duplicateOf: matched.find(m => m.txn.type === t.type && cents(m.txn.amount) === cents(t.amount) && Math.abs(dayKey(m.txn.date) - dayKey(t.date)) <= 2)?.txn.id ?? null }))
   const closing = [...ordered].reverse().find(r => r.balance != null)
   return { matched, toAdd, extras, closingBalance: closing ? closing.balance : null, from: ordered[0].date, to: ordered[ordered.length - 1].date }

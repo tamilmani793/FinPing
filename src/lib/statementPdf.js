@@ -91,25 +91,35 @@ export function linesToTable(lines) {
     }
     table.push(row)
   }
-  return foldContinuations(table, head.cols)
+  return foldContinuations(table, head.cols, lines.slice(start).map(l => l.page))
 }
 
-// narration text that wrapped onto the next line belongs to the row above it; repeated headers and footers are dropped
-function foldContinuations(table, c) {
+// A transaction often takes 2-4 printed lines: the date sits on the first, the long narration wraps over all of
+// them, and the reference / value date / amounts sit on whichever line is level with the middle of the cell, so
+// the lines above AND below them belong to the same transaction. A new transaction starts at a line whose DATE
+// column holds a date (a value date in another column does not count). Lines are then joined cell by cell.
+const DATE_AT_START = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ -,]*\d{2,4})/
+const FOOTER = /(statement summary|end of statement|generated (on|by)|this is a computer|registered office|closing balance\s*:|page \d+ of \d+|gstin|state account branch)/i
+
+function foldContinuations(table, c, pages) {
   const hdr = norm(table[0].join(' '))
   const out = [table[0]]
-  for (const row of table.slice(1)) {
+  let cur = null, curPage = null, stop = false
+  table.slice(1).forEach((row, i) => {
+    if (stop) return
     const line = norm(row.join(' '))
-    if (!line || line === hdr || JUNK.test(line)) continue
-    const hasDate = /\d/.test(row[c.date] || '')
-    const hasMoney = row.some((v, i) => i !== c.date && MONEY.test(v || ''))
-    if (!hasDate && !hasMoney && out.length > 1) {
-      const prev = out[out.length - 1]
-      prev[c.narration] = `${prev[c.narration]} ${row.filter(Boolean).join(' ')}`.trim().slice(0, 300)
-      continue
-    }
-    out.push(row)
-  }
+    if (!line || line === hdr || JUNK.test(line)) return
+    if (FOOTER.test(row.join(' '))) { if (/end of statement|statement summary/i.test(row.join(' '))) stop = true; cur = null; return }
+    const starts = DATE_AT_START.test((row[c.date] || '').trim())
+    if (starts) { cur = row.slice(); curPage = pages[i]; out.push(cur); return }
+    if (!cur || pages[i] !== curPage) return // text above the first transaction of a page: not part of one
+    row.forEach((v, k) => {
+      if (!v) return
+      if (k === c.narration) cur[k] = `${cur[k]} ${v}`.trim().slice(0, 300)
+      else if (!cur[k]) cur[k] = v
+      else if (k !== c.date && !MONEY.test(v)) cur[k] = `${cur[k]} ${v}`.trim()
+    })
+  })
   return out
 }
 
@@ -130,7 +140,7 @@ export async function parsePdf(arrayBuffer, password, pdfjs) {
   const lines = []
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p)
-    lines.push(...pageLines((await page.getTextContent()).items))
+    for (const l of pageLines((await page.getTextContent()).items)) { l.page = p; lines.push(l) }
   }
   await task.destroy()
   if (!lines.length) throw new Error('This PDF has no readable text (it may be a scanned image). Download the statement as CSV or Excel instead.')
