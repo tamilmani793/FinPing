@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
 import { db } from '../db/schema'
-import { TopBar, Card, SectionHdr, Badge, TxnRow, Divider, LabelCaps, BtnPrimary, BtnSecondary, SmsParsedCard, formatINR, getMerchantIcon, formatDate } from '../components/UI'
-import { parseSMS } from '../lib/smsParser'
+import { TopBar, Card, SectionHdr, Badge, TxnRow, Divider, LabelCaps, BtnPrimary, BtnSecondary, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import TxnDetailSheet from '../components/TxnDetailSheet'
 import { applyTxnToCard } from '../lib/ingestSMS'
 import { useStore } from '../store'
@@ -23,14 +22,11 @@ export default function Expenses() {
   const [expandedCats, setExpandedCats] = useState(new Set(['Food Delivery']))
   const [showAddForm, setShowAddForm] = useState(false)
   const [editTxn, setEditTxn] = useState(null)
-  const [showPasteSMS, setShowPasteSMS] = useState(false)
-  const [smsText, setSmsText] = useState('')
-  const [parsed, setParsed] = useState(null)
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth())
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const { showNotification, composeRequest } = useStore()
 
-  useEffect(() => { if (composeRequest > 0) setShowPasteSMS(true) }, [composeRequest])
+  useEffect(() => { if (composeRequest > 0) setShowAddForm(true) }, [composeRequest])
 
   const [form, setForm] = useState({ merchant: '', amount: '', category: 'General', paymentMode: 'UPI', cardId: '', notes: '', tags: '' })
   const accountList = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft && c.cardType !== 'unknown')
@@ -68,25 +64,6 @@ export default function Expenses() {
     const next = new Set(expandedCats)
     if (next.has(cat)) next.delete(cat); else next.add(cat)
     setExpandedCats(next)
-  }
-
-  const handleParseSMS = () => {
-    if (!smsText.trim()) return
-    const result = parseSMS(smsText)
-    if (result) { setParsed(result) } else { showNotification('Could not parse this SMS — try editing fields manually', 'error') }
-  }
-
-  const handleConfirmSMS = async () => {
-    if (!parsed) return
-    await db.transactions.add({
-      date: parsed.receivedAt || new Date(), amount: parsed.amount || 0,
-      type: parsed.transactionType || 'debit', merchant: parsed.merchant || 'Unknown',
-      category: parsed.category || 'General', paymentMode: parsed.paymentMode || 'UPI',
-      bank: parsed.bank || '', cardId: null, rawSMS: parsed.rawText,
-      parsedBy: 'auto', tags: [], notes: '', isExcluded: false, createdAt: new Date(),
-    })
-    setParsed(null); setSmsText(''); setShowPasteSMS(false)
-    showNotification('Transaction saved from SMS!', 'success')
   }
 
   const handleAddManual = async () => {
@@ -145,28 +122,9 @@ export default function Expenses() {
       <div style={{ padding: '4px 16px 0' }}>
         <SectionHdr title="By Category" right={<Badge variant="grey">{cats.length} categories</Badge>} />
 
-        {/* Paste SMS CTA */}
-        {!showPasteSMS && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <button className="btn-secondary" style={{ flex: 1, height: 36, fontSize: 12 }} onClick={() => setShowPasteSMS(true)}>📲 Paste SMS</button>
-            <button className="btn-secondary" style={{ flex: 1, height: 36, fontSize: 12 }} onClick={() => setShowAddForm(!showAddForm)}>+ Add Manually</button>
-          </div>
-        )}
-
-        {/* SMS Paste Area */}
-        {showPasteSMS && (
-          <Card style={{ marginBottom: 10 }}>
-            <LabelCaps style={{ marginBottom: 6 }}>Paste Bank SMS</LabelCaps>
-            <textarea className="input" style={{ height: 80, marginBottom: 8, fontSize: 12 }}
-              placeholder="Paste your bank SMS here..." value={smsText}
-              onChange={e => { setSmsText(e.target.value); setParsed(null) }} />
-            <div style={{ display: 'flex', gap: 6 }}>
-              <BtnPrimary onClick={handleParseSMS} style={{ flex: 1, height: 36, fontSize: 12 }}>Parse SMS</BtnPrimary>
-              <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => { setShowPasteSMS(false); setParsed(null); setSmsText('') }}>Cancel</button>
-            </div>
-            {parsed && <SmsParsedCard parsed={parsed} onConfirm={handleConfirmSMS} onDiscard={() => { setParsed(null); setSmsText('') }} />}
-          </Card>
-        )}
+        <div style={{ marginBottom: 10 }}>
+          <button className="btn-secondary" style={{ width: '100%', height: 36, fontSize: 12 }} onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Close' : '+ Add Manually'}</button>
+        </div>
 
         {/* Manual Add Form */}
         {showAddForm && (
@@ -245,7 +203,7 @@ export default function Expenses() {
           <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--txt2)' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
             <div style={{ fontSize: 14, fontWeight: 500 }}>No transactions yet</div>
-            <div style={{ fontSize: 12, marginTop: 4 }}>Paste a bank SMS or add manually above</div>
+            <div style={{ fontSize: 12, marginTop: 4 }}>Add a transaction manually above, or let the SMS sync fill this in</div>
           </div>
         )}
       </div>

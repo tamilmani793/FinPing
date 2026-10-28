@@ -1,5 +1,4 @@
-import { Home, ArrowLeftRight, Wallet, Landmark, User } from 'lucide-react'
-import { useProfile } from '../lib/profile'
+import { Home, ArrowLeftRight, Wallet, Landmark, PieChart } from 'lucide-react'
 import { useStore } from '../store'
 
 const TABS = [
@@ -7,14 +6,13 @@ const TABS = [
   { id: 'history', label: 'History', Icon: ArrowLeftRight },
   { id: 'cards', label: 'Accounts', Icon: Wallet },
   { id: 'debt', label: 'Debt', Icon: Landmark },
-  { id: 'profile', label: 'Profile', Icon: User },
+  { id: 'charts', label: 'Charts', Icon: PieChart },
 ]
 
 export default function BottomNav() {
   const { activeTab, setActiveTab } = useStore()
-  const { photo } = useProfile()
-  // Wealth and Charts are opened from Home; keep Home highlighted for them.
-  const current = activeTab === 'wealth' || activeTab === 'charts' ? 'home' : activeTab
+  // Wealth is opened from Home; keep Home highlighted for it.
+  const current = activeTab === 'wealth' ? 'home' : activeTab
   return (
     <nav style={{
       position: 'absolute', left: 14, right: 14,
@@ -33,9 +31,7 @@ export default function BottomNav() {
               cursor: 'pointer', height: 48, flex: 1, minWidth: 0, margin: '0 1px', padding: '0 2px', borderRadius: 24,
               background: active ? 'var(--pink-bg)' : 'transparent', transition: 'background 0.15s',
             }}>
-            {id === 'profile' && photo
-              ? <img src={photo} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', border: active ? '2px solid var(--pink)' : '1.5px solid var(--border2)' }} />
-              : <Icon size={20} strokeWidth={active ? 2.4 : 1.8} color={active ? 'var(--pink)' : 'var(--txt2)'} />}
+            <Icon size={20} strokeWidth={active ? 2.4 : 1.8} color={active ? 'var(--pink)' : 'var(--txt2)'} />
             <div style={{ fontSize: 10, fontWeight: active ? 700 : 500, color: active ? 'var(--pink)' : 'var(--txt2)' }}>{label}</div>
           </div>
         )

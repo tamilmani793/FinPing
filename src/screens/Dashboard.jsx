@@ -103,7 +103,7 @@ export default function Dashboard() {
           <div className="pill-chip" onClick={() => setActiveTab('charts')}><PieChart size={14} color="var(--gold)" /> Charts</div>
         </div>
 
-        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>Today is <b style={{ color: 'var(--txt)' }}>{format(now, 'EEE, d MMM')}</b></div>
+        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>Today is <b style={{ color: 'var(--txt)' }}>{format(now, 'EEE, d MMM yyyy')}</b></div>
 
         {/* Insights */}
         <div className="label-caps" style={{ textAlign: 'center', marginBottom: 10, letterSpacing: '0.12em' }}>Insights</div>

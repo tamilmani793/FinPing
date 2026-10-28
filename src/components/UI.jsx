@@ -6,7 +6,7 @@ import { SyncPill } from './SmsSync'
 
 export function TopBar({ title, sub, right }) {
   const { activeTab, setActiveTab, smsSync } = useStore()
-  const isSub = activeTab === 'wealth' || activeTab === 'charts'
+  const isSub = activeTab === 'wealth' || activeTab === 'profile'
   return (
     <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -70,3 +70,17 @@ export function cardStats(card, txns, now = new Date()) {
     limit, available, utilPct: limit ? Math.min(100, Math.round(((limit - available) / limit) * 100)) : 0,
   }
 }
+
+// Spend that counts towards the annual-fee waiver: this card year (from the latest issue anniversary until today),
+// spends only, leaving out your own exclusions, card bill payments and the categories that earn no rewards.
+export function feeWaiverSpend(card, txns, now = new Date()) {
+  const issued = card.issueDate || card.annualFeeDate
+  const base = issued ? new Date(issued) : null
+  let start = base && !Number.isNaN(+base) ? new Date(now.getFullYear(), base.getMonth(), base.getDate()) : new Date(now.getFullYear() - 1, now.getMonth(), now.getDate() + 1)
+  if (start > now) start = new Date(start.getFullYear() - 1, start.getMonth(), start.getDate())
+  const skip = excludedFor(card)
+  const spent = txns
+    .filter(t => t.type === 'debit' && !t.isExcluded && !isCardPayment(t) && !skip.includes(t.category) && new Date(t.date) >= start && new Date(t.date) <= now)
+    .reduce((a, t) => a + t.amount, 0)
+  return { spent, start, hasIssueDate: !!base }
+}

@@ -46,6 +46,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
     status: isStatementPaid(card) ? 'paid' : 'pending',
     excludedCategories: excludedFor(card),
     issueDate: dateStr(card.issueDate || card.annualFeeDate), interestRate: str(card.interestRate), rewardPoints: str(card.rewardPoints), notes: card.notes || '',
+    feeType: card.annualFee > 0 || card.totalAnnualFee > 0 || card.isLTF === false ? 'annual' : 'ltf',
     annualFee: str(card.annualFee > 0 ? card.annualFee : card.totalAnnualFee), feeWaiverThreshold: str(card.feeWaiverThreshold),
   })
   const isCredit = form.cardType === 'credit'
@@ -254,14 +255,25 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
           </div>
 
           <div className="label-caps" style={{ marginTop: 6, color: 'var(--gold-dim)' }}>Fees</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[['ltf', 'Lifetime free'], ['annual', 'Annual charges']].map(([id, label]) => {
+              const on = form.feeType === id
+              return (
+                <div key={id} onClick={() => setForm(f => ({ ...f, feeType: id }))} style={{ flex: 1, textAlign: 'center', padding: '10px 6px', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 700, border: `1.5px solid ${on ? 'var(--gold)' : 'var(--border2)'}`, background: on ? 'var(--gold-bg)' : 'var(--bg1)', color: on ? 'var(--gold-dim)' : 'var(--txt2)' }}>{label}</div>
+              )
+            })}
+          </div>
+          {form.feeType === 'ltf' && <div style={{ fontSize: 12, color: 'var(--mint-dim)', fontWeight: 600 }}>No joining or annual fee on this card.</div>}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <Field label="Annual fee before GST (₹)"><input {...num('annualFee')} /></Field>
-            <Field label="Fee waiver spend (₹)"><input {...num('feeWaiverThreshold')} /></Field>
-            <Field label="Card issued on"><input className="input" type="date" value={form.issueDate} onChange={set('issueDate')} /></Field>
+            {form.feeType === 'annual' && <>
+              <Field label="Annual fee before GST (₹)"><input {...num('annualFee')} /></Field>
+              <Field label="Fee waiver spend (₹)"><input {...num('feeWaiverThreshold')} /></Field>
+              <Field label="Card issued on"><input className="input" type="date" value={form.issueDate} onChange={set('issueDate')} /></Field>
+            </>}
             <Field label="Interest rate (% / month)"><input {...num('interestRate')} /></Field>
           </div>
-          {form.issueDate && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>The annual fee is charged on this date every year. Next: <b style={{ color: 'var(--txt)' }}>{fmt(nextAnniversary(form.issueDate))}</b></div>}
-          {Number(form.annualFee) > 0 && (
+          {form.feeType === 'annual' && form.issueDate && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>The annual fee is charged on this date every year. Next: <b style={{ color: 'var(--txt)' }}>{fmt(nextAnniversary(form.issueDate))}</b></div>}
+          {form.feeType === 'annual' && Number(form.annualFee) > 0 && (
             <div style={{ fontSize: 12, color: 'var(--txt2)' }}>
               ₹{Number(form.annualFee).toLocaleString('en-IN')} + 18% GST ₹{(Number(form.annualFee) * 0.18).toLocaleString('en-IN', { maximumFractionDigits: 2 })} = <b style={{ color: 'var(--txt)' }}>₹{(Number(form.annualFee) * 1.18).toLocaleString('en-IN', { maximumFractionDigits: 2 })} a year</b>
             </div>

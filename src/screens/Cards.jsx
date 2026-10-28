@@ -7,7 +7,7 @@ import { db } from '../db/schema'
 import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../components/UI'
 import { useStore } from '../store'
 import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary } from '../lib/cards'
-import { cardStats, rewardStatus, isCardPayment } from '../lib/cardStats'
+import { cardStats, rewardStatus, isCardPayment, feeWaiverSpend } from '../lib/cardStats'
 import { ordinal } from '../lib/cycle'
 import { typeLabel, networkLabel, excludedFor } from '../lib/cardCatalog'
 import CardEditSheet from '../components/CardEditSheet'
@@ -17,6 +17,8 @@ import { entityIdFor } from '../lib/relink'
 const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 const fmtS = d => (d ? format(new Date(d), 'd MMM') : '—')
 const isCredit = c => !c.cardType || c.cardType === 'credit'
+// what the card costs each year, shown as a small tag
+const feeTag = c => (c.isLTF === false && c.totalAnnualFee > 0 ? `₹${Math.round(c.totalAnnualFee).toLocaleString('en-IN')} / yr` : 'Lifetime free')
 const cardLabel = c => `${c.name}${c.cardLast4 && !c.name.includes('••') ? ` ••${c.cardLast4}` : ''}`
 
 // A bank account's activity also includes what the debit cards linked to it spent.
@@ -67,6 +69,7 @@ function CardTile({ card, txns, onOpen }) {
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardLabel(card)}</div>
           <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{[card.bank, networkLabel(card), card.partner].filter(Boolean).join(' · ')}</div>
         </div>
+        {credit && <span className={`badge ${card.isLTF === false && card.totalAnnualFee > 0 ? 'badge-amber' : 'badge-mint'}`}>{feeTag(card)}</span>}
         <ChevronRight size={18} color="var(--txt3)" />
       </div>
 
@@ -283,6 +286,7 @@ function Detail({ card, cards, byCard, onBack }) {
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#E8D29A' }}>{networkLabel(card) || typeLabel(card)}</div>
               <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{[networkLabel(card) ? typeLabel(card) : '', card.partner].filter(Boolean).join(' · ')}</div>
+              {credit && <div style={{ fontSize: 10, fontWeight: 700, color: card.isLTF === false && card.totalAnnualFee > 0 ? '#F0B15C' : '#7FE0B0', marginTop: 2 }}>{feeTag(card)}</div>}
             </div>
           </div>
 
@@ -391,7 +395,17 @@ function Detail({ card, cards, byCard, onBack }) {
               <Row k="No rewards on" v={exclusions.length ? exclusions.join(', ') : 'nothing excluded'} />
               <div className="divider" />
               <Row k="Annual fee" sub={!card.isLTF && card.annualFee > 0 ? `${formatINR(card.annualFee)} + 18% GST ${formatINR(card.annualFeeGST || 0)}` : undefined} v={card.isLTF ? 'Lifetime free' : `${formatINR(card.totalAnnualFee || 0)} / yr`} />
-              {!card.isLTF && card.feeWaiverThreshold > 0 && <Row k="Fee waiver spend" v={`${formatINR(card.totalPaidThisYear || 0)} / ${formatINR(card.feeWaiverThreshold)}`} />}
+              {!card.isLTF && card.feeWaiverThreshold > 0 && (() => {
+                const w = feeWaiverSpend(card, txns)
+                const left = Math.max(0, card.feeWaiverThreshold - w.spent)
+                return (
+                  <>
+                    <Row k="Fee waiver spend" v={`${formatINR(w.spent)} / ${formatINR(card.feeWaiverThreshold)}`} color={left === 0 ? 'var(--mint-dim)' : undefined}
+                      sub={left === 0 ? 'Target reached: the annual fee is waived ✓' : `${formatINR(left)} more to waive the fee · counted since ${fmtD(w.start)}${w.hasIssueDate ? '' : ' (last 12 months: add the issue date for the exact card year)'}`} />
+                    <ProgressBar pct={Math.min(100, Math.round(w.spent / card.feeWaiverThreshold * 100))} variant={left === 0 ? 'mint' : 'amber'} />
+                  </>
+                )
+              })()}
               {(card.issueDate || card.annualFeeDate) && <Row k="Card issued on" v={fmtD(card.issueDate || card.annualFeeDate)} />}
               {!card.isLTF && (card.issueDate || card.annualFeeDate) && <Row k="Next annual fee" v={fmtD(nextAnniversary(card.issueDate || card.annualFeeDate))} sub="on the card's issue date every year" />}
               {card.interestRate > 0 && <Row k="Interest rate" v={`${card.interestRate}% / month`} />}
