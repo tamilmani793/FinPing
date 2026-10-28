@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { relinkTransactions } from './lib/relink'
 import { removeDuplicateTransactions } from './lib/dedupeCleanup'
+import { postDueEmis } from './lib/emiEngine'
 import { useStore } from './store'
 import BottomNav from './components/BottomNav'
 import { Notification } from './components/UI'
@@ -22,6 +23,15 @@ export default function App() {
   const sms = useSmsSync()
   // The header pill and the Home permission card read the sync state from the store.
   useEffect(() => { useStore.setState({ smsSync: { state: sms.state, enable: sms.enable } }) }, [sms.state])
+
+  // Post every EMI that has fallen due (no SMS involved) when the app opens and whenever it comes back to the front.
+  useEffect(() => {
+    const run = () => postDueEmis().then(n => { if (n > 0) showNotification(`${n} EMI${n === 1 ? '' : 's'} posted to your loans`, 'success') }).catch(() => {})
+    run()
+    const onShow = () => { if (document.visibilityState === 'visible') run() }
+    document.addEventListener('visibilitychange', onShow)
+    return () => document.removeEventListener('visibilitychange', onShow)
+  }, [])
 
   // Tie transactions to the cards / accounts they belong to. The first run also creates the cards and
   // accounts that older transactions point to; every later launch only links to the ones that exist

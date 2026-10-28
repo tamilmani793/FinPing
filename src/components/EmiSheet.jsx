@@ -5,7 +5,7 @@ import { db } from '../db/schema'
 import { useStore } from '../store'
 import { formatINR } from './UI'
 import { isLive, monthlyEquivalent, freqLabel } from '../lib/policies'
-import { splitPayment, lastRepaymentDate } from '../lib/loanMath'
+import { projectSchedule, nextEmiAmount } from '../lib/loanSchedule'
 
 const fmt = d => (d ? format(new Date(d), 'd MMM') : '—')
 
@@ -25,7 +25,7 @@ export function useMonthlyEmi() {
   const policies = useLiveQuery(() => db.policies.toArray()) || []
   const loans = debts.filter(d => d.status !== 'closed' && d.emiAmount > 0)
   const live = policies.filter(p => isLive(p) && p.premium > 0)
-  const loanTotal = loans.reduce((s, d) => s + d.emiAmount, 0)
+  const loanTotal = loans.reduce((s, d) => s + nextEmiAmount(d), 0)
   const policyTotal = live.reduce((s, p) => s + monthlyEquivalent(p), 0)
   return { loans, policies: live, loanTotal, policyTotal, total: loanTotal + policyTotal }
 }
@@ -62,7 +62,6 @@ function Item({ icon, title, sub, amount, amountSub, onClick }) {
 export default function EmiSheet({ onClose }) {
   const { setActiveTab, setDebtSegment } = useStore()
   const { loans, policies, loanTotal, policyTotal, total } = useMonthlyEmi()
-  const repayments = useLiveQuery(() => db.debtRepayments.toArray()) || []
   const go = seg => { setDebtSegment(seg); setActiveTab('debt'); onClose() }
 
   return (
@@ -75,16 +74,17 @@ export default function EmiSheet({ onClose }) {
 
         <Group title={`Loans · ${loans.length}`} total={`${formatINR(loanTotal)} / mo`}>
           {loans.map(d => {
-            // The EMI is interest (daily, on the balance) + principal; only the principal lowers what is left.
-            const due = nextEmiDate(d.emiDate)
-            const sp = d.interestRate > 0 ? splitPayment(d, d.emiAmount, due || new Date(), lastRepaymentDate(repayments.filter(r => r.debtId === d.id))) : null
+            // The EMI is interest + principal; only the principal lowers what is left. The numbers come from the loan's own schedule.
+            const proj = projectSchedule(d)
+            const next = proj.rows[0]
+            const due = d.nextEmiDate ? new Date(d.nextEmiDate) : nextEmiDate(d.emiDate)
             return (
               <Item key={d.id} icon={<Landmark size={17} />} onClick={() => go('loans')}
                 title={d.name}
-                sub={sp
-                  ? <>{[d.lender, due ? `next ${fmt(due)}` : null].filter(Boolean).join(' · ')}<br /><span style={{ color: 'var(--red-dim)' }}>{formatINR(sp.interest)} interest</span> + <span style={{ color: 'var(--mint-dim)' }}>{formatINR(sp.principal)} principal</span></>
+                sub={next && next.interest > 0
+                  ? <>{[d.lender, due ? `next ${fmt(due)}` : null].filter(Boolean).join(' · ')}<br /><span style={{ color: 'var(--red-dim)' }}>{formatINR(next.interest)} interest</span> + <span style={{ color: 'var(--mint-dim)' }}>{formatINR(next.principal)} principal</span></>
                   : `${[d.lender, d.emiDate ? `EMI on the ${d.emiDate}th` : null].filter(Boolean).join(' · ')}${due ? ` · next ${fmt(due)}` : ''}`}
-                amount={formatINR(d.emiAmount)} amountSub={`${formatINR(d.currentOutstanding)} left`} />
+                amount={formatINR(next ? next.emi : d.emiAmount)} amountSub={`${formatINR(d.currentOutstanding)} left${proj.remaining ? ` · ${proj.remaining} EMIs` : ''}`} />
             )
           })}
           {!loans.length && <div style={{ fontSize: 12, color: 'var(--txt2)', padding: '8px 0' }}>No loans with an EMI. Add one on the Debt screen.</div>}

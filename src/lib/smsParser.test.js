@@ -42,7 +42,8 @@ const TEST_SMS = [
   {
     label: 'Home Loan EMI',
     text: 'Dear Customer, EMI of Rs.24,800 for your Home Loan A/c XXXXXXXX7841 has been debited on 22-Oct-2026. Outstanding: Rs.6,80,000. HDFC Bank',
-    expect: { type: 'emi', amount: 24800, bank: 'HDFC Bank' }
+    // loans are no longer matched from SMS (EMIs post themselves from the loan's schedule), so this is just a bank debit
+    expect: { type: 'transaction', transactionType: 'debit', amount: 24800, category: 'EMI', bank: 'HDFC Bank' }
   },
   {
     label: 'MF SIP',

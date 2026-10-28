@@ -103,8 +103,9 @@ function extractBank(text) {
   return 'Unknown Bank'
 }
 
-function classifyCategory(merchant, text) {
-  if (!merchant) return 'General'
+export function classifyCategory(merchant, text) {
+  // No merchant to go by (a bank's own "EMI ... has been debited" alert): the only thing safe to infer is an EMI
+  if (!merchant) return /\bemi\b|loan installment|equated monthly/i.test(text || '') ? 'EMI' : 'General'
   const lower = merchant.toLowerCase()
   for (const [key, cat] of Object.entries(MERCHANT_CATEGORY_MAP)) {
     if (lower.includes(key) && cat) return cat
@@ -311,8 +312,10 @@ export function parseSMS(rawText, sender = '', receivedAt = new Date()) {
   const paymentResult = detectPaymentReceivedSMS(rawText)
   if (paymentResult) return { ...paymentResult, rawText, sender, receivedAt, confidence: 0.9 }
 
-  const emiResult = detectEMISMS(rawText)
-  if (emiResult) return { ...emiResult, rawText, sender, receivedAt, confidence: 0.85 }
+  // Loans are NOT tracked from SMS (EMIs post themselves on their due date from the loan's schedule).
+  //  - "EMI of Rs.24,800 ... has been debited" is just a debit on the bank account: it falls through to the normal transaction below
+  //  - EMI offers and information ("convert to EMI", "EMI facility") carry no money movement
+  if (detectEMISMS(rawText) && !/\b(debited|deducted|paid)\b/i.test(rawText)) return null
 
   const investResult = detectInvestmentSMS(rawText)
   if (investResult) return { ...investResult, rawText, sender, receivedAt, confidence: 0.88 }

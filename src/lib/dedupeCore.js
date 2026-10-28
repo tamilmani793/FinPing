@@ -50,6 +50,8 @@ export function isSameTransaction(a, b, windowMs = DUP_WINDOW_MS) {
   if (!loanEntry && !noMerchant(a.merchant) && !noMerchant(b.merchant) && norm(a.merchant) !== norm(b.merchant)) return false
 
   const dt = Math.abs(new Date(a.date) - new Date(b.date))
+  // an EMI is posted on its due date, while the bank's alert carries the real debit time: same day is close enough
+  if (loanEntry && dt <= 30 * 60 * 60 * 1000) return true
   if (dt <= windowMs) return true
   return sa.mandate && sb.mandate && sameLocalDay(a.date, b.date)
 }

@@ -2,7 +2,6 @@ import { db } from '../db/schema'
 import { parseSMS, isCreditCardSMS, detectCardKind, extractAvailableLimit } from './smsParser'
 import { shiftAvailable, setLimitFields, groupOf } from './cards'
 import { cycleDates } from './cycle'
-import { recordRepayment } from './debtBackup'
 import { findDuplicate, mergeDuplicate, pairTransfer } from './dedupe'
 
 // Finds the card by its last four digits (preferring the same bank), or creates it.
@@ -199,30 +198,6 @@ export async function ingestSMS(rawText, meta = {}) {
       }
       await log('saved', 'statement')
       return { status: 'success', message: `Statement: ₹${parsed.totalDue} due` }
-    }
-    case 'emi': {
-      const debts = await db.debts.where('status').equals('active').toArray()
-      // The loan account number in the SMS is the surest match; otherwise EMI amount + lender.
-      const flat = s => String(s || '').replace(/[\s\-]/g, '').toLowerCase()
-      const haystack = flat(text)
-      const bank = (parsed.bank || '').toLowerCase()
-      const sameLender = d => {
-        const l = (d.lender || '').toLowerCase()
-        if (!bank || bank === 'unknown bank') return true
-        return l.includes(bank.split(' ')[0]) || (bank.startsWith('state bank') && l.includes('sbi'))
-      }
-      // Banks mask or shorten account numbers (XX778899), so the last digits are what is compared.
-      const tail = d => flat(d.loanAccountNo).slice(-6)
-      const debt = debts.find(d => d.loanAccountNo && tail(d).length >= 4 && haystack.includes(tail(d)))
-        || debts.find(d => d.emiAmount && Math.abs(d.emiAmount - parsed.amount) < 1 && sameLender(d))
-      if (debt) {
-        // Interest for the days since the last payment comes off first; only the rest lowers the principal.
-        await recordRepayment(debt.id, { amount: parsed.amount, date: receivedAt, source: 'sms', rawSMS: text })
-        await log('saved', 'emi')
-        return { status: 'success', message: `EMI ₹${parsed.amount} applied to ${debt.name}` }
-      }
-      await log('needs_review', 'emi')
-      return { status: 'review', message: 'EMI detected — add the loan under Debt to track it' }
     }
     default:
       await log('needs_review', parsed.type)

@@ -3,12 +3,13 @@ import { DUP_WINDOW_MS, isSameTransaction, smsSignals } from './dedupeCore'
 
 export { DUP_WINDOW_MS, isSameTransaction }
 const DAY = 24 * 60 * 60 * 1000
+const REACH = 36 * 60 * 60 * 1000 // far enough to find a loan EMI posted on its due date and the bank's alert for it
 
 // An already-saved transaction that the new one duplicates (card payments are handled separately).
 // The decision (same reference number, same running balance, same time stamp...) lives in dedupeCore.
 export async function findDuplicate(candidate) {
   const t = new Date(candidate.date).getTime()
-  const near = await db.transactions.where('date').between(new Date(t - DAY), new Date(t + DAY), true, true).toArray()
+  const near = await db.transactions.where('date').between(new Date(t - REACH), new Date(t + REACH), true, true).toArray()
   return near.find(x => x.kind !== 'card_payment' && isSameTransaction(x, candidate)) || null
 }
 
