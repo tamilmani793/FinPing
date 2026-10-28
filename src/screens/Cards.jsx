@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format, startOfMonth } from 'date-fns'
-import { ChevronLeft, ChevronRight, CreditCard, Gift, Pencil } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CreditCard, FileText, Gift, Pencil } from 'lucide-react'
+import StatementImportSheet from '../components/StatementImportSheet'
 import { db } from '../db/schema'
 import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../components/UI'
 import { useStore } from '../store'
@@ -236,6 +237,7 @@ function PaymentDetails({ card, s }) {
 
 function Detail({ card, cards, byCard, onBack }) {
   const [editOpen, setEditOpen] = useState(false)
+  const [stmtOpen, setStmtOpen] = useState(false)
   const txns = txnsFor(card, cards, byCard)
   const credit = isCredit(card)
   const linkedAccount = card.cardType === 'debit' && card.linkedAccountId != null ? cards.find(c => c.id === card.linkedAccountId) : null
@@ -257,6 +259,7 @@ function Detail({ card, cards, byCard, onBack }) {
       <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div onClick={onBack} style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</div>
+        {card.cardType === 'account' && <button className="btn-secondary" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setStmtOpen(true)}><FileText size={13} /> Statement</button>}
         <button className="btn-secondary" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setEditOpen(true)}><Pencil size={13} /> Edit</button>
       </div>
 
@@ -404,6 +407,7 @@ function Detail({ card, cards, byCard, onBack }) {
       </div>
 
       {editOpen && <CardEditSheet card={card} cards={cards} onClose={() => setEditOpen(false)} />}
+      {stmtOpen && <StatementImportSheet account={card} onClose={() => setStmtOpen(false)} />}
     </div>
   )
 }
