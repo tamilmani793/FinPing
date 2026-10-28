@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Sun, Moon, SunMoon, Check, Pencil, X, SlidersHorizontal } from 'lucide-react'
+import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Sun, Moon, SunMoon, Check, Pencil, X, SlidersHorizontal, Info } from 'lucide-react'
 import { format } from 'date-fns'
 import { TopBar, BtnPrimary, Avatar } from '../components/UI'
 import { useStore } from '../store'
@@ -208,6 +208,7 @@ export default function Profile() {
         <div className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
           <Row Icon={Smartphone} title="SMS tracking" sub={isNative() ? 'Reads bank SMS on this phone' : 'Available in the Android app; paste SMS in the browser'} right={<span />} />
           <Row Icon={ShieldCheck} title="Privacy" sub="All data stays on your device" right={<span />} />
+          <Row Icon={Info} title="FinPing" sub={`Version ${__APP_VERSION__}`} right={<span />} />
         </div>
       </div>
     </div>

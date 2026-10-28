@@ -47,3 +47,8 @@ db.version(5).stores({}).upgrade(async tx => {
 db.version(6).stores({
   policies: '++id, insurer, type, status',
 })
+
+// v7: transactions you deleted, so a bank statement import does not bring them back
+db.version(7).stores({
+  deletedTxns: '++id, stmtKey',
+})

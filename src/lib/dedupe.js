@@ -18,6 +18,8 @@ const noMerchant = m => !m || /^unknown$/i.test(String(m).trim())
 // Folds the second SMS into the first: keeps one entry, but fills in anything the first one lacked.
 export async function mergeDuplicate(existing, extra, smsText) {
   const patch = { extraSMS: [...(existing.extraSMS || []), smsText].filter(Boolean) }
+  // What you edited, or what your bank statement says, is never overwritten by a later SMS: it is only remembered.
+  if (existing.userEdited || existing.stmtKey) { await db.transactions.update(existing.id, patch); return }
   if (noMerchant(existing.merchant) && !noMerchant(extra.merchant)) patch.merchant = extra.merchant
   if ((!existing.category || existing.category === 'General') && extra.category && extra.category !== 'General') patch.category = extra.category
   if (!existing.accountLast4 && extra.accountLast4) patch.accountLast4 = extra.accountLast4

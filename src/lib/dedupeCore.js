@@ -57,7 +57,7 @@ export function isSameTransaction(a, b, windowMs = DUP_WINDOW_MS) {
 }
 
 // Which of several copies to keep: the one that is linked to a card/account and says who was paid.
-export const keepScore = t => (t.cardId != null ? 4 : 0) + (noMerchant(t.merchant) ? 0 : 2) + (t.category && t.category !== 'General' ? 1 : 0) + (t.parsedBy === 'manual' ? 3 : 0)
+export const keepScore = t => (t.cardId != null ? 4 : 0) + (noMerchant(t.merchant) ? 0 : 2) + (t.category && t.category !== 'General' ? 1 : 0) + (t.parsedBy === 'manual' || t.userEdited ? 3 : 0) + (t.stmtKey ? 1 : 0)
 
 // ids of the other side of an own-account transfer: a debit and a credit that quote the same reference
 export function transferPairs(txns) {

@@ -270,7 +270,7 @@ const tokens = s => new Set(norm(s).split(' ').filter(w => w.length >= 3 && !/^(
 // entries that must keep their own name / category: loan postings, transfers, card bill payments
 const PROTECTED = t => !!t.debtId || t.category === 'Cashback' || ['loan_payment', 'loan_received', 'transfer', 'card_payment'].includes(t.kind)
 
-export function reconcile(rows, saved) {
+export function reconcile(rows, saved, deleted = []) {
   const ordered = [...rows].map((r, seq) => ({ ...r, seq })).sort((a, b) => a.date - b.date || a.seq - b.seq)
   const first = dayKey(ordered[0].date), last = dayKey(ordered[ordered.length - 1].date)
   // a line already imported earlier keeps its entry (so importing the same file twice changes nothing)
@@ -304,13 +304,21 @@ export function reconcile(rows, saved) {
     pairs.set(r.stmtKey, t); claimed.add(t.id); done.add(r.stmtKey)
   }
 
-  const matched = [], toAdd = []
-  for (const r of ordered) { const t = pairs.get(r.stmtKey); t ? matched.push({ row: r, txn: t }) : toAdd.push(r) }
+  const matched = [], toAdd = [], skipped = []
+  // each deleted entry cancels one matching statement line (same key, or same day, direction and amount)
+  const gone = deleted.map(d => ({ ...d, used: false }))
+  const wasDeleted = r => {
+    const day = r.date.getFullYear() + '-' + String(r.date.getMonth() + 1).padStart(2, '0') + '-' + String(r.date.getDate()).padStart(2, '0')
+    const hit = gone.find(d => !d.used && (d.stmtKey ? d.stmtKey === r.stmtKey : d.day === day && d.type === r.type && cents(d.amount) === cents(r.amount)))
+    if (hit) hit.used = true
+    return !!hit
+  }
+  for (const r of ordered) { const t = pairs.get(r.stmtKey); if (t) matched.push({ row: r, txn: t }); else if (wasDeleted(r)) skipped.push(r); else toAdd.push(r) }
   const extras = saved.filter(t => !claimed.has(t.id) && (!t.stmtKey || stale(t)) && dayKey(t.date) >= first && dayKey(t.date) <= last)
-    .map(t => ({ txn: t, keep: t.parsedBy === 'manual' || PROTECTED(t), duplicateOf: matched.find(m => m.txn.type === t.type && cents(m.txn.amount) === cents(t.amount) && Math.abs(dayKey(m.txn.date) - dayKey(t.date)) <= 2)?.txn.id ?? null }))
+    .map(t => ({ txn: t, keep: t.parsedBy === 'manual' || t.userEdited || PROTECTED(t), duplicateOf: matched.find(m => m.txn.type === t.type && cents(m.txn.amount) === cents(t.amount) && Math.abs(dayKey(m.txn.date) - dayKey(t.date)) <= 2)?.txn.id ?? null }))
     .filter(x => !x.txn._loose || x.duplicateOf != null)
   const closing = [...ordered].reverse().find(r => r.balance != null)
-  return { matched, toAdd, extras, closingBalance: closing ? closing.balance : null, from: ordered[0].date, to: ordered[ordered.length - 1].date }
+  return { matched, toAdd, skipped, extras, closingBalance: closing ? closing.balance : null, from: ordered[0].date, to: ordered[ordered.length - 1].date }
 }
 
 // what to change on a saved entry so it agrees with the statement line
@@ -318,6 +326,7 @@ export function correction(row, txn) {
   const old = new Date(txn.date)
   const date = new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate(), old.getHours() || 12, old.getMinutes(), old.getSeconds())
   const fields = { date, stmtKey: row.stmtKey, bankNarration: row.narration, refNo: row.ref || [...row.refs][0] || txn.refNo || null, stmtBalance: row.balance, counterparty: row.merchant !== 'Unknown' ? row.merchant : null, vpa: row.vpa || null, parsedBy: txn.parsedBy === 'manual' ? 'manual' : 'statement' }
+  if (txn.userEdited || txn.parsedBy === 'manual') { delete fields.date; fields.parsedBy = txn.parsedBy; return fields } // yours: only link it
   if (!txn.notes && row.note) fields.notes = row.note
   if (!PROTECTED(txn) && txn.parsedBy !== 'manual') {
     if (row.merchant && row.merchant !== 'Unknown') fields.merchant = row.merchant

@@ -24,7 +24,7 @@ export async function accountEntries(account) {
 }
 
 export async function planStatement(account, rows) {
-  return reconcile(rows, await accountEntries(account))
+  return reconcile(rows, await accountEntries(account), await db.deletedTxns.toArray())
 }
 
 // Applies the plan: corrects matched entries, adds the missing ones, removes the chosen extras.

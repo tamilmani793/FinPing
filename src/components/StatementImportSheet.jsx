@@ -83,6 +83,7 @@ export default function StatementImportSheet({ account, onClose }) {
               <div style={{ fontWeight: 700, marginBottom: 2 }}>{fmtD(plan.from)} → {fmtD(plan.to)}</div>
               <div><b style={{ color: 'var(--mint-dim)' }}>{plan.matched.length}</b> saved entries matched · corrected with the bank's details</div>
               <div><b style={{ color: 'var(--gold-dim)' }}>{plan.toAdd.length}</b> on the statement but missing · will be added</div>
+              {plan.skipped?.length > 0 && <div><b style={{ color: 'var(--txt)' }}>{plan.skipped.length}</b> line{plan.skipped.length === 1 ? '' : 's'} you deleted earlier stay deleted</div>}
               <div><b style={{ color: 'var(--red-dim)' }}>{plan.extras.length}</b> saved but not on the statement{plan.extras.length ? ' · choose below' : ''}</div>
             </div>
 

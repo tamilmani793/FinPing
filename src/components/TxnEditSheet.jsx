@@ -36,6 +36,7 @@ export default function TxnEditSheet({ txn, onClose }) {
       date: new Date(y, m - 1, d, old.getHours(), old.getMinutes()),
       cardId: f.cardId === '' ? null : Number(f.cardId), notes: f.notes, isExcluded: f.isExcluded,
       parsedBy: txn.parsedBy === 'auto' ? 'auto-edited' : txn.parsedBy,
+      userEdited: true, // your changes win over the bank statement and over any SMS
     })
     showNotification('Transaction updated', 'success')
     onClose()
@@ -43,6 +44,7 @@ export default function TxnEditSheet({ txn, onClose }) {
 
   const remove = async () => {
     if (!window.confirm('Delete this transaction? Card balances are not changed.')) return
+    await db.deletedTxns.add({ stmtKey: txn.stmtKey || null, day: format(new Date(txn.date), 'yyyy-MM-dd'), type: txn.type, amount: txn.amount, cardId: txn.cardId ?? null, deletedAt: new Date() })
     await db.transactions.delete(txn.id)
     showNotification('Transaction deleted', 'success')
     onClose()
