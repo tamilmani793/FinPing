@@ -18,9 +18,10 @@ export async function requestSmsPermission() {
 }
 
 // Read inbox messages since the last sync and apply them. Returns how many were applied.
-export async function syncInbox({ firstRunDays = 30 } = {}) {
+// rescanDays re-reads that many days back regardless of the last sync (messages already applied are skipped).
+export async function syncInbox({ firstRunDays = 30, rescanDays = 0 } = {}) {
   if (!(await hasSmsPermission())) return 0
-  const last = Number(localStorage.getItem(LAST_SYNC_KEY)) || Date.now() - firstRunDays * 864e5
+  const last = rescanDays > 0 ? Date.now() - rescanDays * 864e5 : Number(localStorage.getItem(LAST_SYNC_KEY)) || Date.now() - firstRunDays * 864e5
   const { messages } = await FinSms.readInbox({ sinceMs: last, limit: 1000 })
   let applied = 0
   for (const m of [...messages].sort((a, b) => a.date - b.date)) {

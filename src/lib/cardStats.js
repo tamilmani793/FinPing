@@ -58,29 +58,42 @@ export function cardStats(card, txns, now = new Date()) {
 
   // Current outstanding = what is still due on the bill + everything spent after it.
   const totalDue = pendingBilled
-  const outstanding = pendingBilled + unbilled
+  const tracked = pendingBilled + unbilled // from the bills, payments and spends saved here
   const limit = card.creditLimit || 0
   const available = card.availableCredit || 0
+  // The bank's own figures are the truth: limit − available credit is what is really owed, so use it when both are known.
+  const bankUsed = limit > 0 && available > 0 ? Math.max(0, limit - available) : null
+  const outstanding = bankUsed ?? tracked
   return {
     dates, prevStatement, unbilled, billed, billedIsEstimate: !hasStatement && !!dates.key, billedSpends,
     paidThisCycle, pendingBilled, status, payments, paymentsThisCycle,
     unbilledTxns, billedTxns,
     totalDue, outstanding, owing,
-    bankUsed: limit > 0 ? Math.max(0, limit - available) : null, // what the bank's available limit implies is in use
+    tracked, bankUsed,
     limit, available, utilPct: limit ? Math.min(100, Math.round(((limit - available) / limit) * 100)) : 0,
   }
 }
 
-// Spend that counts towards the annual-fee waiver: this card year (from the latest issue anniversary until today),
-// spends only, leaving out your own exclusions, card bill payments and the categories that earn no rewards.
-export function feeWaiverSpend(card, txns, now = new Date()) {
+// Spend that counts towards the annual-fee waiver. Each card year runs from one issue-date anniversary to the next and
+// is judged on its own: spends only, leaving out your own exclusions, card bill payments and the categories that earn no
+// rewards, less refunds. `years` lists the current card year and up to four earlier ones, newest first.
+export function feeWaiverSpend(card, txns, now = new Date(), threshold = card.feeWaiverThreshold || 0) {
   const issued = card.issueDate || card.annualFeeDate
   const base = issued ? new Date(issued) : null
-  let start = base && !Number.isNaN(+base) ? new Date(now.getFullYear(), base.getMonth(), base.getDate()) : new Date(now.getFullYear() - 1, now.getMonth(), now.getDate() + 1)
+  const hasBase = !!base && !Number.isNaN(+base)
+  let start = hasBase ? new Date(now.getFullYear(), base.getMonth(), base.getDate()) : new Date(now.getFullYear() - 1, now.getMonth(), now.getDate() + 1)
   if (start > now) start = new Date(start.getFullYear() - 1, start.getMonth(), start.getDate())
   const skip = excludedFor(card)
-  const spent = txns
-    .filter(t => t.type === 'debit' && !t.isExcluded && !isCardPayment(t) && !skip.includes(t.category) && new Date(t.date) >= start && new Date(t.date) <= now)
-    .reduce((a, t) => a + t.amount, 0)
-  return { spent, start, hasIssueDate: !!base }
+  const counts = t => !t.isExcluded && !isCardPayment(t) && !skip.includes(t.category)
+  const net = (from, to) => txns
+    .filter(t => counts(t) && new Date(t.date) >= from && new Date(t.date) < to)
+    .reduce((a, t) => a + (t.type === 'debit' ? t.amount : t.type === 'credit' ? -t.amount : 0), 0)
+  const yearEnd = from => new Date(from.getFullYear() + 1, from.getMonth(), from.getDate())
+  const years = []
+  for (let from = start, n = 0; n < 5 && (!hasBase || from >= new Date(base.getFullYear(), base.getMonth(), base.getDate())); n++, from = new Date(from.getFullYear() - 1, from.getMonth(), from.getDate())) {
+    const to = yearEnd(from)
+    const spent = Math.max(0, net(from, to > now ? new Date(now.getTime() + 1) : to))
+    years.push({ start: from, end: to, spent, met: threshold > 0 && spent >= threshold, current: n === 0 })
+  }
+  return { spent: years[0].spent, start, end: yearEnd(start), years, hasIssueDate: hasBase }
 }

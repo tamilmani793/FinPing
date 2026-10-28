@@ -5,6 +5,7 @@ import { IndianRupee, Calendar, Store, Wallet, CreditCard } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { cardTitle } from '../lib/cardCatalog'
+import { applyTxnToCard } from '../lib/ingestSMS'
 import { askConfirm } from '../lib/confirm'
 import { useOptions } from '../lib/options'
 import { BtnPrimary } from './UI'
@@ -16,6 +17,7 @@ const I = 17
 // Fix anything SMS parsing got wrong: direction, mode, category, card, amount...
 export default function TxnEditSheet({ txn, onClose }) {
   const { showNotification } = useStore()
+  const isNew = txn.id == null // a spend typed in by hand, e.g. one the SMS never showed
   const cards = useLiveQuery(() => db.creditCards.toArray()) || []
   const categoryList = useOptions('categories')
   const [f, setF] = useState({
@@ -33,6 +35,18 @@ export default function TxnEditSheet({ txn, onClose }) {
     if (!(amount > 0)) { showNotification('Enter a valid amount', 'error'); return }
     const [y, m, d] = f.date.split('-').map(Number)
     const old = new Date(txn.date)
+    if (isNew) {
+      const card = f.cardId === '' ? null : await db.creditCards.get(Number(f.cardId))
+      await db.transactions.add({
+        date: new Date(y, m - 1, d, new Date().getHours(), new Date().getMinutes()), amount, type: f.type, merchant: f.merchant.trim() || 'Unknown',
+        category: f.category, paymentMode: f.paymentMode, bank: card?.bank || '', accountLast4: card?.cardLast4 || null, cardId: card ? card.id : null,
+        rawSMS: null, parsedBy: 'manual', tags: [], notes: f.notes, isExcluded: f.isExcluded, createdAt: new Date(),
+      })
+      if (card && !['account', 'unknown'].includes(card.cardType)) await applyTxnToCard(card, f.type, amount)
+      showNotification('Transaction added', 'success')
+      onClose()
+      return
+    }
     const next = { merchant: f.merchant.trim() || 'Unknown', amount, type: f.type, category: f.category, paymentMode: f.paymentMode, notes: f.notes, isExcluded: f.isExcluded }
     // only what you actually changed counts as "yours" (and so beats the bank statement)
     const changed = ['merchant', 'amount', 'type', 'category', 'paymentMode', 'notes', 'isExcluded'].filter(k => next[k] !== (txn[k] ?? (k === 'notes' ? '' : txn[k])))
@@ -62,7 +76,7 @@ export default function TxnEditSheet({ txn, onClose }) {
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
         <div className="sheet-handle" />
-        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 12 }}>Edit transaction</div>
+        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 12 }}>{isNew ? 'Add transaction' : 'Edit transaction'}</div>
         {txn.rawSMS && <div className="sms-raw" style={{ marginBottom: 14 }}>{txn.rawSMS}</div>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -90,9 +104,9 @@ export default function TxnEditSheet({ txn, onClose }) {
 
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={onClose}>Cancel</button>
-            <BtnPrimary onClick={save} style={{ flex: 1 }}>Save changes</BtnPrimary>
+            <BtnPrimary onClick={save} style={{ flex: 1 }}>{isNew ? 'Add' : 'Save changes'}</BtnPrimary>
           </div>
-          <button className="btn-ghost" style={{ color: 'var(--red-dim)', borderColor: 'var(--red-border)', height: 46 }} onClick={remove}>Delete transaction</button>
+          {!isNew && <button className="btn-ghost" style={{ color: 'var(--red-dim)', borderColor: 'var(--red-border)', height: 46 }} onClick={remove}>Delete transaction</button>}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format, startOfMonth, endOfMonth, startOfDay, endOfDay, subDays, subMonths } from 'date-fns'
-import { Calendar, ChevronLeft, ChevronRight, CreditCard, FileText, Gift, Landmark, Pencil } from 'lucide-react'
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, CreditCard, FileText, Gift, Landmark, Pencil } from 'lucide-react'
 import StatementImportSheet from '../components/StatementImportSheet'
 import { db } from '../db/schema'
 import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../components/UI'
@@ -18,6 +18,8 @@ import { entityIdFor } from '../lib/relink'
 import { txnName } from '../lib/txnName'
 import { Segmented, TextField, Picker } from '../components/Fields'
 import Sortable from '../components/Sortable'
+import TxnEditSheet from '../components/TxnEditSheet'
+import { isNative, syncInbox } from '../lib/nativeSms'
 import { bySortOrder, saveOrder } from '../lib/sortOrder'
 
 const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
@@ -48,14 +50,27 @@ function Row({ k, v, color, bold, sub }) {
   )
 }
 
+// Tap the heading to fold a section away; which ones are folded is remembered on this phone
+const FOLD_KEY = 'finping_folded_sections'
+const readFolded = () => { try { return JSON.parse(localStorage.getItem(FOLD_KEY)) || [] } catch { return [] } }
 function Section({ title, right, children }) {
+  const [folded, setFolded] = useState(() => readFolded().includes(title))
+  const toggle = () => {
+    const next = !folded
+    setFolded(next)
+    const all = readFolded().filter(x => x !== title)
+    localStorage.setItem(FOLD_KEY, JSON.stringify(next ? [...all, title] : all))
+  }
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <div className="section-hdr" style={{ marginBottom: 6 }}>
-        <div className="label-caps" style={{ color: 'var(--gold-dim)' }}>{title}</div>
+      <div className="section-hdr" style={{ marginBottom: folded ? 0 : 6 }}>
+        <div role="button" tabIndex={0} aria-expanded={!folded} onClick={toggle} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggle() }} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1, minWidth: 0 }}>
+          <ChevronDown size={15} color="var(--gold-dim)" style={{ transform: folded ? 'rotate(-90deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }} />
+          <div className="label-caps" style={{ color: 'var(--gold-dim)' }}>{title}</div>
+        </div>
         {right}
       </div>
-      {children}
+      {!folded && children}
     </div>
   )
 }
@@ -129,7 +144,12 @@ function Portfolio({ cards, byCard, onOpen, onAdd }) {
   const accounts = cards.filter(c => c.cardType === 'account')
   const unknown = cards.filter(c => c.cardType === 'unknown')
   const stats = credit.map(c => cardStats(c, byCard[c.id] || []))
-  const totalOut = stats.reduce((s, x) => s + x.outstanding, 0)
+  // a limit shared by several cards is counted once
+  const seenGroups = new Set()
+  const totalOut = credit.reduce((sum, c, i) => {
+    if (c.limitGroup) { if (seenGroups.has(c.limitGroup)) return sum; seenGroups.add(c.limitGroup) }
+    return sum + stats[i].outstanding
+  }, 0)
   const totalDue = stats.reduce((s, x) => s + x.totalDue, 0)
   const groups = [['Credit cards', bySortOrder(credit)], ['Debit cards', bySortOrder(debit)], ['Bank accounts', bySortOrder(accounts)], ['Type not set', bySortOrder(unknown)]]
 
@@ -318,7 +338,15 @@ function PaymentDetails({ card, s }) {
 function Detail({ card, cards, byCard, onBack }) {
   const [editOpen, setEditOpen] = useState(false)
   const [stmtOpen, setStmtOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const { showNotification } = useStore()
   const txns = txnsFor(card, cards, byCard)
+  // look through the inbox again for recent bank SMS (those already applied are skipped), now and on request
+  const checkSms = async (say = false) => {
+    if (!isNative()) { if (say) showNotification('SMS can only be read in the Android app', 'error'); return }
+    try { const n = await syncInbox({ rescanDays: 45 }); if (say || n > 0) showNotification(n > 0 ? `${n} SMS added` : 'No new SMS found', n > 0 ? 'success' : undefined) } catch { if (say) showNotification('Could not read SMS', 'error') }
+  }
+  useEffect(() => { checkSms() }, [card.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const credit = isCredit(card)
   const linkedAccount = card.cardType === 'debit' && card.linkedAccountId != null ? cards.find(c => c.id === card.linkedAccountId) : null
   const linkedCards = card.cardType === 'account' ? cards.filter(c => c.linkedAccountId === card.id) : []
@@ -429,9 +457,9 @@ function Detail({ card, cards, byCard, onBack }) {
               <Row k="Total amount due" sub={s.billed > 0 ? `${formatINR(s.billed)} billed − ${formatINR(s.paidThisCycle)} paid${s.billedIsEstimate ? ' · estimated' : ''}` : 'nothing billed yet'} v={formatINR(s.totalDue)} color={s.totalDue > 0 ? 'var(--red-dim)' : 'var(--mint-dim)'} />
               <Row k="+ Spends after the statement" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} />
               <div className="divider" />
-              <Row k="Current outstanding" v={formatINR(s.outstanding)} bold />
-              {s.bankUsed != null && Math.abs(s.bankUsed - s.outstanding) >= 1 && (
-                <Row k="Limit in use per bank" sub="limit − available limit; may include interest, fees or spends the SMS did not show" v={formatINR(s.bankUsed)} color="var(--txt2)" />
+              <Row k="Current outstanding" sub={s.bankUsed != null ? 'credit limit − available credit' : undefined} v={formatINR(s.outstanding)} bold />
+              {s.bankUsed != null && Math.abs(s.tracked - s.outstanding) >= 1 && (
+                <Row k="Tracked from bills and spends" sub="what the saved bills, payments and spends add up to" v={formatINR(s.tracked)} color="var(--txt2)" />
               )}
             </Section>
 
@@ -448,7 +476,7 @@ function Detail({ card, cards, byCard, onBack }) {
             </Section>
 
             {/* Spend */}
-            <Section title="Spend details">
+            <Section title="Spend details" right={<span style={{ display: 'flex', gap: 12, fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }}><span onClick={() => checkSms(true)}>↻ Check SMS</span><span onClick={() => setAddOpen(true)}>＋ Add</span></span>}>
               <Row k="Unbilled spends" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} bold />
               <Row k="Billed in last statement" sub={s.prevStatement ? `${fmtS(s.prevStatement)} – ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.billedSpends)} />
               <Row k="Spent this month" v={formatINR(spentMonth)} />
@@ -473,13 +501,17 @@ function Detail({ card, cards, byCard, onBack }) {
               <div className="divider" />
               <Row k="Annual fee" sub={!card.isLTF && card.annualFee > 0 ? `${formatINR(card.annualFee)} + 18% GST ${formatINR(card.annualFeeGST || 0)}` : undefined} v={card.isLTF ? 'Lifetime free' : `${formatINR(card.totalAnnualFee || 0)} / yr`} />
               {!card.isLTF && card.feeWaiverThreshold > 0 && (() => {
-                const w = feeWaiverSpend(card, txns)
+                const w = feeWaiverSpend(card, txns, new Date(), card.feeWaiverThreshold)
                 const left = Math.max(0, card.feeWaiverThreshold - w.spent)
                 return (
                   <>
                     <Row k="Fee waiver spend" v={`${formatINR(w.spent)} / ${formatINR(card.feeWaiverThreshold)}`} color={left === 0 ? 'var(--mint-dim)' : undefined}
                       sub={left === 0 ? 'Target reached: the annual fee is waived ✓' : `${formatINR(left)} more to waive the fee · counted since ${fmtD(w.start)}${w.hasIssueDate ? '' : ' (last 12 months: add the issue date for the exact card year)'}`} />
                     <ProgressBar pct={Math.min(100, Math.round(w.spent / card.feeWaiverThreshold * 100))} variant={left === 0 ? 'mint' : 'amber'} />
+                    {w.hasIssueDate && <Row k="This card year" v={`${fmtD(w.start)} – ${fmtD(new Date(w.end.getTime() - 86400000))}`} />}
+                    {w.years.slice(1).map(y => (
+                      <Row key={+y.start} k={`${fmtD(y.start)} – ${fmtD(new Date(y.end.getTime() - 86400000))}`} v={`${formatINR(y.spent)} ${y.met ? '✓ waived' : '✗ not met'}`} color={y.met ? 'var(--mint-dim)' : 'var(--red-dim)'} />
+                    ))}
                   </>
                 )
               })()}
@@ -504,6 +536,7 @@ function Detail({ card, cards, byCard, onBack }) {
         )}
       </div>
 
+      {addOpen && <TxnEditSheet txn={{ type: 'debit', date: new Date(), amount: '', merchant: '', category: 'General', paymentMode: card.cardType === 'account' ? 'Bank' : 'Credit Card', cardId: card.id }} onClose={() => setAddOpen(false)} />}
       {editOpen && <CardEditSheet card={card} cards={cards} onClose={() => setEditOpen(false)} />}
       {stmtOpen && <StatementImportSheet account={card} onClose={() => setStmtOpen(false)} />}
     </div>
