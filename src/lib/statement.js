@@ -297,7 +297,7 @@ export function statementRows(table) {
     const amount = debit ? debit : credit
     rows.push({
       date, type, amount, narration, merchant: info.merchant === 'Unknown' ? (fallbackName(narration) || (/^\d+$/.test(narration.trim()) ? (type === 'debit' ? 'Cheque / bank debit' : 'Bank credit') : 'Unknown')) : info.merchant, mode: info.mode,
-      category: canonCategory(classifyCategory(info.merchant, narration)),
+      category: type === 'credit' && /cash ?back/i.test(narration) ? 'Cashback' : canonCategory(classifyCategory(info.merchant, narration)),
       vpa: info.vpa, note: info.note, ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
       balance: c.balance >= 0 ? parseBalance(r[c.balance]) : null,
       key: `${date.toISOString().slice(0, 10)}|${type}|${amount}|${c.balance >= 0 ? parseBalance(r[c.balance]) : norm(narration).slice(0, 60)}`,
@@ -305,6 +305,7 @@ export function statementRows(table) {
   }
   if (!rows.length) throw new Error('The table was found, but no dated rows with an amount were readable in it.')
   rows.check = checkRows(rows, table.summary)
+  rows.cardSummary = table.cardSummary || null
   return rows
 }
 
@@ -422,7 +423,7 @@ export function correction(row, txn) {
   if (unnamed && row.merchant && row.merchant !== 'Unknown') fields.merchant = row.merchant // never leave a nameless entry nameless
   if (!PROTECTED(txn) && txn.parsedBy !== 'manual') {
     if (row.merchant && row.merchant !== 'Unknown' && (!mine.includes('merchant') || unnamed)) fields.merchant = row.merchant
-    if ((!txn.category || ['General', 'Other', 'Unknown'].includes(txn.category)) && !mine.includes('category')) fields.category = row.category
+    if (((!txn.category || ['General', 'Other', 'Unknown'].includes(txn.category)) || (row.category === 'Cashback' && txn.type === 'credit')) && !mine.includes('category')) fields.category = row.category
   }
   return fields
 }
@@ -454,6 +455,34 @@ export async function readStatement({ file, text, password }) {
     else if (isOle) table = (await import('./statementXls')).parseXls(await file.arrayBuffer())
     else if (/\.xlsx$/i.test(file.name) || file.type.includes('spreadsheetml')) table = await parseXlsx(await file.arrayBuffer())
     else table = parseDelimited(await file.text())
-  } else table = parseDelimited(text)
+  } else { const { body, summary } = splitSummary(text); table = parseDelimited(body); if (summary) table.cardSummary = summary }
   return statementRows(table)
+}
+
+// A pasted statement may start with one summary line carrying the card's bill details, e.g.
+//   #SUMMARY, statementDate=15/10/2026, totalDue=998.00, minDue=200, dueDate=04/11/2026, rewardPoints=96, creditLimit=100000, availableCredit=90000
+// (statementDate and totalDue are required; the rest is optional.)
+export function splitSummary(text) {
+  const lines = String(text || '').split(/\r?\n/)
+  const i = lines.findIndex(l => /^\s*#\s*summary\b/i.test(l))
+  if (i < 0) return { body: text, summary: null }
+  const kv = {}
+  for (const part of lines[i].replace(/^\s*#\s*summary\s*[,;\t:]?/i, '').split(/[,;\t]/)) {
+    const m = part.match(/^\s*([A-Za-z ]+?)\s*[=:]\s*(.+?)\s*$/)
+    if (m) kv[m[1].toLowerCase().replace(/[^a-z]/g, '')] = m[2]
+  }
+  const num = v => { const n = parseFloat(String(v ?? '').replace(/[₹,\s]|rs\.?|inr/gi, '')); return Number.isFinite(n) ? n : null }
+  const date = v => (v ? parseStatementDate(v) : null)
+  const summary = {
+    statementDate: date(kv.statementdate || kv.stmtdate),
+    totalDue: num(kv.totaldue ?? kv.totalamountdue ?? kv.due),
+    minDue: num(kv.mindue ?? kv.minimumdue ?? kv.minimumamountdue),
+    dueDate: date(kv.duedate),
+    rewardPoints: num(kv.rewardpoints ?? kv.points),
+    creditLimit: num(kv.creditlimit ?? kv.totallimit),
+    availableCredit: num(kv.availablecredit ?? kv.availablelimit),
+  }
+  for (const k of Object.keys(summary)) if (summary[k] == null) delete summary[k]
+  if (!summary.statementDate || summary.totalDue == null) throw new Error('The #SUMMARY line needs statementDate=dd/mm/yyyy and totalDue=amount')
+  return { body: lines.filter((_, k) => k !== i).join('\n'), summary }
 }

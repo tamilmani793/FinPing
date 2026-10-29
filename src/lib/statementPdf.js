@@ -249,6 +249,35 @@ export function findSummary(lines) {
   return null
 }
 
+// A credit card statement's own first-page summary (HDFC layout): statement date, total amount due, minimum due, due date and
+// the credit limits. Used to bring the card's bill details up to what the bank printed.
+const num = x => parseFloat(String(x).replace(/,/g, ''))
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 }
+const dateOf = t => { const m = String(t).match(/(\d{1,2})\s+([A-Za-z]{3})[a-z]*,?\s+(\d{4})/); return m && MONTHS[m[2].toLowerCase()] != null ? new Date(+m[3], MONTHS[m[2].toLowerCase()], +m[1], 12) : null }
+export function findCardSummary(lines) {
+  const text = lines.filter(l => l.page <= 2).map(l => l.map(c => c.text).join(' | '))
+  const out = {}
+  const sd = text.find(t => /^statement date\b/i.test(t))
+  if (sd) out.statementDate = dateOf(sd)
+  // "C | 1,801.65 | C | 1,802.00 | + | C | 9,584.00 | + | C | 0.00 | = | C | 9,584.00": the amount after the "=" is the total due
+  const eq = text.find(t => /\|\s*=\s*\|/.test(t) && /[\d,]+\.\d\d/.test(t))
+  if (eq) { const m = eq.split(/\|\s*=\s*\|/)[1].match(/[\d,]*\d\.\d\d/); if (m) out.totalDue = num(m[0]) }
+  // "C | 480.00 | 04 Nov, 2026": minimum due and due date
+  const md = text.find(t => /\d{1,2}\s+[A-Za-z]{3},?\s+\d{4}/.test(t) && /[\d,]+\.\d\d/.test(t) && !/^statement date|billing period/i.test(t) && !/=/.test(t))
+  if (md) { out.dueDate = dateOf(md); const m = md.match(/[\d,]*\d\.\d\d/); if (m) out.minDue = num(m[0]) }
+  // "C | 3,66,000 | C | 3,53,787 | C | 1,46,400": total limit, available limit, available cash limit
+  const lim = text.find(t => /^[C₹\s|]*\d[\d,]{4,}[\s|C₹]+\d[\d,]{3,}[\s|C₹]+\d[\d,]{3,}[\s|]*$/.test(t))
+  if (lim) { const n = lim.match(/\d[\d,]*\d/g).map(num); out.creditLimit = n[0]; out.availableCredit = n[1] }
+  // reward points: a row "opening | earned | disbursed | lapsed" under the Reward Points heading, then the closing balance on its own line
+  const ri = text.findIndex(t => /reward points/i.test(t) && /opening balance/i.test(t))
+  if (ri >= 0) {
+    for (let k = ri + 1; k < Math.min(text.length, ri + 5); k++) {
+      if (/^\d[\d,]*\s*\|\s*\d[\d,]*\s*\|\s*\d[\d,]*\s*\|\s*\d[\d,]*$/.test(text[k]) && /^\d[\d,]*$/.test(text[k + 1] || '')) { out.rewardPoints = num(text[k + 1]); break }
+    }
+  }
+  return out.totalDue != null && out.statementDate ? out : null
+}
+
 // `pdfjs` can be handed in (tests); the app loads it on first use so it is not part of the normal start-up
 export async function parsePdf(arrayBuffer, password, pdfjs) {
   if (!pdfjs) {
@@ -272,5 +301,6 @@ export async function parsePdf(arrayBuffer, password, pdfjs) {
   if (!lines.length) throw new Error('This PDF has no readable text (it may be a scanned image). Download the statement as CSV or Excel instead.')
   const table = linesToTable(lines)
   table.summary = findSummary(lines)
+  table.cardSummary = findCardSummary(lines)
   return table
 }

@@ -175,7 +175,7 @@ export default function Profile() {
           <div style={{ fontSize: 12, marginBottom: 10 }}>Last backup: <b>{last ? format(last, 'd MMM yyyy, h:mm a') : 'never'}</b></div>
           <div style={{ display: 'flex', gap: 8 }}>
             <BtnPrimary onClick={doBackup} style={{ flex: 1 }}><Download size={16} /> {busy ? 'Working…' : 'Export backup'}</BtnPrimary>
-            <button className="btn-secondary" style={{ flex: 1, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }} disabled={busy} onClick={() => restoreInput.current?.click()}><Upload size={16} /> Import backup</button>
+            <button className="btn-secondary" style={{ flex: 1, height: 52, fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }} disabled={busy} onClick={() => restoreInput.current?.click()}><Upload size={16} /> Import backup</button>
           </div>
           <input ref={restoreInput} type="file" accept="application/json,.json" onChange={onPickBackup} style={{ display: 'none' }} />
         </div>

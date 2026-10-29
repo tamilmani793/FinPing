@@ -1,6 +1,8 @@
 import { db } from '../db/schema'
 import { reconcile, correction, newEntry } from './statement'
 import { applyTxnToCard } from './ingestSMS'
+import { cycleDates } from './cycle'
+import { setLimitFields } from './cards'
 
 // The saved entries a bank account's statement should agree with: the account's own and those of its linked debit cards.
 export async function accountEntries(account) {
@@ -29,11 +31,12 @@ export async function planStatement(account, rows) {
   // The statement is the truth: every line on it is kept, even one whose earlier SMS entry you deleted (so totals agree with the bank's)
   const plan = reconcile(rows, await accountEntries(account), [])
   plan.check = rows.check || null
+  plan.cardSummary = rows.cardSummary || null
   return plan
 }
 
 // Applies the plan: corrects matched entries, adds the missing ones, removes the chosen extras.
-export async function applyStatement(account, plan, { removeIds = [], setBalance = true } = {}) {
+export async function applyStatement(account, plan, { removeIds = [], setBalance = true, updateBill = false } = {}) {
   await db.transaction('rw', db.transactions, db.creditCards, async () => {
     for (const { row, txn } of plan.matched) {
       const fields = correction(row, txn)
@@ -51,6 +54,21 @@ export async function applyStatement(account, plan, { removeIds = [], setBalance
       await db.transactions.bulkDelete(removeIds)
     }
     if (setBalance && plan.closingBalance != null && account.cardType === 'account') await db.creditCards.update(account.id, { accountBalance: plan.closingBalance })
+    if (updateBill && plan.cardSummary && (!account.cardType || account.cardType === 'credit')) await applyCardSummary(account, plan.cardSummary)
   })
   return { corrected: plan.matched.length, added: plan.toAdd.length, removed: removeIds.length }
+}
+
+// Brings a credit card's bill details up to the figures its statement printed: total due, minimum due, statement day and limits.
+async function applyCardSummary(card, sm) {
+  const fresh = await db.creditCards.get(card.id)
+  const patch = { statementBalance: sm.totalDue, pendingDue: sm.totalDue, minimumDue: sm.minDue || 0, unbilled: 0, statusPaid: sm.totalDue <= 0 }
+  if (!fresh.cycleSet || !(Number(fresh.billingCycleDate) >= 1)) { patch.billingCycleDate = String(sm.statementDate.getDate()); patch.cycleSet = true }
+  if (sm.rewardPoints != null) patch.rewardPoints = sm.rewardPoints
+  if (sm.dueDate && !(Number(fresh.paymentDueDays) > 0)) patch.paymentDueDays = Math.max(0, Math.round((sm.dueDate - sm.statementDate) / 86400000))
+  const merged = { ...fresh, ...patch }
+  const key = cycleDates(merged, sm.statementDate).key || null
+  patch.statementCycleKey = key; patch.statusCycle = key
+  await db.creditCards.update(card.id, patch)
+  if (sm.creditLimit > 0) await setLimitFields(merged, { creditLimit: sm.creditLimit, availableCredit: sm.availableCredit })
 }

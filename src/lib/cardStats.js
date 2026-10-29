@@ -58,15 +58,20 @@ export function cardStats(card, txns, now = new Date()) {
 
   // Current outstanding = what is still due on the bill + everything spent after it.
   const totalDue = pendingBilled
-  const outstanding = pendingBilled + unbilled
+  const tracked = pendingBilled + unbilled // from the bills, payments and spends saved here
   const limit = card.creditLimit || 0
   const available = card.availableCredit || 0
+  // The bank's own figures are the truth: limit − available credit is what is really owed, so use it when both are known.
+  const bankUsed = limit > 0 && available > 0 ? Math.max(0, limit - available) : null
+  // Cards that share one limit share one available-credit figure, so limit − available is the whole pool's use, not this card's:
+  // such a card shows what ITS OWN bills and spends add up to, and the pool's figure is kept separately.
+  const outstanding = card.limitGroup ? tracked : (bankUsed ?? tracked)
   return {
     dates, prevStatement, unbilled, billed, billedIsEstimate: !hasStatement && !!dates.key, billedSpends,
     paidThisCycle, pendingBilled, status, payments, paymentsThisCycle,
     unbilledTxns, billedTxns,
     totalDue, outstanding, owing,
-    bankUsed: limit > 0 ? Math.max(0, limit - available) : null, // what the bank's available limit implies is in use
+    tracked, bankUsed, shared: !!card.limitGroup,
     limit, available, utilPct: limit ? Math.min(100, Math.round(((limit - available) / limit) * 100)) : 0,
   }
 }

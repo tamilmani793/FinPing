@@ -16,6 +16,7 @@ export default function StatementImportSheet({ account, onClose }) {
   const [busy, setBusy] = useState(false)
   const [plan, setPlan] = useState(null)
   const [setBal, setSetBal] = useState(true)
+  const [updBill, setUpdBill] = useState(true)
 
   const [file, setFile] = useState(null)       // a chosen file waiting for its password
   const [needPw, setNeedPw] = useState(false)
@@ -40,13 +41,12 @@ export default function StatementImportSheet({ account, onClose }) {
     try {
       // the statement replaces everything saved for its dates: whatever it does not show is removed
       const removeIds = plan.extras.map(x => x.txn.id)
-      const r = await applyStatement(account, plan, { removeIds, setBalance: setBal })
+      const r = await applyStatement(account, plan, { removeIds, setBalance: setBal, updateBill: updBill })
       showNotification(`${r.corrected} corrected · ${r.added} added · ${r.removed} removed`, 'success')
       onClose()
     } catch (e) { showNotification(e.message || 'Import failed', 'error'); setBusy(false) }
   }
 
-  const removing = plan ? plan.extras.length : 0
   return (
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28, maxHeight: '88vh', overflowY: 'auto' }}>
@@ -95,24 +95,14 @@ export default function StatementImportSheet({ account, onClose }) {
               <div><b style={{ color: 'var(--mint-dim)' }}>{plan.matched.length}</b> saved entries matched · corrected with the bank's details</div>
               <div><b style={{ color: 'var(--gold-dim)' }}>{plan.toAdd.length}</b> on the statement but missing · will be added</div>
               {plan.skipped?.length > 0 && <div><b style={{ color: 'var(--txt)' }}>{plan.skipped.length}</b> line{plan.skipped.length === 1 ? '' : 's'} you deleted earlier stay deleted</div>}
-              <div><b style={{ color: 'var(--red-dim)' }}>{plan.extras.length}</b> saved for these dates but not on the statement · will be removed</div>
-              <div style={{ color: 'var(--txt2)', fontSize: 11 }}>Entries on other dates are left as they are.</div>
+              <div style={{ color: 'var(--txt2)', fontSize: 11 }}>Everything saved for these dates is replaced by the statement. Entries on other dates are left as they are.</div>
             </div>
 
-            {plan.extras.length > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <div className="label-caps" style={{ marginBottom: 6 }}>Removed · not on your statement</div>
-                {plan.extras.map(({ txn, keep, duplicateOf }) => (
-                  <div key={txn.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)', fontSize: 12 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.merchant}</div>
-                      <div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{fmtD(txn.date)}{duplicateOf ? ' · looks like a duplicate' : ''}{keep ? ' · typed by you / loan entry' : ''}</div>
-                    </div>
-                    <div style={{ fontWeight: 700, color: txn.type === 'debit' ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{txn.type === 'debit' ? '−' : '+'}{formatINR(txn.amount)}</div>
-                  </div>
-                ))}
-                <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>The statement replaces everything saved for its dates, so the totals match the bank's. Other dates are not touched.</div>
-              </div>
+            {plan.cardSummary && (!account.cardType || account.cardType === 'credit') && (
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, marginBottom: 12 }}>
+                <input type="checkbox" checked={updBill} onChange={e => setUpdBill(e.target.checked)} style={{ marginTop: 3 }} />
+                <span>Update this card's bill from the statement: total due <b>{formatINR(plan.cardSummary.totalDue)}</b>{plan.cardSummary.minDue != null ? `, minimum ${formatINR(plan.cardSummary.minDue)}` : ''}{plan.cardSummary.dueDate ? `, due ${fmtD(plan.cardSummary.dueDate)}` : ''}, statement of {fmtD(plan.cardSummary.statementDate)}{plan.cardSummary.rewardPoints != null ? `, ${plan.cardSummary.rewardPoints} reward points` : ''}{plan.cardSummary.creditLimit ? `, limit ${formatINR(plan.cardSummary.creditLimit)} (available ${formatINR(plan.cardSummary.availableCredit)})` : ''}</span>
+              </label>
             )}
 
             {plan.closingBalance != null && account.cardType === 'account' && (
@@ -124,7 +114,7 @@ export default function StatementImportSheet({ account, onClose }) {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setPlan(null)}>Back</button>
-              <BtnPrimary onClick={run} style={{ flex: 2 }}>{busy ? 'Importing…' : (removing > 0 ? `Import · remove ${removing}` : 'Import')}</BtnPrimary>
+              <BtnPrimary onClick={run} style={{ flex: 2 }}>{busy ? 'Importing…' : 'Import'}</BtnPrimary>
             </div>
           </>
         )}
