@@ -515,7 +515,7 @@ function Detail({ card, cards, byCard, onBack }) {
 
         {!credit && (
           <Section title={card.cardType === 'account' ? 'Account transactions' : 'Transactions'}>
-            <FilteredTxnList card={card} list={spends} cards={cards} emptyText="No transactions yet for this card" />
+            <FilteredTxnList card={card} list={txns} cards={cards} emptyText="No transactions yet for this card" />
           </Section>
         )}
 
