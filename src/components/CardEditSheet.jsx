@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { CreditCard, Landmark, Globe, Hash, IndianRupee, Calendar, Percent, Award, Link2, Gift, User, Sparkles } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { saveCardEdit, groupOf, nextAnniversary } from '../lib/cards'
+import { syncCardAmounts } from '../lib/cardSync'
 import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import { BtnPrimary } from './UI'
 import { Field, FormHeading, Segmented, TextField, Picker } from './Fields'
@@ -54,6 +55,20 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
     feeType: card.annualFee > 0 || card.totalAnnualFee > 0 || card.isLTF === false ? 'annual' : 'ltf',
     annualFee: str(card.annualFee > 0 ? card.annualFee : card.totalAnnualFee), feeWaiverThreshold: str(card.feeWaiverThreshold),
   })
+  // Open with the amounts that match the statement and the transactions (not stale typed-in values): unbilled spends, current
+  // outstanding, pending due and, with a shared limit, the pool's available credit
+  useEffect(() => {
+    if (isNew || (card.cardType && card.cardType !== 'credit')) return
+    let live = true
+    syncCardAmounts(card.id).then(c => {
+      if (!live || !c) return
+      setForm(f => ({
+        ...f, creditLimit: str(c.creditLimit), availableCredit: str(c.availableCredit), statementBalance: str(c.statementBalance),
+        pendingDue: str(c.pendingDue), minimumDue: str(c.minimumDue), unbilled: str(c.unbilled), currentBalance: str(c.currentBalance), rewardPoints: str(c.rewardPoints),
+      }))
+    }).catch(() => {})
+    return () => { live = false }
+  }, [card.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const isCredit = form.cardType === 'credit'
   const isDebit = form.cardType === 'debit'
   const cardNames = isDebit ? debitNames : creditNames // what the Card name dropdown offers for this type

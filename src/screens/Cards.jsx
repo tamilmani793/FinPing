@@ -19,6 +19,7 @@ import { txnName } from '../lib/txnName'
 import { Segmented, TextField, Picker } from '../components/Fields'
 import Sortable from '../components/Sortable'
 import TxnEditSheet from '../components/TxnEditSheet'
+import { syncCardAmounts } from '../lib/cardSync'
 import { isNative, syncInbox } from '../lib/nativeSms'
 import { bySortOrder, saveOrder } from '../lib/sortOrder'
 
@@ -346,6 +347,7 @@ function Detail({ card, cards, byCard, onBack }) {
     try { const n = await syncInbox({ rescanDays: 45 }); if (say || n > 0) showNotification(n > 0 ? `${n} SMS added` : 'No new SMS found', n > 0 ? 'success' : undefined) } catch { if (say) showNotification('Could not read SMS', 'error') }
   }
   useEffect(() => { checkSms() }, [card.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!card.cardType || card.cardType === 'credit') syncCardAmounts(card.id).catch(() => {}) }, [card.id, (byCard[card.id] || []).length]) // eslint-disable-line react-hooks/exhaustive-deps
   const credit = isCredit(card)
   const linkedAccount = card.cardType === 'debit' && card.linkedAccountId != null ? cards.find(c => c.id === card.linkedAccountId) : null
   const linkedCards = card.cardType === 'account' ? cards.filter(c => c.linkedAccountId === card.id) : []

@@ -5,6 +5,7 @@ import { BtnPrimary, formatINR } from './UI'
 import { cardTitle } from '../lib/cardCatalog'
 import { readStatement } from '../lib/statement'
 import { planStatement, applyStatement } from '../lib/statementImport'
+import { syncCardAmounts } from '../lib/cardSync'
 
 const fmtD = d => format(new Date(d), 'd MMM yyyy')
 
@@ -42,6 +43,7 @@ export default function StatementImportSheet({ account, onClose }) {
       // the statement replaces everything saved for its dates: whatever it does not show is removed
       const removeIds = plan.extras.map(x => x.txn.id)
       const r = await applyStatement(account, plan, { removeIds, setBalance: setBal, updateBill: updBill })
+      if (!account.cardType || account.cardType === 'credit') await syncCardAmounts(account.id) // unbilled, outstanding and the shared limit's available credit follow the new entries
       showNotification(`${r.corrected} corrected · ${r.added} added · ${r.removed} removed`, 'success')
       onClose()
     } catch (e) { showNotification(e.message || 'Import failed', 'error'); setBusy(false) }
