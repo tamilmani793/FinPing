@@ -144,12 +144,7 @@ function Portfolio({ cards, byCard, onOpen, onAdd }) {
   const accounts = cards.filter(c => c.cardType === 'account')
   const unknown = cards.filter(c => c.cardType === 'unknown')
   const stats = credit.map(c => cardStats(c, byCard[c.id] || []))
-  // a limit shared by several cards is counted once
-  const seenGroups = new Set()
-  const totalOut = credit.reduce((sum, c, i) => {
-    if (c.limitGroup) { if (seenGroups.has(c.limitGroup)) return sum; seenGroups.add(c.limitGroup) }
-    return sum + stats[i].outstanding
-  }, 0)
+  const totalOut = stats.reduce((s, x) => s + x.outstanding, 0)
   const totalDue = stats.reduce((s, x) => s + x.totalDue, 0)
   const groups = [['Credit cards', bySortOrder(credit)], ['Debit cards', bySortOrder(debit)], ['Bank accounts', bySortOrder(accounts)], ['Type not set', bySortOrder(unknown)]]
 
@@ -457,9 +452,9 @@ function Detail({ card, cards, byCard, onBack }) {
               <Row k="Total amount due" sub={s.billed > 0 ? `${formatINR(s.billed)} billed − ${formatINR(s.paidThisCycle)} paid${s.billedIsEstimate ? ' · estimated' : ''}` : 'nothing billed yet'} v={formatINR(s.totalDue)} color={s.totalDue > 0 ? 'var(--red-dim)' : 'var(--mint-dim)'} />
               <Row k="+ Spends after the statement" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} />
               <div className="divider" />
-              <Row k="Current outstanding" sub={s.bankUsed != null ? 'credit limit − available credit' : undefined} v={formatINR(s.outstanding)} bold />
-              {s.bankUsed != null && Math.abs(s.tracked - s.outstanding) >= 1 && (
-                <Row k="Tracked from bills and spends" sub="what the saved bills, payments and spends add up to" v={formatINR(s.tracked)} color="var(--txt2)" />
+              <Row k="Current outstanding" v={formatINR(s.outstanding)} bold />
+              {s.bankUsed != null && Math.abs(s.bankUsed - s.outstanding) >= 1 && (
+                <Row k="Limit in use per bank" sub="limit − available limit; may include interest, fees or spends the SMS did not show" v={formatINR(s.bankUsed)} color="var(--txt2)" />
               )}
             </Section>
 

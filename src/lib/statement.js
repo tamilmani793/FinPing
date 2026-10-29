@@ -135,6 +135,8 @@ function parseBalance(v) {
   if (n == null) return null
   return /^-|^\(|\bdr$/i.test(raw.replace(/\s/g, '')) ? -n : n
 }
+// every amount written inside a cell, with its sign
+const moneyTokens = v => (String(v ?? '').match(/[+-]?\(?[\d,]*\d\.\d{1,2}\)?/g) || []).map(x => { const n = parseFloat(x.replace(/[,()+]/g, '')); return /^\(/.test(x) ? -Math.abs(n) : n })
 const isCr = v => /cr$/i.test(String(v ?? '').trim())
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9/ ]/g, ' ').replace(/\s+/g, ' ').trim()
@@ -246,6 +248,19 @@ export function statementRows(table) {
     if (!date) continue
     let debit = c.debit >= 0 ? parseMoney(r[c.debit]) : null
     let credit = c.credit >= 0 ? parseMoney(r[c.credit]) : null
+    if (c.debit >= 0 && c.credit >= 0) {
+      // The two amount columns can sit so close that the PDF joins them into one cell ("0.00 1.00" = withdrawal, deposit)
+      const dt = moneyTokens(r[c.debit]), ct = moneyTokens(r[c.credit])
+      if (dt.length === 2 && !ct.length) { debit = Math.abs(dt[0]); credit = Math.abs(dt[1]); if (dt[0] < 0 && !dt[1]) { credit = Math.abs(dt[0]); debit = null } }
+      else if (ct.length === 2 && !dt.length) { debit = Math.abs(ct[0]); credit = Math.abs(ct[1]) }
+      // a negative withdrawal is a reversal (money back in), a negative deposit the other way round
+      const dn = dt.length ? dt.find(x => x !== 0) : null, cn = ct.length ? ct.find(x => x !== 0) : null
+      if (dt.length === 2 && dn < 0 && dt[1] === 0) { credit = -dn; debit = null }
+      else if (dt.length === 1 && dn < 0 && !(credit > 0)) { credit = -dn; debit = null }
+      else if (ct.length === 1 && cn < 0 && !(debit > 0)) { debit = -cn; credit = null }
+    }
+    if (!(debit > 0)) debit = null
+    if (!(credit > 0)) credit = null
     if (c.amount >= 0 && debit == null && credit == null) {
       const a = parseMoney(r[c.amount])
       const dir = (c.type >= 0 ? r[c.type] : r[c.amount]) || ''
@@ -266,7 +281,7 @@ export function statementRows(table) {
     const type = debit > 0 ? 'debit' : 'credit'
     const amount = debit > 0 ? debit : credit
     rows.push({
-      date, type, amount, narration, merchant: info.merchant === 'Unknown' ? (fallbackName(narration) || 'Unknown') : info.merchant, mode: info.mode,
+      date, type, amount, narration, merchant: info.merchant === 'Unknown' ? (fallbackName(narration) || (/^\d+$/.test(narration.trim()) ? (type === 'debit' ? 'Cheque / bank debit' : 'Bank credit') : 'Unknown')) : info.merchant, mode: info.mode,
       category: canonCategory(classifyCategory(info.merchant, narration)),
       vpa: info.vpa, note: info.note, ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
       balance: c.balance >= 0 ? parseBalance(r[c.balance]) : null,

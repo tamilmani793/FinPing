@@ -28,7 +28,7 @@ export default function StatementImportSheet({ account, onClose }) {
       const rows = await readStatement({ file: f, text, password })
       const p = await planStatement(account, rows)
       setPlan(p)
-      setDrop(Object.fromEntries(p.extras.map(x => [x.txn.id, !x.keep])))
+      setDrop(Object.fromEntries(p.extras.map(x => [x.txn.id, true]))) // the statement is the truth: everything it does not show goes unless you untick it
       setFile(null); setNeedPw(false); setPw('') // the password is not kept
     } catch (e) {
       if (e.needPassword) { setFile(f); setNeedPw(true); setPw(''); showNotification(e.message, e.wrong ? 'error' : undefined) }
@@ -100,12 +100,12 @@ export default function StatementImportSheet({ account, onClose }) {
                     <input type="checkbox" checked={!!drop[txn.id]} onChange={e => setDrop({ ...drop, [txn.id]: e.target.checked })} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.merchant}</div>
-                      <div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{fmtD(txn.date)}{duplicateOf ? ' · looks like a duplicate' : ''}{keep ? ' · typed by you / loan entry, kept' : ''}</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{fmtD(txn.date)}{duplicateOf ? ' · looks like a duplicate' : ''}{keep ? ' · typed by you / loan entry (untick to keep)' : ''}</div>
                     </div>
                     <div style={{ fontWeight: 700, color: txn.type === 'debit' ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{txn.type === 'debit' ? '−' : '+'}{formatINR(txn.amount)}</div>
                   </label>
                 ))}
-                <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>Ticked entries are removed. Untick any that you know are real.</div>
+                <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>Ticked entries are removed so only the statement's entries remain. Untick any you want to keep (your own entries, loan postings).</div>
               </div>
             )}
 

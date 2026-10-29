@@ -58,18 +58,15 @@ export function cardStats(card, txns, now = new Date()) {
 
   // Current outstanding = what is still due on the bill + everything spent after it.
   const totalDue = pendingBilled
-  const tracked = pendingBilled + unbilled // from the bills, payments and spends saved here
+  const outstanding = pendingBilled + unbilled
   const limit = card.creditLimit || 0
   const available = card.availableCredit || 0
-  // The bank's own figures are the truth: limit − available credit is what is really owed, so use it when both are known.
-  const bankUsed = limit > 0 && available > 0 ? Math.max(0, limit - available) : null
-  const outstanding = bankUsed ?? tracked
   return {
     dates, prevStatement, unbilled, billed, billedIsEstimate: !hasStatement && !!dates.key, billedSpends,
     paidThisCycle, pendingBilled, status, payments, paymentsThisCycle,
     unbilledTxns, billedTxns,
     totalDue, outstanding, owing,
-    tracked, bankUsed,
+    bankUsed: limit > 0 ? Math.max(0, limit - available) : null, // what the bank's available limit implies is in use
     limit, available, utilPct: limit ? Math.min(100, Math.round(((limit - available) / limit) * 100)) : 0,
   }
 }
