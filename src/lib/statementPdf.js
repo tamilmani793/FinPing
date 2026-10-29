@@ -194,7 +194,7 @@ function foldContinuations(table, c, pages, ys = []) {
       if (blocks.has(u.i)) continue
       let best = null
       for (const d of dates) if (pages[d.i] === pages[u.i] && (!best || Math.abs(ys[d.i] - ys[u.i]) < Math.abs(ys[best.i] - ys[u.i]))) best = d
-      if (best && Math.abs(ys[best.i] - ys[u.i]) < 60) blocks.get(best.i).push(u)
+      if (best && Math.abs(ys[best.i] - ys[u.i]) < 30) blocks.get(best.i).push(u)
     }
     for (const [di, list] of blocks) {
       list.sort((p, q) => ys[q.i] - ys[p.i])
@@ -233,6 +233,22 @@ function foldContinuations(table, c, pages, ys = []) {
   return out
 }
 
+// Many banks print their own totals ("Opening Balance | Dr Count | Cr Count | Debits | Credits | Closing Balance" and a row of
+// numbers under it). They are used afterwards to prove that every line was read.
+export function findSummary(lines) {
+  const text = l => l.map(c => c.text).join(' ')
+  for (let i = 0; i < lines.length - 1; i++) {
+    const head = text(lines[i]).toLowerCase()
+    if (!(/dr\s*count/.test(head) && /cr\s*count/.test(head) && /debits/.test(head) && /credits/.test(head))) continue
+    const nums = (text(lines[i + 1]).match(/-?[\d,]*\d(?:\.\d{1,2})?/g) || []).map(x => parseFloat(x.replace(/,/g, '')))
+    const order = [['opening', head.indexOf('opening')], ['drCount', head.search(/dr\s*count/)], ['crCount', head.search(/cr\s*count/)], ['debits', head.search(/debits/)], ['credits', head.search(/credits/)], ['closing', head.indexOf('closing')]]
+      .filter(([, p]) => p >= 0).sort((a, b) => a[1] - b[1]).map(([k]) => k)
+    if (nums.length !== order.length) return null
+    return Object.fromEntries(order.map((k, j) => [k, nums[j]]))
+  }
+  return null
+}
+
 // `pdfjs` can be handed in (tests); the app loads it on first use so it is not part of the normal start-up
 export async function parsePdf(arrayBuffer, password, pdfjs) {
   if (!pdfjs) {
@@ -254,5 +270,7 @@ export async function parsePdf(arrayBuffer, password, pdfjs) {
   }
   await task.destroy()
   if (!lines.length) throw new Error('This PDF has no readable text (it may be a scanned image). Download the statement as CSV or Excel instead.')
-  return linesToTable(lines)
+  const table = linesToTable(lines)
+  table.summary = findSummary(lines)
+  return table
 }

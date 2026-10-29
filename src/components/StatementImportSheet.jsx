@@ -85,6 +85,13 @@ export default function StatementImportSheet({ account, onClose }) {
                 Read <b style={{ color: 'var(--txt)' }}>{plan.total}</b> lines{plan.unnamed > 0 ? `, ${plan.unnamed} without a readable name` : ', every one with a name'}. First lines:
                 {plan.sample.map((r, i) => <div key={i} style={{ display: 'flex', gap: 8, marginTop: 2 }}><span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--txt)' }}>{fmtD(r.date)} · {r.merchant}</span><b style={{ color: r.type === 'debit' ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{r.type === 'debit' ? '−' : '+'}{formatINR(r.amount)}</b></div>)}
               </div>
+              {plan.check && (
+                <div style={{ margin: '4px 0 8px', padding: '6px 8px', borderRadius: 8, fontSize: 11.5, background: plan.check.ok ? 'var(--mint-bg)' : 'var(--red-bg)', color: plan.check.ok ? 'var(--mint-dim)' : 'var(--red-dim)' }}>
+                  {plan.check.ok
+                    ? <>✓ Every line was read: {plan.check.summary ? 'counts and totals agree with the statement’s own summary' : ''}{plan.check.summary && plan.check.balanceLines ? ' and ' : ''}{plan.check.balanceLines ? 'the running balance adds up on all ' + plan.check.balanceLines + ' lines' : ''}.</>
+                    : <>⚠ This file was not read completely: {plan.check.problems.join('; ')}. Importing it will not match your bank.</>}
+                </div>
+              )}
               <div><b style={{ color: 'var(--mint-dim)' }}>{plan.matched.length}</b> saved entries matched · corrected with the bank's details</div>
               <div><b style={{ color: 'var(--gold-dim)' }}>{plan.toAdd.length}</b> on the statement but missing · will be added</div>
               {plan.skipped?.length > 0 && <div><b style={{ color: 'var(--txt)' }}>{plan.skipped.length}</b> line{plan.skipped.length === 1 ? '' : 's'} you deleted earlier stay deleted</div>}
@@ -117,7 +124,7 @@ export default function StatementImportSheet({ account, onClose }) {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setPlan(null)}>Back</button>
-              <BtnPrimary onClick={run} style={{ flex: 2 }}>{busy ? 'Importing…' : `Import · remove ${removing}`}</BtnPrimary>
+              <BtnPrimary onClick={run} style={{ flex: 2 }}>{busy ? 'Importing…' : (removing > 0 ? `Import · remove ${removing}` : 'Import')}</BtnPrimary>
             </div>
           </>
         )}

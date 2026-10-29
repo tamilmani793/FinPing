@@ -178,6 +178,8 @@ export function isReminderOrRequest(text) {
   const t = text.toLowerCase()
   const done = /\bhas been (?:successfully )?(?:debited|paid|credited)\b|\bsuccessfully (?:debited|paid)\b/.test(t)
   if (!done && /\b(?:is|are|was) due on\b|\bdue on\b|\bdue for payment\b|will be (?:debited|deducted|charged|presented)|\bplease maintain\b|\breminder\b|\bupcoming\b/.test(t)) return true
+  // bill / premium / EMI notices: nothing has moved yet, it only asks you to pay
+  if (!done && /\b(?:bill|invoice|premium|emi|installment|instalment|dues?)\b[^.]{0,70}\b(?:is |are |was )?(?:due|pending|overdue|payable|unpaid|outstanding|generated)\b|\b(?:pay|paying) (?:by|before|now|on time|your)\b|\bkindly pay\b|\bavoid (?:late|penalty|disconnection)|\blast date\b|\bdue date\b|\bdue by\b|\boverdue\b|\bminimum (?:amount )?due\b|\bunpaid\b/.test(t)) return true
   if (/(?:being|currently being) processed|we got your .{0,40}request|request (?:has been |is )?(?:received|raised|submitted)|successfully claimed|supercoins|congratulations/.test(t)) return true
   return false
 }
@@ -284,8 +286,22 @@ function detectCashbackSMS(text) {
 }
 
 // ── Main parse function ────────────────────────────────────────────────────
+// Only messages from a bank, card issuer or payment app are read. Indian senders look like "AX-HDFCBK" / "VM-SBIINB" / "JD-PNBSMS";
+// anything else (telecom and utility bills, shops, personal numbers) is ignored. A sender that is not on the list is still accepted
+// when the message itself is a bank alert for an account or card ending in four digits.
+const BANK_SENDERS = /(hdfc|sbi|icici|axis|kotak|kmb|pnb|punb|indian ?b|indbnk|indb|hsbc|canara|cnrb|baroda|bobsms|bob|union|ubi|yes ?b|idfc|idbi|bandhan|federal|fedbnk|rbl|ausfb|stanc|scb|citi|amex|dbs|sibank|kvb|tmb|cub|uco|boi|cbi|iob|jkb|bom|psb|nainital|karnataka|dhanlaxmi|equitas|ujjivan|jana|esaf|paytm|phonepe|gpay|cred|slice|onecard|jupiter|npci|sbicrd|bankofindia|bank)/i
+const looksLikeAccountAlert = text => /\b(?:a\/c|acct?|account|card|ac)\b[^.]{0,25}(?:[x*]{2,}|ending|no\.?)\s*[\dxX*]*\d{3,4}\b/i.test(text) && /\b(?:debited|credited|spent|withdrawn|deposited|paid|received|transferred|sent)\b/i.test(text)
+export function isBankSender(sender, text = '') {
+  const s = String(sender || '').trim()
+  if (!s) return true // unknown / pasted text: nothing to judge by
+  const header = s.replace(/^[A-Za-z]{2}[-_]/, '')
+  if (BANK_SENDERS.test(header)) return true
+  return looksLikeAccountAlert(text)
+}
+
 export function parseSMS(rawText, sender = '', receivedAt = new Date()) {
   if (!rawText || rawText.length < 20) return null
+  if (!isBankSender(sender, rawText)) return null
 
   // Check for known financial sender patterns
   const senderUpper = sender.toUpperCase()

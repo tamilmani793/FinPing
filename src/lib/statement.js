@@ -137,6 +137,13 @@ function parseBalance(v) {
 }
 // every amount written inside a cell, with its sign
 const moneyTokens = v => (String(v ?? '').match(/[+-]?\(?[\d,]*\d\.\d{1,2}\)?/g) || []).map(x => { const n = parseFloat(x.replace(/[,()+]/g, '')); return /^\(/.test(x) ? -Math.abs(n) : n })
+// Credit / Debit written in any of the ways banks do it
+const dirOf = v => {
+  const s = String(v ?? '').trim()
+  if (/\b(cr|credit|deposit|received)\b|\dcr$/i.test(s) || /^c$/i.test(s)) return 'credit'
+  if (/\b(dr|debit|withdrawal|paid)\b|\ddr$/i.test(s) || /^d$/i.test(s)) return 'debit'
+  return null
+}
 const isCr = v => /cr$/i.test(String(v ?? '').trim())
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9/ ]/g, ' ').replace(/\s+/g, ' ').trim()
@@ -147,19 +154,19 @@ export function detectColumns(table) {
     const h = table[i].map(norm)
     const find = (...tests) => h.findIndex(c => c && tests.some(t => t.test(c)))
     const date = (() => {
-      const exact = h.findIndex(c => /^(txn\.? |tran(saction)? |posting )?date$/.test(c))
+      const exact = h.findIndex(c => /^(txn\.? |tran(saction)? |posting |post |trans\.? |booking |book )?date$/.test(c))
       return exact >= 0 ? exact : find(/date|\bdt\b/)
     })()
     const marker = c => /(debit|dr)\s*\/\s*(credit|cr)|(credit|cr)\s*\/\s*(debit|dr)/.test(c)
     const findCol = (...tests) => h.findIndex(c => c && !marker(c) && tests.some(t => t.test(c)))
-    const debit = findCol(/withdraw/, /^debit/, /\bdebit amount/, /^dr\b/, /^dr$/)
-    const credit = findCol(/deposit/, /^credit/, /\bcredit amount/, /^cr\b/, /^cr$/)
-    const amount = find(/^amount/, /^amt\b/, /transaction amount/)
-    const narration = find(/narration/, /description/, /particulars/, /remarks/, /transaction details/, /details/)
+    const debit = findCol(/withdraw/, /^debit/, /\bdebit amount/, /^dr\b/, /^dr$/, /paid out/, /money out/, /outflow/, /^debits?\b/)
+    const credit = findCol(/deposit/, /^credit/, /\bcredit amount/, /^cr\b/, /^cr$/, /paid in/, /money in/, /inflow/, /^credits?\b/)
+    const amount = find(/^amount/, /^amt\b/, /transaction amount/, /^(txn|tran) amount/, /amount \(/)
+    const narration = find(/narration/, /description/, /particulars/, /remarks/, /transaction details/, /details/, /^transaction$/, /^payee/)
     if (date < 0 || narration < 0 || !((debit >= 0 && credit >= 0) || amount >= 0)) continue
     return {
       header: i, date, narration, debit, credit, amount,
-      type: find(/dr\s*\/\s*cr/, /debit\s*\/\s*credit/, /^type$/, /^cr\s*\/\s*dr/, /credit\s*\/\s*debit/),
+      type: find(/dr\s*\/\s*cr/, /debit\s*\/\s*credit/, /^(txn |tran |transaction )?type$/, /^cr\s*\/\s*dr/, /credit\s*\/\s*debit/, /indicator/),
       ref: find(/chq/, /cheque/, /\bref/),
       balance: find(/balance/, /^bal\b/, /^bal$/),
     }
@@ -243,9 +250,12 @@ export function statementRows(table) {
   if (!c) throw new Error("Couldn't find the transaction table. The file needs a header row with a Date, a description (Narration / Particulars / Remarks) and Debit & Credit (or Withdrawal & Deposit) columns.")
   const rows = []
   let prevBal = null
-  for (const r of table.slice(c.header + 1)) {
+  const body = table.slice(c.header + 1).filter(r => parseStatementDate(r[c.date]))
+  const firstD = body.length ? parseStatementDate(body[0][c.date]) : null, lastD = body.length ? parseStatementDate(body[body.length - 1][c.date]) : null
+  const desc = !!firstD && !!lastD && firstD > lastD // newest first
+  for (const [bi, r] of body.entries()) {
     const date = parseStatementDate(r[c.date])
-    if (!date) continue
+    const nextBal = c.balance >= 0 && bi + 1 < body.length ? parseBalance(body[bi + 1][c.balance]) : null
     let debit = c.debit >= 0 ? parseMoney(r[c.debit]) : null
     let credit = c.credit >= 0 ? parseMoney(r[c.credit]) : null
     if (c.debit >= 0 && c.credit >= 0) {
@@ -263,14 +273,19 @@ export function statementRows(table) {
     if (!credit) credit = null
     if (c.amount >= 0 && debit == null && credit == null) {
       const a = parseMoney(r[c.amount])
-      const dir = (c.type >= 0 ? r[c.type] : r[c.amount]) || ''
       const bal = c.balance >= 0 ? parseBalance(r[c.balance]) : null
-      // one amount column and no Dr / Cr marker: the balance says which way the money moved
-      const marked = /\b(cr|dr)\b|cr$|dr$/i.test(dir) || (c.type >= 0 && /^[cd]$/i.test(dir.trim()))
+      // which way the money moved, from the best evidence the row has: a Credit / Debit / Cr / Dr marker (its own column or
+      // written on the amount), a sign on the amount, then the running balance (looking at the right neighbour for the file's order)
+      const raw = String(r[c.amount] || '').trim()
+      const marker = (c.type >= 0 ? dirOf(r[c.type]) : null) || dirOf(raw)
+      const neighbour = desc ? nextBal : prevBal
       if (a != null) {
-        if (/^\s*\+/.test(String(r[c.amount] || ''))) credit = a // a leading + is money in (HDFC card statements)
-        else if (marked) { if (/cr|^\s*c\s*$|credit/i.test(dir) || isCr(r[c.amount])) credit = a; else debit = a }
-        else if (bal != null && prevBal != null) { if (bal > prevBal) credit = a; else debit = a }
+        if (marker) { if (marker === 'credit') credit = a; else debit = a }
+        else if (/^\+/.test(raw)) credit = a // a leading + is money in (HDFC card statements)
+        else if (/^-|^\(/.test(raw.replace(/^[₹\s]+/, ''))) debit = a
+        else if (bal != null && neighbour != null) {
+          if (bal > neighbour) credit = a; else debit = a
+        }
         else debit = a
       }
     }
@@ -289,7 +304,41 @@ export function statementRows(table) {
     })
   }
   if (!rows.length) throw new Error('The table was found, but no dated rows with an amount were readable in it.')
+  rows.check = checkRows(rows, table.summary)
   return rows
+}
+
+// Proof that the statement was read completely. Two independent checks:
+//  1) the running balance: every line's balance must equal the previous balance plus or minus its amount
+//  2) the bank's own summary (counts and totals), when the statement prints one
+export function checkRows(rows, summary) {
+  const r2 = n => Math.round(n * 100) / 100
+  const out = { balanceLines: 0, balanceBad: 0, summary: null, ok: true, problems: [] }
+  // statements run oldest-first or newest-first: judge the order that fits best
+  const chain = list => {
+    let lines = 0, bad = 0
+    for (let i = 1; i < list.length; i++) {
+      const p = list[i - 1], q = list[i]
+      if (p.balance == null || q.balance == null) continue
+      lines++
+      const exp = q.type === 'credit' ? p.balance + q.amount : p.balance - q.amount
+      if (Math.abs(exp - q.balance) >= 0.011) bad++
+    }
+    return { lines, bad }
+  }
+  const fwd = chain(rows), back = chain([...rows].reverse())
+  const best = back.bad < fwd.bad ? back : fwd
+  out.balanceLines = best.lines; out.balanceBad = best.bad
+  if (out.balanceBad) { out.ok = false; out.problems.push(out.balanceBad + ' line' + (out.balanceBad === 1 ? '' : 's') + " do not follow the statement's running balance") }
+  if (summary) {
+    const cr = rows.filter(r => r.type === 'credit'), dr = rows.filter(r => r.type === 'debit')
+    const got = { drCount: dr.length, crCount: cr.length, debits: r2(dr.reduce((s, r) => s + r.amount, 0)), credits: r2(cr.reduce((s, r) => s + r.amount, 0)) }
+    out.summary = { statement: summary, read: got }
+    for (const k of ['drCount', 'crCount', 'debits', 'credits']) {
+      if (summary[k] != null && Math.abs(summary[k] - got[k]) > 0.011) { out.ok = false; out.problems.push('statement says ' + k + ' ' + summary[k].toLocaleString('en-IN') + ', read ' + got[k].toLocaleString('en-IN')) }
+    }
+  }
+  return out
 }
 
 // ───────────────────────────── statement vs what the app already has ─────────────────────────────
