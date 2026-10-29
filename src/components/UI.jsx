@@ -1,12 +1,14 @@
 import { format } from 'date-fns'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, User } from 'lucide-react'
+import { useProfile, initialsOf } from '../lib/profile'
 import { useStore } from '../store'
+import { SyncPill } from './SmsSync'
 
 export function TopBar({ title, sub, right }) {
-  const { activeTab, setActiveTab } = useStore()
-  const isSub = activeTab === 'debt' || activeTab === 'wealth'
+  const { activeTab, setActiveTab, smsSync } = useStore()
+  const isSub = activeTab === 'wealth' || activeTab === 'profile'
   return (
-    <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)' }}>
+    <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)', position: 'sticky', top: 0, zIndex: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {isSub ? (
           <div onClick={() => setActiveTab('home')} style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -20,7 +22,7 @@ export function TopBar({ title, sub, right }) {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {right || <Avatar />}
+        {right || <><SyncPill state={smsSync.state} /><Avatar /></>}
       </div>
     </div>
   )
@@ -35,9 +37,14 @@ export function SMSPill() {
   )
 }
 
-export function Avatar({ initials = 'TS' }) {
+// The user's profile picture (or initials); tapping it opens the Profile screen
+export function Avatar({ size = 28, onClick, fontSize }) {
+  const { name, photo } = useProfile()
+  const { setActiveTab } = useStore()
   return (
-    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--gold-bg)', border: '1.5px solid var(--gold-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--gold-dim)' }}>{initials}</div>
+    <div onClick={onClick || (() => setActiveTab('profile'))} style={{ width: size, height: size, borderRadius: '50%', background: 'var(--gold-bg)', border: '1.5px solid var(--gold-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fontSize || Math.max(10, Math.round(size * 0.36)), fontWeight: 700, color: 'var(--gold-dim)', overflow: 'hidden', cursor: 'pointer', flexShrink: 0 }}>
+      {photo ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (initialsOf(name) || <User size={Math.round(size * 0.55)} />)}
+    </div>
   )
 }
 
@@ -99,7 +106,7 @@ export function TxnRow({ icon, merchant, meta, amount, isCredit, badge, tags, on
       </div>
       <div className="txn-amt">
         <div className={isCredit ? 'amt-credit' : 'amt-debit'}>
-          {isCredit ? '+' : ''}₹{Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+          {isCredit ? '+' : '−'}₹{Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
         </div>
         {badge}
       </div>
@@ -177,5 +184,5 @@ export function formatINR(amount, decimals = 0) {
 }
 
 export function formatDate(date) {
-  return format(new Date(date), 'd MMM')
+  return format(new Date(date), 'd MMM yyyy')
 }

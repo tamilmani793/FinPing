@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { startOfMonth, subDays, startOfDay, format, addDays, addMonths, differenceInCalendarDays } from 'date-fns'
+import { startOfMonth, subDays, subMonths, startOfDay, endOfDay, format, addDays, differenceInCalendarDays } from 'date-fns'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { TrendingUp, BarChart3, PieChart as PieIcon } from 'lucide-react'
+import { TrendingUp, BarChart3, PieChart as PieIcon, Calendar } from 'lucide-react'
 import { db } from '../db/schema'
 import { TopBar, formatINR } from '../components/UI'
+import { flowOf, spendOf, isCreditCard } from '../lib/flow'
+import { Picker, TextField } from '../components/Fields'
 
 const PALETTE = ['#E8466C', '#A855F7', '#F5A524', '#6366F1', '#F97316', '#14B8A6', '#06B6D4', '#84CC16', '#EC4899', '#EAB308', '#8B8B8B']
 const MODES = [
@@ -12,19 +14,32 @@ const MODES = [
   { id: 'bar', label: 'Bar', Icon: BarChart3 },
   { id: 'pie', label: 'Pie', Icon: PieIcon },
 ]
-const PERIODS = ['This Month', '7D', '1M', '3M']
-const tooltipStyle = { background: '#fff', border: '1px solid rgba(90,60,20,0.18)', borderRadius: 10, fontSize: 12, color: '#2A2119' }
+const PERIODS = [
+  { value: 'month', label: 'This month' }, { value: '7d', label: '7 days' }, { value: '1m', label: '1 month' }, { value: '3m', label: '3 months' },
+  { value: 'fy', label: 'Current financial year' }, { value: 'pfy', label: 'Previous financial year' }, { value: 'custom', label: 'Custom range' },
+]
+const tooltipStyle = { background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 10, fontSize: 12, color: 'var(--txt)' }
 
-function rangeFor(i, now) {
-  if (i === 0) return startOfMonth(now)
-  if (i === 1) return startOfDay(subDays(now, 6))
-  if (i === 2) return startOfDay(subDays(now, 29))
-  return startOfDay(subDays(now, 89))
+// Indian financial year: 1 April to 31 March
+const fyStart = now => new Date(now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1, 3, 1)
+
+// [start, end] of the chosen period
+function rangeFor(period, now, from, to) {
+  if (period === 'month') return [startOfMonth(now), endOfDay(now)]
+  if (period === '7d') return [startOfDay(subDays(now, 6)), endOfDay(now)]
+  if (period === '1m') return [startOfDay(subDays(now, 29)), endOfDay(now)]
+  if (period === '3m') return [startOfDay(subMonths(now, 3)), endOfDay(now)]
+  if (period === 'fy') return [fyStart(now), endOfDay(now)]
+  if (period === 'pfy') { const s = fyStart(now); return [new Date(s.getFullYear() - 1, 3, 1), new Date(s.getFullYear(), 2, 31, 23, 59, 59, 999)] }
+  const a = from ? startOfDay(new Date(from + 'T12:00:00')) : startOfMonth(now)
+  const b = to ? endOfDay(new Date(to + 'T12:00:00')) : endOfDay(now)
+  return [a, b < a ? endOfDay(a) : b]
 }
 
 // Daily buckets up to ~31 days, weekly beyond that.
 function buildBuckets(start, now) {
   const days = differenceInCalendarDays(now, start) + 1
+  if (days < 1) return []
   const step = days > 35 ? 7 : 1
   const out = []
   for (let d = start; d <= now; d = addDays(d, step)) {
@@ -35,30 +50,36 @@ function buildBuckets(start, now) {
 
 export default function Charts() {
   const [mode, setMode] = useState('area')
-  const [period, setPeriod] = useState(0)
+  const [period, setPeriod] = useState('month')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const now = new Date()
-  const start = rangeFor(period, now)
+  const [start, end] = rangeFor(period, now, from, to)
 
   const transactions = useLiveQuery(
-    () => db.transactions.filter(t => new Date(t.date) >= start && !t.isExcluded).toArray(),
-    [period]
+    () => db.transactions.filter(t => new Date(t.date) >= start && new Date(t.date) <= end && !t.isExcluded).toArray(),
+    [period, +start, +end]
   )
   const txns = transactions || []
-  const income = txns.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0)
-  const spent = txns.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0)
+  const cardList = useLiveQuery(() => db.creditCards.toArray()) || []
+  const cc = new Set(cardList.filter(isCreditCard).map(c => c.id))
+  // card refunds, reversals and cashback take money off spending; only credits to accounts are income
+  const { spent, income } = flowOf(txns, cardList)
   const net = income - spent
 
-  const buckets = buildBuckets(start, now)
+  const buckets = buildBuckets(start, end < now ? end : now)
   const catMap = {}
   for (const t of txns) {
-    if (t.type !== 'debit') continue
+    const amt = spendOf(t, cc)
+    if (!amt) continue
     const d = new Date(t.date)
     const b = buckets.find(x => d >= x.from && d < x.to)
-    if (b) b.spend += t.amount
+    if (b) b.spend += amt
     const c = t.category || 'General'
-    catMap[c] = (catMap[c] || 0) + t.amount
+    catMap[c] = (catMap[c] || 0) + amt
   }
-  const cats = Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+  for (const b of buckets) b.spend = Math.max(0, b.spend)
+  const cats = Object.entries(catMap).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
   const colorOf = i => PALETTE[i % PALETTE.length]
   const hasData = txns.length > 0
   const fmtTick = v => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)
@@ -78,10 +99,15 @@ export default function Charts() {
         </div>
 
         {/* Period */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
-          {PERIODS.map((p, i) => (
-            <div key={p} className={`chip${period === i ? ' active' : ''}`} onClick={() => setPeriod(i)}>{p}</div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+          <Picker value={period} options={PERIODS} onChange={setPeriod} title="Show analytics for" icon={<Calendar size={17} />} />
+          {period === 'custom' && (
+            <div className="form-grid">
+              <TextField icon={<Calendar size={17} />} type="date" value={from} max={to || undefined} onChange={e => setFrom(e.target.value)} placeholder="From" aria-label="From date" />
+              <TextField icon={<Calendar size={17} />} type="date" value={to} min={from || undefined} onChange={e => setTo(e.target.value)} placeholder="To" aria-label="To date" />
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: 'var(--txt2)', padding: '0 4px' }}>{format(start, 'd MMM yyyy')} – {format(end, 'd MMM yyyy')}</div>
         </div>
 
         {/* Period summary */}
@@ -111,7 +137,7 @@ export default function Charts() {
             <div style={{ height: 240, position: 'relative' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={cats} dataKey="value" nameKey="name" innerRadius={62} outerRadius={95} paddingAngle={1} stroke="#fff" strokeWidth={2}>
+                  <Pie data={cats} dataKey="value" nameKey="name" innerRadius={62} outerRadius={95} paddingAngle={1} stroke="var(--bg1)" strokeWidth={2}>
                     {cats.map((d, i) => <Cell key={d.name} fill={colorOf(i)} />)}
                   </Pie>
                   <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [formatINR(v), n]} />
@@ -127,9 +153,9 @@ export default function Charts() {
               <ResponsiveContainer width="100%" height="100%">
                 {mode === 'bar' ? (
                   <BarChart data={buckets} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-                    <CartesianGrid stroke="rgba(90,60,20,0.08)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: '#A89A8B', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                    <YAxis tick={{ fill: '#A89A8B', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={fmtTick} />
+                    <CartesianGrid stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: 'var(--txt3)', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: 'var(--txt3)', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={fmtTick} />
                     <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(214,69,93,0.06)' }} formatter={v => [formatINR(v), 'Spent']} />
                     <Bar dataKey="spend" fill="#E8466C" radius={[5, 5, 0, 0]} />
                   </BarChart>
@@ -141,9 +167,9 @@ export default function Charts() {
                         <stop offset="100%" stopColor="#E8466C" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="rgba(90,60,20,0.08)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: '#A89A8B', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                    <YAxis tick={{ fill: '#A89A8B', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={fmtTick} />
+                    <CartesianGrid stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: 'var(--txt3)', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: 'var(--txt3)', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={fmtTick} />
                     <Tooltip contentStyle={tooltipStyle} formatter={v => [formatINR(v), 'Spent']} />
                     <Area type="monotone" dataKey="spend" stroke="#E8466C" strokeWidth={2} fill="url(#trendFill)" />
                   </AreaChart>

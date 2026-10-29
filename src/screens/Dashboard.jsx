@@ -1,10 +1,20 @@
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import EmiSheet, { useMonthlyEmi } from '../components/EmiSheet'
+import TxnDetailSheet from '../components/TxnDetailSheet'
+import CardDuesSheet, { useCardDues } from '../components/CardDuesSheet'
+import { SmsPermissionCard } from '../components/SmsSync'
+import { cardStats } from '../lib/cardStats'
 import { startOfMonth, subMonths, format } from 'date-fns'
-import { ArrowUpRight, ArrowDownLeft, PiggyBank, Receipt, CreditCard, Landmark, TrendingUp } from 'lucide-react'
+import { ArrowUpRight, ArrowDownLeft, PiggyBank, Receipt, CreditCard, Landmark, TrendingUp, PieChart, ChevronRight } from 'lucide-react'
 import { db } from '../db/schema'
 import { TopBar, TxnRow, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
+import { flowOf } from '../lib/flow'
 import { getUserName } from '../lib/profile'
+import { cardTitle } from '../lib/cardCatalog'
+import { txnName } from '../lib/txnName'
+import { orderCards } from '../lib/sortOrder'
 
 function greeting(now) {
   const h = now.getHours()
@@ -30,10 +40,10 @@ function Delta({ cur, prev, goodWhenUp }) {
 
 function Tile({ Icon, tone, label, value, extra, onClick }) {
   const tones = {
-    orange: ['#FCE6D6', '#D9701F'], green: ['#DDF3E7', '#2E9E6B'], blue: ['#E2E8FB', '#4A5FD0'],
-    gold: ['#F6EBCF', '#A57C2A'], red: ['#FBDDE0', '#D6455D'],
-  }
-  const [bg, fg] = tones[tone]
+      orange: ['rgba(217,112,31,0.16)', '#D9701F'], green: ['rgba(46,158,107,0.16)', '#2E9E6B'], blue: ['rgba(74,95,208,0.16)', '#6B7BE0'],
+      gold: ['var(--gold-bg)', 'var(--gold-dim)'], red: ['rgba(214,69,93,0.16)', '#D6455D'],
+    }
+    const [bg, fg] = tones[tone]
   return (
     <div className="stat-tile" onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -47,22 +57,22 @@ function Tile({ Icon, tone, label, value, extra, onClick }) {
 }
 
 export default function Dashboard() {
-  const { setActiveTab } = useStore()
+  const { setActiveTab, openCard, smsSync } = useStore()
   const now = new Date()
   const monthStart = startOfMonth(now)
   const prevStart = startOfMonth(subMonths(now, 1))
 
   const txnsAll = useLiveQuery(() => db.transactions.filter(t => new Date(t.date) >= prevStart && !t.isExcluded).toArray()) || []
-  const cards = useLiveQuery(() => db.creditCards.toArray()) || []
+  const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft)
   const investments = useLiveQuery(() => db.investments.toArray()) || []
-  const debts = useLiveQuery(() => db.debts.toArray()) || []
 
   const cur = txnsAll.filter(t => new Date(t.date) >= monthStart)
   const prev = txnsAll.filter(t => new Date(t.date) < monthStart)
   const sum = (arr, type) => arr.filter(t => t.type === type).reduce((s, t) => s + t.amount, 0)
 
-  const expenses = sum(cur, 'debit'), income = sum(cur, 'credit')
-  const prevExpenses = sum(prev, 'debit'), prevIncome = sum(prev, 'credit')
+  // card refunds, reversals and cashback reduce spending; only credits to accounts are income
+  const { spent: expenses, income } = flowOf(cur, cards)
+  const { spent: prevExpenses, income: prevIncome } = flowOf(prev, cards)
   const net = income - expenses
   const savedPct = income > 0 ? Math.max(0, Math.round((net / income) * 100)) : 0
   const spendShare = income > 0 ? Math.min(100, Math.round((expenses / income) * 100)) : expenses > 0 ? 100 : 0
@@ -70,9 +80,14 @@ export default function Dashboard() {
   const bills = cur.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
   const prevBills = prev.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
   const invested = investments.reduce((s, i) => s + (i.investedAmount || 0), 0)
-  const cardDue = cards.reduce((s, c) => s + (c.currentBalance || 0), 0)
-  const activeDebts = debts.filter(d => d.status !== 'closed')
-  const emi = activeDebts.reduce((s, d) => s + (d.emiAmount || 0), 0)
+  // Card dues = billed amounts still unpaid across credit cards (same figures as the Accounts screen)
+  const { rows: dueRows, totalDue: cardDue, owingCount } = useCardDues()
+  const [duesOpen, setDuesOpen] = useState(false)
+  // Monthly EMI = loan EMIs + insurance premiums (spread over their payment period)
+  const { loans: emiLoans, policies: emiPolicies, total: emi } = useMonthlyEmi()
+  const [emiOpen, setEmiOpen] = useState(false)
+  const [detailTxn, setDetailTxn] = useState(null)
+  const cardTxns = useLiveQuery(() => db.transactions.filter(t => t.cardId != null).toArray()) || []
 
   const recent = [...cur].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6)
   const name = getUserName()
@@ -83,15 +98,17 @@ export default function Dashboard() {
       <TopBar title="FinPing" />
 
       <div style={{ padding: '0 16px' }}>
+        <SmsPermissionCard state={smsSync.state} enable={smsSync.enable} />
         <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{greeting(now)}{name ? `, ${name}` : ''}</div>
 
         <div style={{ display: 'flex', gap: 8, margin: '12px 0 10px', overflowX: 'auto' }}>
           <div className="pill-chip" onClick={() => setActiveTab('debt')}><Landmark size={14} color="var(--gold)" /> Debt</div>
           <div className="pill-chip" onClick={() => setActiveTab('wealth')}><TrendingUp size={14} color="var(--gold)" /> Wealth</div>
-          <div className="pill-chip" onClick={() => setActiveTab('cards')}><CreditCard size={14} color="var(--gold)" /> Cards</div>
+          <div className="pill-chip" onClick={() => setActiveTab('cards')}><CreditCard size={14} color="var(--gold)" /> Accounts</div>
+          <div className="pill-chip" onClick={() => setActiveTab('charts')}><PieChart size={14} color="var(--gold)" /> Charts</div>
         </div>
 
-        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>Today is <b style={{ color: 'var(--txt)' }}>{format(now, 'EEE, d MMM')}</b></div>
+        <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 12 }}>Today is <b style={{ color: 'var(--txt)' }}>{format(now, 'EEE, d MMM yyyy')}</b></div>
 
         {/* Insights */}
         <div className="label-caps" style={{ textAlign: 'center', marginBottom: 10, letterSpacing: '0.12em' }}>Insights</div>
@@ -116,8 +133,8 @@ export default function Dashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           <Tile Icon={PiggyBank} tone="blue" label={`${mon} Invest`} value={formatINR(invested)} onClick={() => setActiveTab('wealth')} />
           <Tile Icon={Receipt} tone="gold" label={`${mon} Bills`} value={formatINR(bills)} extra={<Delta cur={bills} prev={prevBills} goodWhenUp={false} />} />
-          <Tile Icon={CreditCard} tone="red" label="Card Dues" value={formatINR(cardDue)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{cards.length} card{cards.length === 1 ? '' : 's'}</span>} onClick={() => setActiveTab('cards')} />
-          <Tile Icon={Landmark} tone="orange" label="Monthly EMI" value={formatINR(emi)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{activeDebts.length} active</span>} onClick={() => setActiveTab('debt')} />
+          <Tile Icon={CreditCard} tone="red" label="Card Dues" value={formatINR(cardDue)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{owingCount} of {dueRows.length} card{dueRows.length === 1 ? '' : 's'} owing · tap for list</span>} onClick={() => setDuesOpen(true)} />
+          <Tile Icon={Landmark} tone="orange" label="Monthly EMI" value={formatINR(emi)} extra={<span style={{ fontSize: 10, color: 'var(--txt2)' }}>{emiLoans.length} loan{emiLoans.length === 1 ? '' : 's'} · {emiPolicies.length} polic{emiPolicies.length === 1 ? 'y' : 'ies'} · tap for list</span>} onClick={() => setEmiOpen(true)} />
         </div>
 
         {/* Accounts & cards */}
@@ -126,19 +143,29 @@ export default function Dashboard() {
             <div className="section-title">Accounts &amp; Wallets</div>
             <div style={{ fontSize: 12, color: 'var(--gold-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => setActiveTab('cards')}>View all</div>
           </div>
-          {cards.length ? cards.slice(0, 4).map(c => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
-              <div className="stat-icon" style={{ width: 34, height: 34, background: 'var(--bg2)', color: 'var(--gold-dim)' }}><CreditCard size={17} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{c.bank} •• {c.cardLast4}</div>
+          {cards.length ? orderCards(cards).slice(0, 4).map(c => {
+            // What each row shows depends on what it is: a bank balance, a card's outstanding, or just the type.
+            const credit = !c.cardType || c.cardType === 'credit'
+            const out = credit ? cardStats(c, cardTxns.filter(t => t.cardId === c.id)).outstanding : 0
+            const [amount, label, color] = c.cardType === 'account'
+              ? [c.accountBalance != null ? formatINR(c.accountBalance) : '—', 'balance', 'var(--txt)']
+              : credit ? [formatINR(out), out > 0 ? 'outstanding' : 'no dues', out > 0 ? 'var(--red-dim)' : 'var(--mint-dim)']
+              : ['', c.cardType === 'debit' ? 'debit card' : 'choose type', 'var(--txt2)']
+            return (
+              <div key={c.id} onClick={() => openCard(c.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
+                <div className="stat-icon" style={{ width: 34, height: 34, background: 'var(--bg2)', color: 'var(--gold-dim)' }}>{c.cardType === 'account' ? <Landmark size={17} /> : <CreditCard size={17} />}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardTitle(c, { last4: false })}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{c.cardType === 'account' ? 'Bank account' : c.cardType === 'debit' ? 'Debit card' : 'Credit card'}{c.cardLast4 ? ` •• ${c.cardLast4}` : ''}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {amount && <div style={{ fontSize: 13, fontWeight: 700, color }}>{amount}</div>}
+                  <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{label}</div>
+                </div>
+                <ChevronRight size={15} color="var(--txt3)" />
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: c.currentBalance > 0 ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{formatINR(c.currentBalance || 0)}</div>
-                <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{c.currentBalance > 0 ? 'due' : 'no dues'}</div>
-              </div>
-            </div>
-          )) : (
+            )
+          }) : (
             <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--txt2)', fontSize: 12 }}>No cards yet — they appear once bank SMS are synced.</div>
           )}
         </div>
@@ -150,11 +177,12 @@ export default function Dashboard() {
             <TxnRow
               key={t.id}
               icon={getMerchantIcon(t.merchant)}
-              merchant={t.merchant}
+              merchant={txnName(t)}
               meta={`${t.bank ? t.bank.split(' ')[0] : ''}${t.accountLast4 ? ` ••${t.accountLast4}` : ''} · ${formatDate(t.date)}`}
               amount={t.amount}
               isCredit={t.type === 'credit'}
               tags={t.tags}
+              onClick={() => setDetailTxn(t)}
             />
           ))}
           {!recent.length && (
@@ -162,6 +190,9 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      {duesOpen && <CardDuesSheet onClose={() => setDuesOpen(false)} />}
+      {emiOpen && <EmiSheet onClose={() => setEmiOpen(false)} />}
+      {detailTxn && <TxnDetailSheet txn={detailTxn} onClose={() => setDetailTxn(null)} />}
     </div>
   )
 }

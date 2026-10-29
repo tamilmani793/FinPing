@@ -3,7 +3,10 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, ProgressBar, Divider, LabelCaps, MonoLg, BtnPrimary, BtnSecondary, formatINR, formatDate } from '../components/UI'
+import { IndianRupee, TrendingUp, StickyNote } from 'lucide-react'
+import { Field, TextField, Picker } from '../components/Fields'
 import { useStore } from '../store'
+import { useBackHandler } from '../lib/backNav'
 import { parseSMS } from '../lib/smsParser'
 
 const TYPE_ICONS = { MutualFund: '📈', Stock: '📊', PPF: '🏛', NPS: '🏦', Gold: '🪙', FD: '🔐', Other: '💰' }
@@ -13,6 +16,7 @@ const FILTERS = ['#ALL', '#MUTUALFUNDS', '#STOCKS', '#GOLD', '#RETIREMENT']
 export default function Wealth() {
   const [activeFilter, setActiveFilter] = useState(0)
   const [addOpen, setAddOpen] = useState(false)
+  useBackHandler(addOpen, () => setAddOpen(false))
   const [smsOpen, setSmsOpen] = useState(false)
   const [smsText, setSmsText] = useState('')
   const [parsed, setParsed] = useState(null)
@@ -168,28 +172,33 @@ export default function Wealth() {
         </div>
 
         {addOpen && (
-          <Card style={{ marginBottom: 10 }}>
-            <LabelCaps style={{ marginBottom: 8 }}>Log Investment</LabelCaps>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input className="input" placeholder="Fund / Stock name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-              <select className="input" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                {Object.keys(TYPE_ICONS).map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <input className="input" type="number" placeholder="Invested (₹)" value={form.investedAmount} onChange={e => setForm({ ...form, investedAmount: e.target.value })} />
-                <input className="input" type="number" placeholder="Current value (₹)" value={form.currentValue} onChange={e => setForm({ ...form, currentValue: e.target.value })} />
+          <div className="overlay" onClick={() => setAddOpen(false)}>
+<div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+<div className="sheet-handle" />
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 14 }}>Log an investment</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field label="Fund / stock name"><TextField icon={<TrendingUp size={17} />} placeholder="e.g. Nifty 50 index fund" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
+              <Field label="Type">
+                <Picker value={form.type} options={Object.entries(TYPE_ICONS).map(([t, icon]) => ({ value: t, label: t, icon }))} onChange={v => setForm({ ...form, type: v })} title="Investment type" />
+              </Field>
+              <div className="form-grid">
+                <Field label="Invested"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder="0" value={form.investedAmount} onChange={e => setForm({ ...form, investedAmount: e.target.value })} /></Field>
+                <Field label="Current value"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder="0" value={form.currentValue} onChange={e => setForm({ ...form, currentValue: e.target.value })} /></Field>
               </div>
-              <input className="input" placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <BtnPrimary onClick={handleAddManual} style={{ flex: 1, height: 36, fontSize: 12 }}>Save</BtnPrimary>
-                <button className="btn-ghost" style={{ height: 36, fontSize: 12 }} onClick={() => setAddOpen(false)}>Cancel</button>
+              <Field label="Notes"><TextField icon={<StickyNote size={17} />} placeholder="Optional" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={() => setAddOpen(false)}>Cancel</button>
+                <BtnPrimary onClick={handleAddManual} style={{ flex: 1 }}>Save</BtnPrimary>
               </div>
             </div>
-          </Card>
+          </div>
+          </div>
         )}
 
         {smsOpen && (
-          <Card style={{ marginBottom: 10 }}>
+          <div className="overlay" onClick={() => setSmsOpen(false)}>
+<div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28 }}>
+<div className="sheet-handle" />
             <LabelCaps style={{ marginBottom: 6 }}>Parse Investment SMS</LabelCaps>
             <textarea className="input" style={{ height: 70, marginBottom: 8, fontSize: 12 }} placeholder="Paste MF SIP / FD / Demat SMS..." value={smsText} onChange={e => { setSmsText(e.target.value); setParsed(null) }} />
             <button className="btn-primary" style={{ width: '100%', height: 36, fontSize: 12, marginBottom: parsed ? 8 : 0 }} onClick={handleParseSMS}>Parse</button>
@@ -203,7 +212,8 @@ export default function Wealth() {
                 </div>
               </div>
             )}
-          </Card>
+          </div>
+          </div>
         )}
 
         {/* Live SMS Parser Feed */}

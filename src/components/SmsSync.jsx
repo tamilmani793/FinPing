@@ -30,33 +30,30 @@ export function useSmsSync() {
   return { state, enable }
 }
 
-export function SmsBanner({ state, enable }) {
-  const box = { background: 'var(--indigo-bg)', border: '1px solid var(--indigo-border)', borderRadius: 12, padding: '10px 12px', margin: '10px 16px 0', display: 'flex', gap: 10, alignItems: 'center' }
+// Small status in the top-right corner of the header: green when SMS sync is running, grey/amber when it is not.
+export function SyncPill({ state }) {
   if (state === 'checking') return null
-  if (state === 'needs') {
-    return (
-      <div style={box}>
-        <div style={{ fontSize: 20 }}>📡</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Allow SMS access</div>
-          <div style={{ fontSize: 11, color: 'var(--txt2)' }}>FinPing reads bank SMS on your phone to track spends. Nothing leaves the device.</div>
-        </div>
-        <button className="btn-primary" style={{ height: 32, fontSize: 12, padding: '0 12px' }} onClick={enable}>Allow</button>
-      </div>
-    )
-  }
-  if (state === 'on') {
-    return (
-      <div style={box}>
-        <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--mint)' }} />
-        <div style={{ fontSize: 12, color: 'var(--txt2)' }}>SMS sync on — new bank SMS are added automatically</div>
-      </div>
-    )
-  }
+  const on = state === 'on'
+  const color = on ? 'var(--mint)' : state === 'needs' ? 'var(--amber)' : 'var(--txt3)'
   return (
-    <div style={box}>
-      <div style={{ fontSize: 20 }}>📱</div>
-      <div style={{ fontSize: 12, color: 'var(--txt2)' }}>Automatic SMS sync needs the FinPing Android app. In the browser, use Paste SMS.</div>
+    <div title={on ? 'New bank SMS are added automatically' : 'SMS sync is off'} style={{ display: 'flex', alignItems: 'center', gap: 5, background: on ? 'var(--mint-bg)' : 'var(--bg2)', border: `1px solid ${on ? 'var(--mint-border)' : 'var(--border2)'}`, borderRadius: 9999, padding: '3px 9px', fontSize: 10, fontWeight: 700, color: on ? 'var(--mint-dim)' : 'var(--txt2)', whiteSpace: 'nowrap' }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+      {on ? 'Sync on' : 'Sync off'}
+    </div>
+  )
+}
+
+// The full explanation is only shown while SMS permission is missing. Once it is granted it goes away.
+export function SmsPermissionCard({ state, enable }) {
+  if (state !== 'needs') return null
+  return (
+    <div style={{ background: 'var(--indigo-bg)', border: '1px solid var(--indigo-border)', borderRadius: 12, padding: '10px 12px', margin: '0 0 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div style={{ fontSize: 20 }}>📡</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Allow SMS access</div>
+        <div style={{ fontSize: 11, color: 'var(--txt2)' }}>FinPing reads bank SMS on your phone to track spends. Nothing leaves the device.</div>
+      </div>
+      <button className="btn-primary" style={{ height: 32, fontSize: 12, padding: '0 12px' }} onClick={enable}>Allow</button>
     </div>
   )
 }
