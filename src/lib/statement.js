@@ -297,7 +297,7 @@ export function statementRows(table) {
     const amount = debit ? debit : credit
     rows.push({
       date, type, amount, narration, merchant: info.merchant === 'Unknown' ? (fallbackName(narration) || (/^\d+$/.test(narration.trim()) ? (type === 'debit' ? 'Cheque / bank debit' : 'Bank credit') : 'Unknown')) : info.merchant, mode: info.mode,
-      category: type === 'credit' && /cash ?back/i.test(narration) ? 'Cashback' : canonCategory(classifyCategory(info.merchant, narration)),
+      category: (type === 'credit' && /cash ?back/i.test(narration)) || (type === 'debit' && /cash ?back/i.test(narration) && /reversal|reversed|adj_|adjust/i.test(narration)) ? 'Cashback' : canonCategory(classifyCategory(info.merchant, narration)),
       vpa: info.vpa, note: info.note, ref: c.ref >= 0 ? r[c.ref] : '', refs: refsOf(narration, c.ref >= 0 ? r[c.ref] : ''),
       balance: c.balance >= 0 ? parseBalance(r[c.balance]) : null,
       key: `${date.toISOString().slice(0, 10)}|${type}|${amount}|${c.balance >= 0 ? parseBalance(r[c.balance]) : norm(narration).slice(0, 60)}`,
@@ -306,6 +306,7 @@ export function statementRows(table) {
   if (!rows.length) throw new Error('The table was found, but no dated rows with an amount were readable in it.')
   rows.check = checkRows(rows, table.summary)
   rows.cardSummary = table.cardSummary || null
+  rows.window = table.window || null
   return rows
 }
 
@@ -357,9 +358,10 @@ const tokens = s => new Set(norm(s).split(' ').filter(w => w.length >= 3 && !/^(
 // entries that must keep their own name / category: loan postings, transfers, card bill payments
 const PROTECTED = t => !!t.debtId || t.category === 'Cashback' || ['loan_payment', 'loan_received', 'transfer', 'card_payment'].includes(t.kind)
 
-export function reconcile(rows, saved, deleted = []) {
+export function reconcile(rows, saved, deleted = [], window = null) {
   const ordered = [...rows].map((r, seq) => ({ ...r, seq })).sort((a, b) => a.date - b.date || a.seq - b.seq)
-  const first = dayKey(ordered[0].date), last = dayKey(ordered[ordered.length - 1].date)
+  // everything saved between these days is replaced; a #SUMMARY replaceFrom= / replaceTo= can widen it beyond the statement's own dates
+  const first = Math.min(dayKey(ordered[0].date), window?.from ? dayKey(window.from) : Infinity), last = Math.max(dayKey(ordered[ordered.length - 1].date), window?.to ? dayKey(window.to) : -Infinity)
   // a line already imported earlier keeps its entry (so importing the same file twice changes nothing)
   const seen = {}
   for (const r of ordered) { const n = (seen[r.key] = (seen[r.key] || 0) + 1); r.stmtKey = `${r.key}#${n}` }
@@ -423,7 +425,7 @@ export function correction(row, txn) {
   if (unnamed && row.merchant && row.merchant !== 'Unknown') fields.merchant = row.merchant // never leave a nameless entry nameless
   if (!PROTECTED(txn) && txn.parsedBy !== 'manual') {
     if (row.merchant && row.merchant !== 'Unknown' && (!mine.includes('merchant') || unnamed)) fields.merchant = row.merchant
-    if (((!txn.category || ['General', 'Other', 'Unknown'].includes(txn.category)) || (row.category === 'Cashback' && txn.type === 'credit')) && !mine.includes('category')) fields.category = row.category
+    if (((!txn.category || ['General', 'Other', 'Unknown'].includes(txn.category)) || (row.category === 'Cashback')) && !mine.includes('category')) fields.category = row.category
   }
   return fields
 }
@@ -455,18 +457,18 @@ export async function readStatement({ file, text, password }) {
     else if (isOle) table = (await import('./statementXls')).parseXls(await file.arrayBuffer())
     else if (/\.xlsx$/i.test(file.name) || file.type.includes('spreadsheetml')) table = await parseXlsx(await file.arrayBuffer())
     else table = parseDelimited(await file.text())
-  } else { const { body, summary } = splitSummary(text); table = parseDelimited(body); if (summary) table.cardSummary = summary }
+  } else { const { body, summary, window } = splitSummary(text); table = parseDelimited(body); if (summary) table.cardSummary = summary; if (window) table.window = window }
   return statementRows(table)
 }
 
 // A pasted statement may start with one summary line carrying the card's bill details, e.g.
 //   #SUMMARY, statementDate=15/10/2026, totalDue=998.00, minDue=200, dueDate=04/11/2026, rewardPoints=96, creditLimit=100000, availableCredit=90000
-// (statementDate and totalDue are required; the rest is optional. purchases = the statement's purchases/debits figure; it lets the app
+// (statementDate and totalDue are required; the rest is optional. replaceFrom= / replaceTo= (dd/mm/yyyy) widen the dates whose saved entries are replaced. purchases = the statement's purchases/debits figure; it lets the app
 // tell which spends dated on or before the statement day were NOT part of that bill.)
 export function splitSummary(text) {
   const lines = String(text || '').split(/\r?\n/)
   const i = lines.findIndex(l => /^\s*#\s*summary\b/i.test(l))
-  if (i < 0) return { body: text, summary: null }
+  if (i < 0) return { body: text, summary: null, window: null }
   const kv = {}
   for (const part of lines[i].replace(/^\s*#\s*summary\s*[,;\t:]?/i, '').split(/[,;\t]/)) {
     const m = part.match(/^\s*([A-Za-z ]+?)\s*[=:]\s*(.+?)\s*$/)
@@ -484,7 +486,8 @@ export function splitSummary(text) {
     creditLimit: num(kv.creditlimit ?? kv.totallimit),
     availableCredit: num(kv.availablecredit ?? kv.availablelimit),
   }
+  const window = { from: date(kv.replacefrom), to: date(kv.replaceto) }
   for (const k of Object.keys(summary)) if (summary[k] == null) delete summary[k]
   if (!summary.statementDate || summary.totalDue == null) throw new Error('The #SUMMARY line needs statementDate=dd/mm/yyyy and totalDue=amount')
-  return { body: lines.filter((_, k) => k !== i).join('\n'), summary }
+  return { body: lines.filter((_, k) => k !== i).join('\n'), summary, window: window.from || window.to ? window : null }
 }

@@ -5,6 +5,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, AreaC
 import { TrendingUp, BarChart3, PieChart as PieIcon, Calendar } from 'lucide-react'
 import { db } from '../db/schema'
 import { TopBar, formatINR } from '../components/UI'
+import { flowOf, spendOf, isCreditCard } from '../lib/flow'
 import { Picker, TextField } from '../components/Fields'
 
 const PALETTE = ['#E8466C', '#A855F7', '#F5A524', '#6366F1', '#F97316', '#14B8A6', '#06B6D4', '#84CC16', '#EC4899', '#EAB308', '#8B8B8B']
@@ -60,21 +61,25 @@ export default function Charts() {
     [period, +start, +end]
   )
   const txns = transactions || []
-  const income = txns.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0)
-  const spent = txns.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0)
+  const cardList = useLiveQuery(() => db.creditCards.toArray()) || []
+  const cc = new Set(cardList.filter(isCreditCard).map(c => c.id))
+  // card refunds, reversals and cashback take money off spending; only credits to accounts are income
+  const { spent, income } = flowOf(txns, cardList)
   const net = income - spent
 
   const buckets = buildBuckets(start, end < now ? end : now)
   const catMap = {}
   for (const t of txns) {
-    if (t.type !== 'debit') continue
+    const amt = spendOf(t, cc)
+    if (!amt) continue
     const d = new Date(t.date)
     const b = buckets.find(x => d >= x.from && d < x.to)
-    if (b) b.spend += t.amount
+    if (b) b.spend += amt
     const c = t.category || 'General'
-    catMap[c] = (catMap[c] || 0) + t.amount
+    catMap[c] = (catMap[c] || 0) + amt
   }
-  const cats = Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+  for (const b of buckets) b.spend = Math.max(0, b.spend)
+  const cats = Object.entries(catMap).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
   const colorOf = i => PALETTE[i % PALETTE.length]
   const hasData = txns.length > 0
   const fmtTick = v => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)

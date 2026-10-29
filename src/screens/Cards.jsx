@@ -357,9 +357,11 @@ function Detail({ card, cards, byCard, onBack }) {
   const monthStart = startOfMonth(new Date())
   const spends = txns.filter(t => !isCardPayment(t))
   const spentMonth = spends.filter(t => t.type === 'debit' && new Date(t.date) >= monthStart).reduce((a, t) => a + t.amount, 0)
-  const cb = txns.filter(t => t.type === 'credit' && t.category === 'Cashback')
-  const cbMonth = cb.filter(t => new Date(t.date) >= monthStart).reduce((a, t) => a + t.amount, 0)
-  const cbAll = cb.reduce((a, t) => a + t.amount, 0)
+  // cashback earned, less any that was taken back (a "Cashback_Reversal" debit)
+  const cb = txns.filter(t => t.category === 'Cashback')
+  const cbNet = list => list.reduce((a, t) => a + (t.type === 'credit' ? t.amount : -t.amount), 0)
+  const cbMonth = cbNet(cb.filter(t => new Date(t.date) >= monthStart))
+  const cbAll = cbNet(cb)
   const cycleLine = s.dates.statementDate ? `monthly on the ${ordinal(Number(card.billingCycleDate))}` : undefined
   const exclusions = excludedFor(card)
 

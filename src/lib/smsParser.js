@@ -180,6 +180,8 @@ export function isReminderOrRequest(text) {
   if (!done && /\b(?:is|are|was) due on\b|\bdue on\b|\bdue for payment\b|will be (?:debited|deducted|charged|presented)|\bplease maintain\b|\breminder\b|\bupcoming\b/.test(t)) return true
   // bill / premium / EMI notices: nothing has moved yet, it only asks you to pay
   if (!done && /\b(?:bill|invoice|premium|emi|installment|instalment|dues?)\b[^.]{0,70}\b(?:is |are |was )?(?:due|pending|overdue|payable|unpaid|outstanding|generated)\b|\b(?:pay|paying) (?:by|before|now|on time|your)\b|\bkindly pay\b|\bavoid (?:late|penalty|disconnection)|\blast date\b|\bdue date\b|\bdue by\b|\boverdue\b|\bminimum (?:amount )?due\b|\bunpaid\b/.test(t)) return true
+  // offers and promotions ("pre-approved loan of Rs 8,70,000", "limit upgrade", "apply now"): amounts in them are not money that moved
+  if (/\bpre-?\s?approved\b|\bpre-?\s?qualified\b|\bloan (?:of|up ?to|offer)\b|\bup ?to (?:rs|inr|₹)|\bapply (?:now|today|here|online)\b|\bclick (?:here|on|the link)\b|\bt&c\b|\bterms (?:and|&) conditions\b|\bexclusive offer\b|\blimit (?:enhancement|increase|upgrade)\b|\bavail (?:now|this|the|a|an)\b|\binstant (?:loan|cash)\b|\bget (?:a |an )?(?:loan|credit line)\b|https?:\/\/|\bbit\.ly\b/.test(t)) return true
   if (/(?:being|currently being) processed|we got your .{0,40}request|request (?:has been |is )?(?:received|raised|submitted)|successfully claimed|supercoins|congratulations/.test(t)) return true
   return false
 }

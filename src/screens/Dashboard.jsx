@@ -10,6 +10,7 @@ import { ArrowUpRight, ArrowDownLeft, PiggyBank, Receipt, CreditCard, Landmark, 
 import { db } from '../db/schema'
 import { TopBar, TxnRow, formatINR, getMerchantIcon, formatDate } from '../components/UI'
 import { useStore } from '../store'
+import { flowOf } from '../lib/flow'
 import { getUserName } from '../lib/profile'
 import { cardTitle } from '../lib/cardCatalog'
 import { txnName } from '../lib/txnName'
@@ -69,8 +70,9 @@ export default function Dashboard() {
   const prev = txnsAll.filter(t => new Date(t.date) < monthStart)
   const sum = (arr, type) => arr.filter(t => t.type === type).reduce((s, t) => s + t.amount, 0)
 
-  const expenses = sum(cur, 'debit'), income = sum(cur, 'credit')
-  const prevExpenses = sum(prev, 'debit'), prevIncome = sum(prev, 'credit')
+  // card refunds, reversals and cashback reduce spending; only credits to accounts are income
+  const { spent: expenses, income } = flowOf(cur, cards)
+  const { spent: prevExpenses, income: prevIncome } = flowOf(prev, cards)
   const net = income - expenses
   const savedPct = income > 0 ? Math.max(0, Math.round((net / income) * 100)) : 0
   const spendShare = income > 0 ? Math.min(100, Math.round((expenses / income) * 100)) : expenses > 0 ? 100 : 0
