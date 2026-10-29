@@ -461,7 +461,8 @@ export async function readStatement({ file, text, password }) {
 
 // A pasted statement may start with one summary line carrying the card's bill details, e.g.
 //   #SUMMARY, statementDate=15/10/2026, totalDue=998.00, minDue=200, dueDate=04/11/2026, rewardPoints=96, creditLimit=100000, availableCredit=90000
-// (statementDate and totalDue are required; the rest is optional.)
+// (statementDate and totalDue are required; the rest is optional. purchases = the statement's purchases/debits figure; it lets the app
+// tell which spends dated on or before the statement day were NOT part of that bill.)
 export function splitSummary(text) {
   const lines = String(text || '').split(/\r?\n/)
   const i = lines.findIndex(l => /^\s*#\s*summary\b/i.test(l))
@@ -478,6 +479,7 @@ export function splitSummary(text) {
     totalDue: num(kv.totaldue ?? kv.totalamountdue ?? kv.due),
     minDue: num(kv.mindue ?? kv.minimumdue ?? kv.minimumamountdue),
     dueDate: date(kv.duedate),
+    purchases: num(kv.purchases ?? kv.purchasesdebits),
     rewardPoints: num(kv.rewardpoints ?? kv.points),
     creditLimit: num(kv.creditlimit ?? kv.totallimit),
     availableCredit: num(kv.availablecredit ?? kv.availablelimit),

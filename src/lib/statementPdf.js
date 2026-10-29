@@ -261,7 +261,12 @@ export function findCardSummary(lines) {
   if (sd) out.statementDate = dateOf(sd)
   // "C | 1,801.65 | C | 1,802.00 | + | C | 9,584.00 | + | C | 0.00 | = | C | 9,584.00": the amount after the "=" is the total due
   const eq = text.find(t => /\|\s*=\s*\|/.test(t) && /[\d,]+\.\d\d/.test(t))
-  if (eq) { const m = eq.split(/\|\s*=\s*\|/)[1].match(/[\d,]*\d\.\d\d/); if (m) out.totalDue = num(m[0]) }
+  if (eq) {
+    const m = eq.split(/\|\s*=\s*\|/)[1].match(/[\d,]*\d\.\d\d/); if (m) out.totalDue = num(m[0])
+    // previous dues, payments received, purchases, finance charges, then the total
+    const all = (eq.match(/[\d,]*\d\.\d\d/g) || []).map(num)
+    if (all.length === 5) out.purchases = all[2]
+  }
   // "C | 480.00 | 04 Nov, 2026": minimum due and due date
   const md = text.find(t => /\d{1,2}\s+[A-Za-z]{3},?\s+\d{4}/.test(t) && /[\d,]+\.\d\d/.test(t) && !/^statement date|billing period/i.test(t) && !/=/.test(t))
   if (md) { out.dueDate = dateOf(md); const m = md.match(/[\d,]*\d\.\d\d/); if (m) out.minDue = num(m[0]) }

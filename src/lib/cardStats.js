@@ -32,7 +32,12 @@ export function cardStats(card, txns, now = new Date()) {
     unbilledTxns = bill
   }
 
-  const unbilled = dates.statementDate ? Math.max(0, sum(unbilledTxns)) : (card.unbilled || 0)
+  // Spends dated on or before the statement day that the bank's bill did not include (posted after it was cut) belong to the next
+  // bill: whatever the cycle's debits add up to beyond the statement's own purchases figure.
+  const hasStatementEarly = !!dates.key && card.statementCycleKey === dates.key
+  const billedDebits = billedTxns.filter(t => t.type === 'debit').reduce((s, t) => s + t.amount, 0)
+  const notBilled = hasStatementEarly && card.statementPurchases != null && billedDebits - card.statementPurchases > 1 ? billedDebits - card.statementPurchases : 0
+  const unbilled = dates.statementDate ? Math.max(0, sum(unbilledTxns) + notBilled) : (card.unbilled || 0)
   const billedSpends = Math.max(0, sum(billedTxns))
   const hasStatement = !!dates.key && card.statementCycleKey === dates.key
   const paymentsThisCycle = dates.statementDate ? payments.filter(p => new Date(p.date) >= dates.statementDate) : []
@@ -71,7 +76,7 @@ export function cardStats(card, txns, now = new Date()) {
     paidThisCycle, pendingBilled, status, payments, paymentsThisCycle,
     unbilledTxns, billedTxns,
     totalDue, outstanding, owing,
-    tracked, bankUsed, shared: !!card.limitGroup,
+    tracked, bankUsed, shared: !!card.limitGroup, notBilled,
     limit, available, utilPct: limit ? Math.min(100, Math.round(((limit - available) / limit) * 100)) : 0,
   }
 }
