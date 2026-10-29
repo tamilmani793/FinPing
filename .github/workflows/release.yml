@@ -1,0 +1,113 @@
+name: Release build and deploy
+
+# Runs when a release is created, published or edited: builds the signed APK, keeps it as a workflow artifact, attaches it to that
+# release, and deploys the web app to GitHub Pages. (Releases made by the branch-build workflow with the built-in token do not
+# start this one, so there is no loop.)
+on:
+  release:
+    types: [created, published, edited]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and attach the APK to
+        required: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: true
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  apk:
+    # leave the automatic "latest" and branch pre-releases to the branch-build workflow
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.release.tag_name != 'latest' && !startsWith(github.event.release.tag_name, 'apk-')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Stamp the version from the release tag
+        run: |
+          VERSION="${TAG#v}"
+          if printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            npm pkg set version="$VERSION"
+            sed -i "s/versionName \".*\"/versionName \"$VERSION\"/" android/app/build.gradle
+          fi
+          sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/" android/app/build.gradle
+      - run: npm ci
+      - run: npm run build
+        env:
+          BASE_PATH: ./
+      - run: npx cap sync android
+      - name: Prepare signing key (optional)
+        env:
+          KEYSTORE_B64: ${{ secrets.FINPING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/finping.jks"
+            echo "FINPING_KEYSTORE=$RUNNER_TEMP/finping.jks" >> "$GITHUB_ENV"
+            echo "FINPING_KEYSTORE_PASSWORD=${{ secrets.FINPING_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "FINPING_KEY_ALIAS=${{ secrets.FINPING_KEY_ALIAS }}" >> "$GITHUB_ENV"
+            echo "FINPING_KEY_PASSWORD=${{ secrets.FINPING_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          else
+            echo "No signing key secrets set: the release APK is signed with a temporary debug key."
+          fi
+      - run: chmod +x gradlew && ./gradlew assembleRelease
+        working-directory: android
+      - name: Name the APK after the release
+        run: cp android/app/build/outputs/apk/release/app-release.apk "FinPing-${TAG}.apk"
+      - name: Keep the APK as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FinPing-apk-${{ env.TAG }}
+          path: FinPing-${{ env.TAG }}.apk
+          if-no-files-found: error
+          retention-days: 90
+      - name: Attach the APK to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "FinPing-${TAG}.apk" --clobber --repo "$GITHUB_REPOSITORY"
+
+  pages:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.release.tag_name != 'latest' && !startsWith(github.event.release.tag_name, 'apk-')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
