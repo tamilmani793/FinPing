@@ -52,14 +52,13 @@ function Row({ k, v, color, bold, sub }) {
 
 // Tap the heading to fold a section away; which ones are folded is remembered on this phone
 const FOLD_KEY = 'finping_folded_sections'
-const readFolded = () => { try { return JSON.parse(localStorage.getItem(FOLD_KEY)) || [] } catch { return [] } }
-function Section({ title, right, children }) {
-  const [folded, setFolded] = useState(() => readFolded().includes(title))
+const readFolded = () => { try { const v = JSON.parse(localStorage.getItem(FOLD_KEY)); return Array.isArray(v) ? Object.fromEntries(v.map(t => [t, true])) : (v || {}) } catch { return {} } }
+function Section({ title, right, children, fold = false }) {
+  const [folded, setFolded] = useState(() => { const m = readFolded(); return title in m ? !!m[title] : fold })
   const toggle = () => {
     const next = !folded
     setFolded(next)
-    const all = readFolded().filter(x => x !== title)
-    localStorage.setItem(FOLD_KEY, JSON.stringify(next ? [...all, title] : all))
+    localStorage.setItem(FOLD_KEY, JSON.stringify({ ...readFolded(), [title]: next }))
   }
   return (
     <div className="card" style={{ marginBottom: 12 }}>
@@ -300,7 +299,7 @@ function PaymentDetails({ card, s }) {
     } catch (e) { showNotification(e.message, 'error') }
   }
   return (
-    <Section title="Payment details" right={<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }} onClick={() => setOpen(!open)}>{open ? 'Cancel' : '＋ Record payment'}</span>}>
+    <Section title="Payment details" fold right={<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }} onClick={() => setOpen(!open)}>{open ? 'Cancel' : '＋ Record payment'}</span>}>
       <Row k="Paid this cycle" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.paidThisCycle)} color="var(--mint-dim)" bold />
       {open && (
         <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, margin: '6px 0 8px' }}>
@@ -447,8 +446,8 @@ function Detail({ card, cards, byCard, onBack }) {
 
         {credit && (
           <>
-            {/* Outstanding */}
-            <Section title="Outstanding details" right={<span className={`badge ${st.badge}`}>{st.label}</span>}>
+            {/* Bill & dues: what is owed now, and the bill behind it */}
+            <Section title="Bill & dues" right={<span className={`badge ${st.badge}`}>{st.label}</span>}>
               <Row k="Total amount due" sub={s.billed > 0 ? `${formatINR(s.billed)} billed − ${formatINR(s.paidThisCycle)} paid${s.billedIsEstimate ? ' · estimated' : ''}` : 'nothing billed yet'} v={formatINR(s.totalDue)} color={s.totalDue > 0 ? 'var(--red-dim)' : 'var(--mint-dim)'} />
               <Row k="+ Spends after the statement" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} />
               <div className="divider" />
@@ -456,10 +455,7 @@ function Detail({ card, cards, byCard, onBack }) {
               {s.bankUsed != null && Math.abs(s.bankUsed - s.outstanding) >= 1 && (
                 <Row k="Limit in use per bank" sub="limit − available limit; may include interest, fees or spends the SMS did not show" v={formatINR(s.bankUsed)} color="var(--txt2)" />
               )}
-            </Section>
-
-            {/* Billed */}
-            <Section title="Billed details">
+              <div className="divider" />
               <Row k="Statement date" sub={cycleLine} v={s.dates.statementDate ? fmtD(s.dates.statementDate) : 'Not set — tap Edit'} />
               <Row k="Payment due date" sub={s.owing && s.dates.dueDate ? `${card.paymentDueDays} days after statement` : undefined} v={s.owing ? (s.dates.dueDate ? fmtD(s.dates.dueDate) : '—') : s.status === 'paid' ? 'Paid — nothing due' : 'No bill yet'} />
               {s.dates.nextStatementDate && <Row k="Next statement" v={`${fmtD(s.dates.nextStatementDate)} · due ${fmtS(s.dates.nextDueDate)}`} />}
@@ -472,7 +468,6 @@ function Detail({ card, cards, byCard, onBack }) {
 
             {/* Spend */}
             <Section title="Spend details" right={<span style={{ display: 'flex', gap: 12, fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }}><span onClick={() => checkSms(true)}>↻ Check SMS</span><span onClick={() => setAddOpen(true)}>＋ Add</span></span>}>
-              <Row k="Unbilled spends" sub={s.dates.statementDate ? `since ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.unbilled)} bold />
               <Row k="Billed in last statement" sub={s.prevStatement ? `${fmtS(s.prevStatement)} – ${fmtS(s.dates.statementDate)}` : undefined} v={formatINR(s.billedSpends)} />
               <Row k="Spent this month" v={formatINR(spentMonth)} />
               <div className="label-caps" style={{ margin: '10px 0 2px' }}>Unbilled · {s.unbilledTxns.length}</div>
@@ -488,7 +483,7 @@ function Detail({ card, cards, byCard, onBack }) {
             <PaymentDetails card={card} s={s} />
 
             {/* Rewards & fees */}
-            <Section title="Rewards & fees" right={<Gift size={15} color="var(--pink)" />}>
+            <Section title="Rewards & fees" fold right={<Gift size={15} color="var(--pink)" />}>
               <Row k="Cashback this month" v={formatINR(cbMonth)} color="var(--mint-dim)" />
               <Row k="Cashback all-time" v={formatINR(cbAll)} color="var(--mint-dim)" />
               {card.rewardPoints > 0 && <Row k="Reward points" v={card.rewardPoints.toLocaleString('en-IN')} />}
@@ -525,7 +520,7 @@ function Detail({ card, cards, byCard, onBack }) {
         )}
 
         {credit && (
-          <Section title="All transactions">
+          <Section title="All transactions" fold>
             <FilteredTxnList card={card} list={txns} cards={cards} emptyText="No transactions yet for this card" />
           </Section>
         )}

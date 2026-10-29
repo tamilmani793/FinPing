@@ -1,6 +1,5 @@
 import { db } from '../db/schema'
 import { splitPayment, lastRepaymentDate } from './loanMath'
-import { findDuplicate } from './dedupe'
 import { accrualUntil, rebuildSchedule } from './loanSchedule'
 
 const DEBT_DATES = ['startDate', 'endDate', 'interestFrom']
@@ -53,47 +52,11 @@ export async function importDebts(jsonText) {
 const blank = v => v === '' || v == null
 const isLent = debt => debt.type === 'FriendLent' // money you lent out: "received" reduces what you are owed
 
-// Writes the matching line on a bank account (the loan EMI debit, or money received) and, for entries
-// typed in by hand, moves that account's balance. An SMS-sourced EMI only adds the line: the bank's own
-// SMS already carries the balance. If the bank has already sent its own debit alert for the same
-// payment, that entry is reused instead of adding a second one.
-async function postToAccount(debt, accountId, twin, { type, amount, date, source, rawSMS, notes, label, category, excluded }) {
-  const none = { accountId: null, accountTxnId: null, accountTxnOwned: false, accountDelta: 0 }
-  if (accountId == null) return none
-  const acct = await db.creditCards.get(accountId)
-  if (!acct || acct.cardType !== 'account') return none
-
-  let accountTxnId, owned = false
-  if (twin && (twin.cardId == null || twin.cardId === acct.id)) {
-    accountTxnId = twin.id
-    await db.transactions.update(twin.id, { cardId: acct.id, category, merchant: label, kind: type === 'debit' ? 'loan_payment' : 'loan_received', debtId: debt.id })
-  } else {
-    owned = true
-    accountTxnId = await db.transactions.add({
-      date, amount, type, merchant: label, category, paymentMode: 'Bank', bank: acct.bank || '', accountLast4: acct.cardLast4 || null,
-      cardId: acct.id, rawSMS: source === 'sms' ? rawSMS : null, parsedBy: source === 'sms' ? 'auto' : 'manual',
-      kind: type === 'debit' ? 'loan_payment' : 'loan_received', debtId: debt.id, tags: [], notes, isExcluded: !!excluded, createdAt: new Date(),
-    })
-  }
-  let delta = 0
-  if (source !== 'sms' && !(twin && accountTxnId === twin.id) && acct.accountBalance != null) {
-    delta = type === 'debit' ? -amount : amount
-    await db.creditCards.update(acct.id, { accountBalance: round2(acct.accountBalance + delta) })
-  }
-  return { accountId: acct.id, accountTxnId, accountTxnOwned: owned, accountDelta: delta }
-}
-
-// The bank's own alert for the same payment, if it already arrived (looked up before any transaction opens).
-async function findTwin(debtId, accountId, { type, amount, date, label }) {
-  const debt = await db.debts.get(debtId)
-  const id = blank(accountId) ? debt?.debitAccountId : Number(accountId)
-  if (id == null) return null
-  const acct = await db.creditCards.get(id)
-  if (!acct || acct.cardType !== 'account') return null
-  // The bank's alert names the payment its own way, so only amount, direction, time and account digits are compared.
-  const hit = await findDuplicate({ date, amount, type, merchant: '', accountLast4: acct.cardLast4, kind: type === 'debit' ? 'loan_payment' : 'loan_received' })
-  return hit && (hit.cardId == null || hit.cardId === acct.id) ? hit : null
-}
+// An EMI or money received is no longer posted to a bank account from here: the bank's own SMS (or statement import) adds
+// that line and moves the balance, so doing it again would count it twice.
+const NO_ACCOUNT = { accountId: null, accountTxnId: null, accountTxnOwned: false, accountDelta: 0 }
+async function postToAccount() { return NO_ACCOUNT }
+async function findTwin() { return null }
 
 // Records a payment (EMI) against a debt. Interest and principal can be given; when BOTH are left blank
 // and the loan has an interest rate, the payment is split automatically: daily interest on the

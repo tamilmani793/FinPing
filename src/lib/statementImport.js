@@ -26,7 +26,8 @@ export async function accountEntries(account) {
 }
 
 export async function planStatement(account, rows) {
-  return reconcile(rows, await accountEntries(account), await db.deletedTxns.toArray())
+  // The statement is the truth: every line on it is kept, even one whose earlier SMS entry you deleted (so totals agree with the bank's)
+  return reconcile(rows, await accountEntries(account), [])
 }
 
 // Applies the plan: corrects matched entries, adds the missing ones, removes the chosen extras.

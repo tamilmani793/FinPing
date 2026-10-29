@@ -10,10 +10,9 @@ import { addManualRepayment, recordReceipt, undoRepayment } from '../lib/debtBac
 import { dailyInterest, splitPayment, lastRepaymentDate } from '../lib/loanMath'
 import { projectSchedule, defaultMode, nextEmiAmount, accrualUntil, FIXED_TYPES } from '../lib/loanSchedule'
 import { parseEmiSchedule } from '../lib/scheduleImport'
-import { cardTitle } from '../lib/cardCatalog'
 import { askConfirm } from '../lib/confirm'
 import { postDueEmis } from '../lib/emiEngine'
-import { Landmark, Wallet, Calendar, IndianRupee, Percent, Hash, User, FileText, Clock, Building2 } from 'lucide-react'
+import { Wallet, Calendar, IndianRupee, Percent, Hash, User, FileText, Clock, Building2 } from 'lucide-react'
 import { Field, FormHeading, Segmented, TextField, Picker } from '../components/Fields'
 import { useDebtTypes, useOptionNames } from '../lib/options'
 import Sortable from '../components/Sortable'
@@ -92,11 +91,8 @@ export default function Debt() {
   const [sched, setSched] = useState(null)
   const [paste, setPaste] = useState({ open: false, text: '', dueDay: '5' })
   const { showNotification, debtSegment, setDebtSegment } = useStore()
-  const accounts = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => c.cardType === 'account' && !c.draft)
-  const acctLabel = a => cardTitle(a)
   const { list: debtTypes, icons: DEBT_ICONS, labels: DEBT_LABELS } = useDebtTypes()
   const typeOptions = debtTypes.map(t => ({ value: t.id, label: t.label, icon: t.icon }))
-  const accountOptions = accounts.map(a => ({ value: String(a.id), label: acctLabel(a), sub: a.accountBalance != null ? formatINR(a.accountBalance) : undefined }))
 
   const debts = useLiveQuery(() => db.debts.toArray())
   const lenderNames = useOptionNames('lenders')
@@ -254,11 +250,6 @@ export default function Debt() {
     showNotification('Debt marked as closed', 'success')
   }
 
-  // the accounts a payment can be debited from / credited to; blank = the loan's own account
-  const acctOptions = d => {
-    const own = d.debitAccountId != null ? accounts.find(x => x.id === d.debitAccountId) : null
-    return [{ value: '', label: own ? `Loan's account (${acctLabel(own)})` : 'No bank account' }, ...accountOptions]
-  }
 
   // preview of the schedule the form describes
   const preview = (() => {
@@ -356,9 +347,6 @@ export default function Debt() {
                 <Field label="Name" span><TextField icon={<FileText size={17} />} placeholder="e.g. HDFC Home Loan, Phone EMI" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
                 <Field label="Lender"><Picker value={form.lender} options={lenderOptions} onChange={v => setForm({ ...form, lender: v })} allowCustom icon={<Building2 size={17} />} title="Lender" placeholder="Choose or type" clearLabel="Not set" /></Field>
                 <Field label="Loan account no."><TextField icon={<Hash size={17} />} value={form.loanAccountNo} onChange={e => setForm({ ...form, loanAccountNo: e.target.value })} /></Field>
-                <Field label="EMI debited from" span>
-                  <Picker value={form.debitAccountId} options={accountOptions} onChange={v => setForm({ ...form, debitAccountId: v })} icon={<Landmark size={17} />} title="EMI debited from" placeholder="Not set" clearLabel="Not set" />
-                </Field>
                 {/* with a pasted / saved bank schedule these are shown filled in, but locked: the schedule decides them */}
                 <fieldset disabled={!!sched} style={{ display: 'contents', border: 0, padding: 0, margin: 0 }}>
                 <Field label={FIXED_TYPES.includes(form.type) ? 'Purchase / loan amount' : 'Loan amount'}><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" value={form.principal} onChange={e => setForm({ ...form, principal: e.target.value })} /></Field>
@@ -489,10 +477,9 @@ export default function Debt() {
                 {isExpanded && (
                   <>
                     <Divider />
-                    {(d.loanAccountNo || d.accountRef || d.debitAccountId != null) && (
+                    {(d.loanAccountNo || d.accountRef) && (
                       <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8, lineHeight: 1.6 }}>
                         {(d.loanAccountNo || d.accountRef) && <div>Loan account no.: <b style={{ color: 'var(--txt)' }}>{d.loanAccountNo || d.accountRef}</b></div>}
-                        {d.debitAccountId != null && (() => { const a = accounts.find(x => x.id === d.debitAccountId); return a ? <div>EMI debited from: <b style={{ color: 'var(--txt)' }}>{acctLabel(a)}</b>{a.accountBalance != null ? ` · balance ${formatINR(a.accountBalance)}` : ''}</div> : null })()}
                       </div>
                     )}
 
@@ -561,7 +548,6 @@ export default function Debt() {
                           </div>
                         )}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
-                          <Field label="Debited from"><Picker value={repayForm.accountId} options={acctOptions(d)} onChange={v => setRepayForm({ ...repayForm, accountId: v })} icon={<Landmark size={17} />} title="Debited from" placeholder="No bank account" /></Field>
                           <Field label="Note"><TextField icon={<FileText size={17} />} placeholder="Optional" value={repayForm.notes} onChange={e => setRepayForm({ ...repayForm, notes: e.target.value })} /></Field>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
@@ -585,7 +571,6 @@ export default function Debt() {
                           <Field label="Date"><TextField icon={<Calendar size={17} />} type="date" value={receiveForm.date} onChange={e => setReceiveForm({ ...receiveForm, date: e.target.value })} /></Field>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
-                          <Field label="Credited to"><Picker value={receiveForm.accountId} options={acctOptions(d)} onChange={v => setReceiveForm({ ...receiveForm, accountId: v })} icon={<Landmark size={17} />} title="Credited to" placeholder="No bank account" /></Field>
                           <Field label="Note"><TextField icon={<FileText size={17} />} placeholder="Optional" value={receiveForm.notes} onChange={e => setReceiveForm({ ...receiveForm, notes: e.target.value })} /></Field>
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>

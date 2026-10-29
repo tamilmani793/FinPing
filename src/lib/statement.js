@@ -253,14 +253,14 @@ export function statementRows(table) {
       const dt = moneyTokens(r[c.debit]), ct = moneyTokens(r[c.credit])
       if (dt.length === 2 && !ct.length) { debit = Math.abs(dt[0]); credit = Math.abs(dt[1]); if (dt[0] < 0 && !dt[1]) { credit = Math.abs(dt[0]); debit = null } }
       else if (ct.length === 2 && !dt.length) { debit = Math.abs(ct[0]); credit = Math.abs(ct[1]) }
-      // a negative withdrawal is a reversal (money back in), a negative deposit the other way round
+      // a negative withdrawal is a reversal: it stays a (negative) withdrawal, as on the statement, so counts and totals agree with the bank's
       const dn = dt.length ? dt.find(x => x !== 0) : null, cn = ct.length ? ct.find(x => x !== 0) : null
-      if (dt.length === 2 && dn < 0 && dt[1] === 0) { credit = -dn; debit = null }
-      else if (dt.length === 1 && dn < 0 && !(credit > 0)) { credit = -dn; debit = null }
+      if (dt.length === 2 && dn < 0 && dt[1] === 0) { debit = dn; credit = null }
+      else if (dt.length === 1 && dn < 0 && !(credit > 0)) { debit = dn; credit = null }
       else if (ct.length === 1 && cn < 0 && !(debit > 0)) { debit = -cn; credit = null }
     }
-    if (!(debit > 0)) debit = null
-    if (!(credit > 0)) credit = null
+    if (!debit) debit = null
+    if (!credit) credit = null
     if (c.amount >= 0 && debit == null && credit == null) {
       const a = parseMoney(r[c.amount])
       const dir = (c.type >= 0 ? r[c.type] : r[c.amount]) || ''
@@ -275,11 +275,11 @@ export function statementRows(table) {
       }
     }
     if (c.balance >= 0) { const b = parseBalance(r[c.balance]); if (b != null) prevBal = b }
-    if (!(debit > 0) && !(credit > 0)) continue
+    if (!debit && !credit) continue
     const narration = r[c.narration] || ''
     const info = narrationInfo(narration)
-    const type = debit > 0 ? 'debit' : 'credit'
-    const amount = debit > 0 ? debit : credit
+    const type = debit ? 'debit' : 'credit'
+    const amount = debit ? debit : credit
     rows.push({
       date, type, amount, narration, merchant: info.merchant === 'Unknown' ? (fallbackName(narration) || (/^\d+$/.test(narration.trim()) ? (type === 'debit' ? 'Cheque / bank debit' : 'Bank credit') : 'Unknown')) : info.merchant, mode: info.mode,
       category: canonCategory(classifyCategory(info.merchant, narration)),
@@ -351,7 +351,7 @@ export function reconcile(rows, saved, deleted = []) {
     return !!hit
   }
   for (const r of ordered) { const t = pairs.get(r.stmtKey); if (t) matched.push({ row: r, txn: t }); else if (wasDeleted(r)) skipped.push(r); else toAdd.push(r) }
-  const extras = saved.filter(t => !claimed.has(t.id) && (!t.stmtKey || stale(t)) && dayKey(t.date) >= first && dayKey(t.date) <= last)
+  const extras = saved.filter(t => !claimed.has(t.id) && dayKey(t.date) >= first && dayKey(t.date) <= last)
     .map(t => ({ txn: t, keep: t.parsedBy === 'manual' || t.userEdited || PROTECTED(t), duplicateOf: matched.find(m => m.txn.type === t.type && cents(m.txn.amount) === cents(t.amount) && Math.abs(dayKey(m.txn.date) - dayKey(t.date)) <= 2)?.txn.id ?? null }))
     .filter(x => !x.txn._loose || x.duplicateOf != null)
   const closing = [...ordered].reverse().find(r => r.balance != null)

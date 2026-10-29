@@ -8,7 +8,7 @@ export function TopBar({ title, sub, right }) {
   const { activeTab, setActiveTab, smsSync } = useStore()
   const isSub = activeTab === 'wealth' || activeTab === 'profile'
   return (
-    <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)' }}>
+    <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)', position: 'sticky', top: 0, zIndex: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {isSub ? (
           <div onClick={() => setActiveTab('home')} style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>

@@ -15,7 +15,6 @@ export default function StatementImportSheet({ account, onClose }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [plan, setPlan] = useState(null)
-  const [drop, setDrop] = useState({})
   const [setBal, setSetBal] = useState(true)
 
   const [file, setFile] = useState(null)       // a chosen file waiting for its password
@@ -28,7 +27,6 @@ export default function StatementImportSheet({ account, onClose }) {
       const rows = await readStatement({ file: f, text, password })
       const p = await planStatement(account, rows)
       setPlan(p)
-      setDrop(Object.fromEntries(p.extras.map(x => [x.txn.id, true]))) // the statement is the truth: everything it does not show goes unless you untick it
       setFile(null); setNeedPw(false); setPw('') // the password is not kept
     } catch (e) {
       if (e.needPassword) { setFile(f); setNeedPw(true); setPw(''); showNotification(e.message, e.wrong ? 'error' : undefined) }
@@ -40,14 +38,15 @@ export default function StatementImportSheet({ account, onClose }) {
   const run = async () => {
     setBusy(true)
     try {
-      const removeIds = plan.extras.filter(x => drop[x.txn.id]).map(x => x.txn.id)
+      // the statement replaces everything saved for its dates: whatever it does not show is removed
+      const removeIds = plan.extras.map(x => x.txn.id)
       const r = await applyStatement(account, plan, { removeIds, setBalance: setBal })
       showNotification(`${r.corrected} corrected · ${r.added} added · ${r.removed} removed`, 'success')
       onClose()
     } catch (e) { showNotification(e.message || 'Import failed', 'error'); setBusy(false) }
   }
 
-  const removing = plan ? plan.extras.filter(x => drop[x.txn.id]).length : 0
+  const removing = plan ? plan.extras.length : 0
   return (
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28, maxHeight: '88vh', overflowY: 'auto' }}>
@@ -89,23 +88,23 @@ export default function StatementImportSheet({ account, onClose }) {
               <div><b style={{ color: 'var(--mint-dim)' }}>{plan.matched.length}</b> saved entries matched · corrected with the bank's details</div>
               <div><b style={{ color: 'var(--gold-dim)' }}>{plan.toAdd.length}</b> on the statement but missing · will be added</div>
               {plan.skipped?.length > 0 && <div><b style={{ color: 'var(--txt)' }}>{plan.skipped.length}</b> line{plan.skipped.length === 1 ? '' : 's'} you deleted earlier stay deleted</div>}
-              <div><b style={{ color: 'var(--red-dim)' }}>{plan.extras.length}</b> saved but not on the statement{plan.extras.length ? ' · choose below' : ''}</div>
+              <div><b style={{ color: 'var(--red-dim)' }}>{plan.extras.length}</b> saved for these dates but not on the statement · will be removed</div>
+              <div style={{ color: 'var(--txt2)', fontSize: 11 }}>Entries on other dates are left as they are.</div>
             </div>
 
             {plan.extras.length > 0 && (
               <div style={{ marginBottom: 10 }}>
-                <div className="label-caps" style={{ marginBottom: 6 }}>Not on your statement</div>
+                <div className="label-caps" style={{ marginBottom: 6 }}>Removed · not on your statement</div>
                 {plan.extras.map(({ txn, keep, duplicateOf }) => (
-                  <label key={txn.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)', fontSize: 12 }}>
-                    <input type="checkbox" checked={!!drop[txn.id]} onChange={e => setDrop({ ...drop, [txn.id]: e.target.checked })} />
+                  <div key={txn.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)', fontSize: 12 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.merchant}</div>
-                      <div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{fmtD(txn.date)}{duplicateOf ? ' · looks like a duplicate' : ''}{keep ? ' · typed by you / loan entry (untick to keep)' : ''}</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{fmtD(txn.date)}{duplicateOf ? ' · looks like a duplicate' : ''}{keep ? ' · typed by you / loan entry' : ''}</div>
                     </div>
                     <div style={{ fontWeight: 700, color: txn.type === 'debit' ? 'var(--red-dim)' : 'var(--mint-dim)' }}>{txn.type === 'debit' ? '−' : '+'}{formatINR(txn.amount)}</div>
-                  </label>
+                  </div>
                 ))}
-                <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>Ticked entries are removed so only the statement's entries remain. Untick any you want to keep (your own entries, loan postings).</div>
+                <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>The statement replaces everything saved for its dates, so the totals match the bank's. Other dates are not touched.</div>
               </div>
             )}
 
