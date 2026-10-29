@@ -211,7 +211,8 @@ export default function Profile() {
         <div className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
           <Row Icon={Smartphone} title="SMS tracking" sub={isNative() ? 'Reads bank SMS on this phone' : 'Available in the Android app; paste SMS in the browser'} right={<span />} />
           <Row Icon={ShieldCheck} title="Privacy" sub="All data stays on your device" right={<span />} />
-          <Row Icon={Info} title="FinPing" sub={`Version ${__APP_VERSION__}`} right={<span />} />
+          <Row Icon={Info} title="FinPing" sub={`Version ${__APP_VERSION__}${__BUILD_INFO__.run ? ` · build #${__BUILD_INFO__.run}` : ''}`} right={<span />} />
+          <Row Icon={Info} title="This build" sub={`${format(new Date(__BUILD_INFO__.time), 'd MMM yyyy, h:mm a')} · ${__BUILD_INFO__.commit || 'unknown commit'}${__BUILD_INFO__.dirty ? '+' : ''}${__BUILD_INFO__.branch ? ` · ${__BUILD_INFO__.branch}` : ''}`} right={<span />} />
         </div>
       </div>
     </div>
