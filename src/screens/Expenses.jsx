@@ -12,6 +12,7 @@ import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { cardTitle } from '../lib/cardCatalog'
 import { txnName } from '../lib/txnName'
+import { rewardPill } from '../lib/rewardRules'
 
 const FILTERS = ['All', 'Food', 'Shopping', 'Utilities', 'Travel', 'Fuel', 'Excluded']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -206,7 +207,7 @@ export default function Expenses() {
                       isCredit={t.type === 'credit'}
                       tags={t.tags}
                       onClick={() => setEditTxn(t)}
-                      badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : null}
+                      badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : (rewardPill(t.expectedReward) ? <Badge variant="mint" style={{ fontSize: 9 }}>{rewardPill(t.expectedReward)}</Badge> : null)}
                     />
                   ))}
                 </>

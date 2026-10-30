@@ -277,7 +277,10 @@ export function findCardSummary(lines) {
   const ri = text.findIndex(t => /reward points/i.test(t) && /opening balance/i.test(t))
   if (ri >= 0) {
     for (let k = ri + 1; k < Math.min(text.length, ri + 5); k++) {
-      if (/^\d[\d,]*\s*\|\s*\d[\d,]*\s*\|\s*\d[\d,]*\s*\|\s*\d[\d,]*$/.test(text[k]) && /^\d[\d,]*$/.test(text[k + 1] || '')) { out.rewardPoints = num(text[k + 1]); break }
+      if (/^\d[\d,]*\s*\|\s*\d[\d,]*\s*\|\s*\d[\d,]*\s*\|\s*\d[\d,]*$/.test(text[k]) && /^\d[\d,]*$/.test(text[k + 1] || '')) {
+        const row = text[k].match(/\d[\d,]*/g).map(num) // opening | earned | disbursed | lapsed
+        out.rewardPoints = num(text[k + 1]); out.rewardsOpening = row[0]; out.rewardsEarned = row[1]; break
+      }
     }
   }
   return out.totalDue != null && out.statementDate ? out : null

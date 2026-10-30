@@ -483,6 +483,8 @@ export function splitSummary(text) {
     dueDate: date(kv.duedate),
     purchases: num(kv.purchases ?? kv.purchasesdebits),
     rewardPoints: num(kv.rewardpoints ?? kv.points),
+    rewardsEarned: num(kv.rewardsearned ?? kv.earned),
+    rewardsOpening: num(kv.rewardsopening),
     creditLimit: num(kv.creditlimit ?? kv.totallimit),
     availableCredit: num(kv.availablecredit ?? kv.availablelimit),
   }

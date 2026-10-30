@@ -1,0 +1,672 @@
+[
+ {
+  "code": 3000,
+  "name": "Airlines (carrier range)",
+  "category": "Travel Online"
+ },
+ {
+  "code": 4111,
+  "name": "Local & suburban commuter transport",
+  "category": "Transport"
+ },
+ {
+  "code": 4112,
+  "name": "Passenger railways",
+  "category": "Travel Online"
+ },
+ {
+  "code": 4121,
+  "name": "Taxis and ride-hailing",
+  "category": "Transport"
+ },
+ {
+  "code": 4131,
+  "name": "Bus lines",
+  "category": "Transport"
+ },
+ {
+  "code": 4214,
+  "name": "Motor freight carriers and trucking",
+  "category": "General"
+ },
+ {
+  "code": 4215,
+  "name": "Courier services",
+  "category": "General"
+ },
+ {
+  "code": 4511,
+  "name": "Airlines and air carriers",
+  "category": "Travel Online"
+ },
+ {
+  "code": 4722,
+  "name": "Travel agencies and tour operators",
+  "category": "Travel Online"
+ },
+ {
+  "code": 4789,
+  "name": "Transportation services",
+  "category": "Transport"
+ },
+ {
+  "code": 4814,
+  "name": "Telecommunication services",
+  "category": "Utilities & Bills"
+ },
+ {
+  "code": 4816,
+  "name": "Computer network / information services",
+  "category": "Utilities & Bills"
+ },
+ {
+  "code": 4899,
+  "name": "Cable, satellite and pay TV",
+  "category": "Entertainment"
+ },
+ {
+  "code": 4900,
+  "name": "Electric, gas, water and sanitary utilities",
+  "category": "Utilities & Bills"
+ },
+ {
+  "code": 5045,
+  "name": "Computers, peripherals and software",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5065,
+  "name": "Electronic parts and equipment",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5094,
+  "name": "Precious stones, metals, watches and jewellery",
+  "category": "Jewellery & Gold"
+ },
+ {
+  "code": 5111,
+  "name": "Stationery, office supplies",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5172,
+  "name": "Petroleum and petroleum products",
+  "category": "Fuel"
+ },
+ {
+  "code": 5200,
+  "name": "Home supply warehouse stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5211,
+  "name": "Lumber and building materials",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5251,
+  "name": "Hardware stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5300,
+  "name": "Wholesale clubs",
+  "category": "Grocery"
+ },
+ {
+  "code": 5309,
+  "name": "Duty free stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5310,
+  "name": "Discount stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5311,
+  "name": "Department stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5331,
+  "name": "Variety stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5399,
+  "name": "General merchandise",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5411,
+  "name": "Grocery stores and supermarkets",
+  "category": "Grocery"
+ },
+ {
+  "code": 5422,
+  "name": "Freezer and locker meat provisioners",
+  "category": "Grocery"
+ },
+ {
+  "code": 5441,
+  "name": "Candy, nut and confectionery stores",
+  "category": "Grocery"
+ },
+ {
+  "code": 5451,
+  "name": "Dairy products stores",
+  "category": "Grocery"
+ },
+ {
+  "code": 5462,
+  "name": "Bakeries",
+  "category": "Grocery"
+ },
+ {
+  "code": 5499,
+  "name": "Convenience and specialty food stores",
+  "category": "Grocery"
+ },
+ {
+  "code": 5541,
+  "name": "Service stations (with or without ancillary services)",
+  "category": "Fuel"
+ },
+ {
+  "code": 5542,
+  "name": "Automated fuel dispensers",
+  "category": "Fuel"
+ },
+ {
+  "code": 5651,
+  "name": "Family clothing stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5691,
+  "name": "Men's and women's clothing",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5699,
+  "name": "Apparel and accessories",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5732,
+  "name": "Electronics stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5733,
+  "name": "Music stores and musical instruments",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5734,
+  "name": "Computer software stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5735,
+  "name": "Record stores",
+  "category": "Entertainment"
+ },
+ {
+  "code": 5812,
+  "name": "Restaurants",
+  "category": "Food Delivery"
+ },
+ {
+  "code": 5813,
+  "name": "Bars and nightclubs",
+  "category": "Entertainment"
+ },
+ {
+  "code": 5814,
+  "name": "Fast food restaurants",
+  "category": "Food Delivery"
+ },
+ {
+  "code": 5815,
+  "name": "Digital goods: media, books, movies, music",
+  "category": "Entertainment"
+ },
+ {
+  "code": 5816,
+  "name": "Digital goods: games",
+  "category": "Entertainment"
+ },
+ {
+  "code": 5817,
+  "name": "Digital goods: applications",
+  "category": "Entertainment"
+ },
+ {
+  "code": 5818,
+  "name": "Digital goods: large merchants",
+  "category": "Entertainment"
+ },
+ {
+  "code": 5912,
+  "name": "Drug stores and pharmacies",
+  "category": "Health"
+ },
+ {
+  "code": 5921,
+  "name": "Package stores: beer, wine, liquor",
+  "category": "Entertainment"
+ },
+ {
+  "code": 5937,
+  "name": "Antique reproductions",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5941,
+  "name": "Sporting goods stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5942,
+  "name": "Book stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5944,
+  "name": "Jewellery, watch, clock and silverware stores",
+  "category": "Jewellery & Gold"
+ },
+ {
+  "code": 5945,
+  "name": "Hobby, toy and game shops",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5947,
+  "name": "Gift, card and novelty shops",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5948,
+  "name": "Luggage and leather goods",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5964,
+  "name": "Direct marketing: catalog merchants",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5965,
+  "name": "Direct marketing: combination catalog and retail",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5966,
+  "name": "Direct marketing: outbound telemarketing",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5967,
+  "name": "Direct marketing: inbound teleservices",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5968,
+  "name": "Direct marketing: subscription",
+  "category": "Entertainment"
+ },
+ {
+  "code": 5969,
+  "name": "Direct marketing: other",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5977,
+  "name": "Cosmetic stores",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5983,
+  "name": "Fuel dealers: coal, fuel oil, LPG",
+  "category": "Fuel"
+ },
+ {
+  "code": 5992,
+  "name": "Florists",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5993,
+  "name": "Cigar stores and stands",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5994,
+  "name": "News dealers and newsstands",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 5999,
+  "name": "Miscellaneous retail",
+  "category": "E-Commerce"
+ },
+ {
+  "code": 6010,
+  "name": "Manual cash disbursements",
+  "category": "Transfer"
+ },
+ {
+  "code": 6011,
+  "name": "Automated cash disbursements (ATM)",
+  "category": "Transfer"
+ },
+ {
+  "code": 6012,
+  "name": "Financial institutions: merchandise and services",
+  "category": "Transfer"
+ },
+ {
+  "code": 6051,
+  "name": "Quasi cash: foreign currency, money orders, crypto",
+  "category": "Transfer"
+ },
+ {
+  "code": 6211,
+  "name": "Securities brokers and dealers",
+  "category": "Investment"
+ },
+ {
+  "code": 6300,
+  "name": "Insurance sales, underwriting and premiums",
+  "category": "Insurance"
+ },
+ {
+  "code": 6381,
+  "name": "Insurance premiums",
+  "category": "Insurance"
+ },
+ {
+  "code": 6399,
+  "name": "Insurance: not elsewhere classified",
+  "category": "Insurance"
+ },
+ {
+  "code": 6513,
+  "name": "Real estate agents and managers: rentals",
+  "category": "Rent"
+ },
+ {
+  "code": 6540,
+  "name": "Stored value card / wallet load, POI funding",
+  "category": "Wallet Load"
+ },
+ {
+  "code": 7011,
+  "name": "Hotels, motels and resorts",
+  "category": "Travel Online"
+ },
+ {
+  "code": 7210,
+  "name": "Laundry, cleaning and garment services",
+  "category": "General"
+ },
+ {
+  "code": 7216,
+  "name": "Dry cleaners",
+  "category": "General"
+ },
+ {
+  "code": 7230,
+  "name": "Beauty and barber shops",
+  "category": "General"
+ },
+ {
+  "code": 7298,
+  "name": "Health and beauty spas",
+  "category": "General"
+ },
+ {
+  "code": 7311,
+  "name": "Advertising services",
+  "category": "General"
+ },
+ {
+  "code": 7322,
+  "name": "Debt collection agencies",
+  "category": "EMI"
+ },
+ {
+  "code": 7399,
+  "name": "Business services: not elsewhere classified",
+  "category": "General"
+ },
+ {
+  "code": 7512,
+  "name": "Car rental agencies",
+  "category": "Travel Online"
+ },
+ {
+  "code": 7523,
+  "name": "Parking lots and garages",
+  "category": "Transport"
+ },
+ {
+  "code": 7524,
+  "name": "Express payment parking",
+  "category": "Transport"
+ },
+ {
+  "code": 7829,
+  "name": "Motion picture production and distribution",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7832,
+  "name": "Motion picture theaters",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7841,
+  "name": "DVD / video rental",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7922,
+  "name": "Theatrical producers and ticket agencies",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7929,
+  "name": "Bands, orchestras, entertainers",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7932,
+  "name": "Billiard and pool establishments",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7933,
+  "name": "Bowling alleys",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7941,
+  "name": "Sports clubs and promoters",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7991,
+  "name": "Tourist attractions and exhibits",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7992,
+  "name": "Golf courses",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7993,
+  "name": "Video amusement game supplies",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7994,
+  "name": "Video game arcades",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7995,
+  "name": "Betting, casino gambling and lottery",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7996,
+  "name": "Amusement parks and carnivals",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7997,
+  "name": "Membership clubs, gyms",
+  "category": "Health"
+ },
+ {
+  "code": 7998,
+  "name": "Aquariums and zoos",
+  "category": "Entertainment"
+ },
+ {
+  "code": 7999,
+  "name": "Recreation services",
+  "category": "Entertainment"
+ },
+ {
+  "code": 8011,
+  "name": "Doctors and physicians",
+  "category": "Health"
+ },
+ {
+  "code": 8021,
+  "name": "Dentists and orthodontists",
+  "category": "Health"
+ },
+ {
+  "code": 8031,
+  "name": "Osteopaths",
+  "category": "Health"
+ },
+ {
+  "code": 8041,
+  "name": "Chiropractors",
+  "category": "Health"
+ },
+ {
+  "code": 8042,
+  "name": "Optometrists and ophthalmologists",
+  "category": "Health"
+ },
+ {
+  "code": 8043,
+  "name": "Opticians and eyeglasses",
+  "category": "Health"
+ },
+ {
+  "code": 8049,
+  "name": "Podiatrists",
+  "category": "Health"
+ },
+ {
+  "code": 8050,
+  "name": "Nursing and personal care facilities",
+  "category": "Health"
+ },
+ {
+  "code": 8062,
+  "name": "Hospitals",
+  "category": "Health"
+ },
+ {
+  "code": 8071,
+  "name": "Medical and dental laboratories",
+  "category": "Health"
+ },
+ {
+  "code": 8099,
+  "name": "Medical services: not elsewhere classified",
+  "category": "Health"
+ },
+ {
+  "code": 8211,
+  "name": "Elementary and secondary schools",
+  "category": "Education"
+ },
+ {
+  "code": 8220,
+  "name": "Colleges, universities and professional schools",
+  "category": "Education"
+ },
+ {
+  "code": 8241,
+  "name": "Correspondence schools",
+  "category": "Education"
+ },
+ {
+  "code": 8244,
+  "name": "Business and secretarial schools",
+  "category": "Education"
+ },
+ {
+  "code": 8249,
+  "name": "Trade and vocational schools",
+  "category": "Education"
+ },
+ {
+  "code": 8299,
+  "name": "Schools and educational services",
+  "category": "Education"
+ },
+ {
+  "code": 8398,
+  "name": "Charitable and social service organisations",
+  "category": "General"
+ },
+ {
+  "code": 8661,
+  "name": "Religious organisations",
+  "category": "General"
+ },
+ {
+  "code": 9211,
+  "name": "Court costs and fines",
+  "category": "Government & Tax"
+ },
+ {
+  "code": 9222,
+  "name": "Fines",
+  "category": "Government & Tax"
+ },
+ {
+  "code": 9311,
+  "name": "Tax payments",
+  "category": "Government & Tax"
+ },
+ {
+  "code": 9399,
+  "name": "Government services: not elsewhere classified",
+  "category": "Government & Tax"
+ },
+ {
+  "code": 9402,
+  "name": "Postal services: government only",
+  "category": "Government & Tax"
+ },
+ {
+  "code": 9405,
+  "name": "Intra-government purchases",
+  "category": "Government & Tax"
+ }
+]

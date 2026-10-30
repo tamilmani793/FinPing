@@ -8,6 +8,8 @@ import { cardTitle } from '../lib/cardCatalog'
 import { applyTxnToCard } from '../lib/ingestSMS'
 import { askConfirm } from '../lib/confirm'
 import { merchantKey, saveRule } from '../lib/merchantRules'
+import { seedMcc } from '../lib/mcc'
+import { tagCardRewards, tagAllCards } from '../lib/rewardTagging'
 import { txnName } from '../lib/txnName'
 import { useOptions } from '../lib/options'
 import { BtnPrimary } from './UI'
@@ -21,11 +23,12 @@ export default function TxnEditSheet({ txn, onClose }) {
   const { showNotification } = useStore()
   const isNew = txn.id == null // a spend typed in by hand, e.g. one the SMS never showed
   const cards = useLiveQuery(() => db.creditCards.toArray()) || []
+  const mccRows = useLiveQuery(async () => { await seedMcc(); return db.mcc_master.orderBy('code').toArray() }) || []
   const categoryList = useOptions('categories')
   const [f, setF] = useState({
     merchant: txn.merchant || '', amount: String(txn.amount ?? ''), date: format(new Date(txn.date), 'yyyy-MM-dd'),
     type: txn.type || 'debit', category: txn.category || 'General', paymentMode: txn.paymentMode || 'Other',
-    cardId: txn.cardId ?? '', notes: txn.notes || '', isExcluded: !!txn.isExcluded,
+    cardId: txn.cardId ?? '', mcc: txn.mcc != null ? String(txn.mcc) : '', notes: txn.notes || '', isExcluded: !!txn.isExcluded,
   })
   const set = k => e => setF({ ...f, [k]: e.target.value })
   // a category that is no longer in the list (old data) stays selectable
@@ -54,11 +57,12 @@ export default function TxnEditSheet({ txn, onClose }) {
     const changed = ['merchant', 'amount', 'type', 'category', 'paymentMode', 'notes', 'isExcluded'].filter(k => next[k] !== (txn[k] ?? (k === 'notes' ? '' : txn[k])))
     if (f.date !== format(new Date(txn.date), 'yyyy-MM-dd')) changed.push('date')
     if (String(f.cardId) !== String(txn.cardId ?? '')) changed.push('cardId')
+    if (String(f.mcc || '') !== String(txn.mcc ?? '')) changed.push('mcc')
     const editedFields = [...new Set([...(txn.editedFields || []), ...changed])]
     await db.transactions.update(txn.id, {
       merchant: f.merchant.trim() || 'Unknown', amount, type: f.type, category: f.category, paymentMode: f.paymentMode,
       date: new Date(y, m - 1, d, old.getHours(), old.getMinutes()),
-      cardId: f.cardId === '' ? null : Number(f.cardId), notes: f.notes, isExcluded: f.isExcluded,
+      cardId: f.cardId === '' ? null : Number(f.cardId), mcc: f.mcc === '' ? null : Number(f.mcc), notes: f.notes, isExcluded: f.isExcluded,
       parsedBy: txn.parsedBy === 'auto' ? 'auto-edited' : txn.parsedBy,
       userEdited: true, editedFields, // your changes win over the bank statement and over any SMS
     })
@@ -70,11 +74,13 @@ export default function TxnEditSheet({ txn, onClose }) {
       if (key && same.length && await askConfirm({ title: `Use "${f.category}" for all ${name}?`, message: `${same.length} other transaction${same.length === 1 ? '' : 's'} from this merchant are in a different category. Change them too, and use this category for new ones.`, confirmLabel: 'Change all', cancelLabel: 'Only this one', danger: false })) {
         for (const t of same) await db.transactions.update(t.id, { category: f.category, userEdited: true, editedFields: [...new Set([...(t.editedFields || []), 'category'])] })
         saveRule(name, f.category)
+        tagAllCards().catch(() => {}) // a new category can change what the card should earn
         showNotification(`${same.length + 1} transactions moved to ${f.category}`, 'success')
         onClose()
         return
       }
     }
+    if (txn.cardId != null || f.cardId !== '') tagCardRewards(Number(f.cardId === '' ? txn.cardId : f.cardId)).catch(() => {})
     showNotification('Transaction updated', 'success')
     onClose()
   }
@@ -107,6 +113,9 @@ export default function TxnEditSheet({ txn, onClose }) {
               <Picker value={f.paymentMode} options={modes} onChange={v => setF({ ...f, paymentMode: v })} icon={<Wallet size={I} />} title="Paid via" placeholder="Select" />
             </Field>
           </div>
+          <Field label="MCC (optional)" hint="Lets card reward rules treat this spend the way the bank does">
+            <Picker value={String(f.mcc || '')} options={mccRows.map(m => ({ value: String(m.code), label: `${m.code} · ${m.name}`, sub: m.category }))} onChange={v => setF({ ...f, mcc: v })} title="Merchant category code" placeholder="Not set" clearLabel="Not set" />
+          </Field>
           <Field label="Card or account">
             <Picker value={String(f.cardId)} options={cards.map(c => ({ value: String(c.id), label: cardTitle(c) }))}
               onChange={v => setF({ ...f, cardId: v })} icon={<CreditCard size={I} />} title="Card or account" placeholder="None (cash / other)" clearLabel="None (bank account / cash)" />

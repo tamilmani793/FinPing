@@ -64,3 +64,10 @@ db.version(8).stores({
 db.version(9).stores({
   salaryDocs: '++id, jobId, month, kind',
 })
+
+// v10: rewards reconciliation - the MCC dictionary, each card's reward rules, and the rewards the bank says it credited per cycle
+db.version(10).stores({
+  mcc_master: 'code, category',
+  card_reward_rules: '++id, cardId',
+  reward_statements: '++id, cardId, cycleKey',
+})

@@ -20,6 +20,10 @@ import { Segmented, TextField, Picker } from '../components/Fields'
 import Sortable from '../components/Sortable'
 import TxnEditSheet from '../components/TxnEditSheet'
 import { syncCardAmounts } from '../lib/cardSync'
+import { tagCardRewards } from '../lib/rewardTagging'
+import { rewardPill } from '../lib/rewardRules'
+import RewardRulesSheet from '../components/RewardRulesSheet'
+import RewardsAuditSheet from '../components/RewardsAuditSheet'
 import { isNative, syncInbox } from '../lib/nativeSms'
 import { bySortOrder, saveOrder } from '../lib/sortOrder'
 
@@ -227,11 +231,11 @@ function TxnList({ card, list, emptyText, cards = [] }) {
             amount={t.amount}
             isCredit={t.type === 'credit'}
             onClick={() => setEdit(t)}
-            badge={!credit ? null : t.type === 'debit'
+            badge={<>{!credit ? null : t.type === 'debit'
               ? (r.eligible
                 ? <span className="badge badge-mint" style={{ fontSize: 9 }}>✅ Rewards</span>
                 : <span className="badge badge-red" style={{ fontSize: 9 }}>⛔ {r.reason}</span>)
-              : <span className="badge badge-indigo" style={{ fontSize: 9 }}>{t.kind === 'card_payment' || t.category === 'Card Payment' ? 'Bill payment' : t.category === 'Cashback' ? 'Cashback' : 'Refund'}</span>}
+              : <span className="badge badge-indigo" style={{ fontSize: 9 }}>{t.kind === 'card_payment' || t.category === 'Card Payment' ? 'Bill payment' : t.category === 'Cashback' ? 'Cashback' : 'Refund'}</span>}{rewardPill(t.expectedReward) && <span className="badge badge-mint" style={{ fontSize: 9, marginLeft: 4 }}>{rewardPill(t.expectedReward)}</span>}</>}
           />
         )
       })}
@@ -339,6 +343,8 @@ function Detail({ card, cards, byCard, onBack }) {
   const [editOpen, setEditOpen] = useState(false)
   const [stmtOpen, setStmtOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const [auditOpen, setAuditOpen] = useState(false)
   const { showNotification } = useStore()
   const txns = txnsFor(card, cards, byCard)
   // look through the inbox again for recent bank SMS (those already applied are skipped), now and on request
@@ -347,6 +353,7 @@ function Detail({ card, cards, byCard, onBack }) {
     try { const n = await syncInbox({ rescanDays: 45 }); if (say || n > 0) showNotification(n > 0 ? `${n} SMS added` : 'No new SMS found', n > 0 ? 'success' : undefined) } catch { if (say) showNotification('Could not read SMS', 'error') }
   }
   useEffect(() => { checkSms() }, [card.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!card.cardType || card.cardType === 'credit') tagCardRewards(card.id).catch(() => {}) }, [card.id, (byCard[card.id] || []).length]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!card.cardType || card.cardType === 'credit') syncCardAmounts(card.id).catch(() => {}) }, [card.id, (byCard[card.id] || []).length]) // eslint-disable-line react-hooks/exhaustive-deps
   const credit = isCredit(card)
   const linkedAccount = card.cardType === 'debit' && card.linkedAccountId != null ? cards.find(c => c.id === card.linkedAccountId) : null
@@ -494,6 +501,10 @@ function Detail({ card, cards, byCard, onBack }) {
 
             {/* Rewards & fees */}
             <Section title="Rewards & fees" fold right={<Gift size={15} color="var(--pink)" />}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <button className="btn-secondary" style={{ flex: 1, height: 38, fontSize: 12.5 }} onClick={() => setRulesOpen(true)}>⚙ Reward rules</button>
+                <button className="btn-secondary" style={{ flex: 1, height: 38, fontSize: 12.5 }} onClick={() => setAuditOpen(true)}>🔎 Rewards audit</button>
+              </div>
               <Row k="Cashback this month" v={formatINR(cbMonth)} color="var(--mint-dim)" />
               <Row k="Cashback all-time" v={formatINR(cbAll)} color="var(--mint-dim)" />
               {card.rewardPoints > 0 && <Row k="Reward points" v={card.rewardPoints.toLocaleString('en-IN')} />}
@@ -536,6 +547,8 @@ function Detail({ card, cards, byCard, onBack }) {
         )}
       </div>
 
+      {rulesOpen && <RewardRulesSheet card={card} onClose={() => setRulesOpen(false)} />}
+      {auditOpen && <RewardsAuditSheet card={card} onClose={() => setAuditOpen(false)} />}
       {addOpen && <TxnEditSheet txn={{ type: 'debit', date: new Date(), amount: '', merchant: '', category: 'General', paymentMode: card.cardType === 'account' ? 'Bank' : 'Credit Card', cardId: card.id }} onClose={() => setAddOpen(false)} />}
       {editOpen && <CardEditSheet card={card} cards={cards} onClose={() => setEditOpen(false)} />}
       {stmtOpen && <StatementImportSheet account={card} onClose={() => setStmtOpen(false)} />}
