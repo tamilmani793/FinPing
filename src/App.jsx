@@ -14,10 +14,11 @@ import Expenses from './screens/Expenses'
 import Charts from './screens/Charts'
 import Profile from './screens/Profile'
 import OptionsPage from './components/OptionsManager'
+import SalaryPage from './components/SalaryPage'
 import Debt from './screens/Debt'
 import Wealth from './screens/Wealth'
 
-const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, debt: Debt, wealth: Wealth }
+const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, salary: SalaryPage, debt: Debt, wealth: Wealth }
 const FAB_TABS = ['home', 'history']
 
 export default function App() {

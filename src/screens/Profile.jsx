@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Sun, Moon, SunMoon, Check, Pencil, X, SlidersHorizontal, Info } from 'lucide-react'
+import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Sun, Moon, SunMoon, Check, Pencil, X, SlidersHorizontal, Info, Briefcase } from 'lucide-react'
 import { format } from 'date-fns'
 import { TopBar, BtnPrimary, Avatar } from '../components/UI'
 import { useStore } from '../store'
@@ -204,6 +204,7 @@ export default function Profile() {
         </div>
 
         <div className="card" style={{ marginBottom: 14, paddingTop: 4, paddingBottom: 4 }}>
+          <Row Icon={Briefcase} title="Salary" sub="Employer, CTC, payslips, tax and PF — checked against your bank credits" onClick={() => setActiveTab('salary')} />
           <Row Icon={Landmark} title="Debt & Loans" sub="EMIs, loans and repayments" onClick={() => setActiveTab('debt')} />
           <Row Icon={TrendingUp} title="Wealth" sub="Investments, SIPs and net worth" onClick={() => setActiveTab('wealth')} />
         </div>
