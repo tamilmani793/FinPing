@@ -2,6 +2,9 @@ import { useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { relinkTransactions } from './lib/relink'
 import { removeDuplicateTransactions } from './lib/dedupeCleanup'
+import { recategoriseWalletLoads } from './lib/recategorise'
+import { tagAllCards } from './lib/rewardTagging'
+import { autoApplyPresets } from './lib/rulesPack'
 import { postDueEmis } from './lib/emiEngine'
 import { useStore } from './store'
 import { initBackNav, exitApp } from './lib/backNav'
@@ -15,11 +18,10 @@ import Charts from './screens/Charts'
 import Profile from './screens/Profile'
 import OptionsPage from './components/OptionsManager'
 import SalaryPage from './components/SalaryPage'
-import MccMaintainer from './components/MccMaintainer'
 import Debt from './screens/Debt'
 import Wealth from './screens/Wealth'
 
-const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, salary: SalaryPage, mcc: MccMaintainer, debt: Debt, wealth: Wealth }
+const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, salary: SalaryPage, debt: Debt, wealth: Wealth }
 const FAB_TABS = ['home', 'history']
 
 export default function App() {
@@ -48,6 +50,17 @@ export default function App() {
       .then(async n => {
         if (first) localStorage.setItem('finping_relink_v1', '1')
         if (n > 0) showNotification(`${n} transactions linked to your cards and accounts`, 'success')
+        // Cards in your accounts that match a bundled card get its reward rules (not again if you removed them yourself)
+        const given = await autoApplyPresets()
+        if (given.length) showNotification(`Reward rules added for ${given.join(', ')}`, 'success')
+        // Once after this update: wallet loads that were filed under another category
+        if (!localStorage.getItem('finping_walletload_v1')) {
+          const w = await recategoriseWalletLoads()
+          localStorage.setItem('finping_walletload_v1', '1')
+          if (w > 0) showNotification(`${w} wallet load${w === 1 ? '' : 's'} moved to the Wallet Load category`, 'success')
+        }
+        // Once after this update: expected rewards were tagged without the percentage; work them out again so every spend shows it
+        if (!localStorage.getItem('finping_rewardtag_v2')) { await tagAllCards(); localStorage.setItem('finping_rewardtag_v2', '1') }
         // Once after this update: clear out entries that were never payments or were saved twice.
         if (!localStorage.getItem('finping_cleanup_v2')) {
           const r = await removeDuplicateTransactions()

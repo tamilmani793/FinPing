@@ -16,9 +16,9 @@ export const useRewardCategories = () => {
   return [...new Set([...own, ...REWARD_CATEGORIES])]
 }
 
-// Profile -> MCC categories: the Merchant Category Code dictionary kept on this phone. Map any code to the FinPing category you want;
+// Profile -> Customise -> Rules and codes -> MCC categories: the Merchant Category Code dictionary kept on this phone. Map any code to the FinPing category you want;
 // reward rules that name an MCC then apply to every spend in that category.
-export default function MccMaintainer() {
+export default function MccMaintainer({ onBack }) {
   const { setActiveTab, showNotification } = useStore()
   const categories = useRewardCategories()
   const rows = useLiveQuery(() => db.mcc_master.orderBy('code').toArray()) || []
@@ -40,7 +40,7 @@ export default function MccMaintainer() {
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 110 }}>
       <div style={{ padding: '14px 18px 12px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg0)' }}>
-        <div onClick={() => setActiveTab('profile')} style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={20} /></div>
+        <div onClick={() => (onBack ? onBack() : setActiveTab('profile'))} style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={20} /></div>
         <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em', flex: 1 }}>MCC categories</div>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }} onClick={() => setAdding(true)}><Plus size={13} style={{ verticalAlign: -2 }} /> Add</span>
       </div>

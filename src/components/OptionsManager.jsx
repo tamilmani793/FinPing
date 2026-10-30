@@ -5,13 +5,18 @@ import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { askConfirm } from '../lib/confirm'
 import Sortable, { ReorderToggle } from './Sortable'
+import { useLiveQuery } from 'dexie-react-hooks'
+import MccMaintainer from './MccMaintainer'
+import { SHOW_MCC } from '../lib/features'
+import RewardRulesSheet from './RewardRulesSheet'
+import { cardTitle } from '../lib/cardCatalog'
 import { Field, TextField, Picker, Segmented } from './Fields'
 import {
   OPTION_LISTS, LOCKED_CATEGORIES, useOptions, useOptionNames, setList, resetList, isCustomised,
   addCategory, renameCategory, removeCategory, debtTypeId, getList,
 } from '../lib/options'
 
-// Profile -> Dropdown options: every list that feeds a dropdown, editable on this phone.
+// Profile -> Customise: every list that feeds a dropdown, editable on this phone.
 
 const CARD_LISTS = ['cardNames', 'debitCardNames']
 const POLICY_LIST = 'policyNames'
@@ -202,20 +207,61 @@ function PageHeader({ title, icon, onBack }) {
   )
 }
 
-// Profile -> Dropdown options: the page that lists every editable list; tapping one opens its own page.
+const MCC = '__mcc' // not a dropdown list: the MCC dictionary is maintained from this page too
+
+// Profile -> Customise: the dropdown lists, plus the rules and codes (MCC categories, card reward rules). Tapping one opens its own page.
 export default function OptionsPage() {
   const { setActiveTab } = useStore()
   const [open, setOpen] = useState(null)
+  const [pickCard, setPickCard] = useState(false)
+  const [rulesCard, setRulesCard] = useState(null)
+  const cards = useLiveQuery(() => db.creditCards.toArray()) || []
   useBackHandler(!!open, () => setOpen(null))
+  if (open === MCC) return <MccMaintainer onBack={() => setOpen(null)} />
   if (open) return <ListPage listKey={open} onClose={() => setOpen(null)} />
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 110 }}>
-      <PageHeader title="Dropdown options" onBack={() => setActiveTab('profile')} />
+      <PageHeader title="Customise" onBack={() => setActiveTab('profile')} />
       <div style={{ padding: '0 18px' }}>
-        <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '0 2px 12px' }}>Choose a list to add, rename or remove its choices. Everything stays on this phone and is included in your backup.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '0 2px 12px' }}>Choose a list to add, rename or remove its choices, or open the rules and codes below. Everything stays on this phone and is included in your backup.</div>
+        <div className="label-caps" style={{ margin: '4px 4px 8px' }}>Lists</div>
         <div className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
           {Object.entries(OPTION_LISTS).map(([key, m], i) => <OptionRow key={key} listKey={key} meta={m} first={i === 0} onOpen={() => setOpen(key)} />)}
         </div>
+        <div className="label-caps" style={{ margin: '18px 4px 8px' }}>Rules</div>
+        <div className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
+          {SHOW_MCC && (
+          <div onClick={() => setOpen(MCC)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer' }}>
+            <div className="stat-icon" style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--gold-bg)', fontSize: 17 }}>🏷</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>MCC categories</div>
+              <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>Map merchant category codes to your categories, for card reward rules</div>
+            </div>
+            <ChevronRight size={18} color="var(--txt3)" />
+          </div>
+          )}
+          <div onClick={() => setPickCard(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
+            <div className="stat-icon" style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--gold-bg)', fontSize: 17 }}>✨</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Card reward rules</div>
+              <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>Cashback and points rules per card, and updates from a file or terms PDF</div>
+            </div>
+            <ChevronRight size={18} color="var(--txt3)" />
+          </div>
+        </div>
+        {pickCard && (
+          <div className="overlay" onClick={() => setPickCard(false)}>
+            <div className="sheet" onClick={e => e.stopPropagation()} style={{ paddingBottom: 28, maxHeight: '80vh', overflowY: 'auto' }}>
+              <div className="sheet-handle" />
+              <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Which card?</div>
+              {cards.filter(c => !c.cardType || c.cardType === 'credit').map(c => (
+                <div key={c.id} onClick={() => { setPickCard(false); setRulesCard(c) }} style={{ padding: '12px 4px', borderTop: '1px solid var(--border)', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>{cardTitle(c)}</div>
+              ))}
+              {!cards.some(c => !c.cardType || c.cardType === 'credit') && <div style={{ fontSize: 12.5, color: 'var(--txt2)', padding: '12px 4px' }}>Add a credit card first.</div>}
+            </div>
+          </div>
+        )}
+        {rulesCard && <RewardRulesSheet card={rulesCard} onClose={() => setRulesCard(null)} />}
       </div>
     </div>
   )

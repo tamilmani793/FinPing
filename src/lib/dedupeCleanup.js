@@ -10,6 +10,22 @@ import { applyTxnToCard } from './ingestSMS'
 //   - a debit and a credit quoting the same reference (your own transfer) are marked as a transfer
 // Genuine repeats (4 ATM withdrawals of the same amount) are left alone: the SMS' own reference,
 // balance and time stamp tell them apart. Returns counts of what changed.
+// What a clean-up would do, in words, without changing anything
+export async function describeCleanup() {
+  const [txns, cards] = await Promise.all([db.transactions.toArray(), db.creditCards.toArray()])
+  const plan = planCleanup(txns, cards)
+  const byId = new Map(txns.map(t => [t.id, t]))
+  const cardName = id => { const c = cards.find(x => x.id === id); return c ? `${c.name || c.bank} ••${c.cardLast4}` : 'a card' }
+  const brief = t => ({ date: t?.date, merchant: t?.merchant || 'Unknown', amount: t?.amount, type: t?.type })
+  return {
+    removed: plan.remove.map(id => ({ ...brief(byId.get(id)), why: String(byId.get(id)?.rawSMS || '').replace(/s+/g, ' ').slice(0, 60) })),
+    converted: plan.payments.map(p => ({ ...brief(byId.get(p.id)), card: cardName(p.cardId) })),
+    merged: plan.merge.map(m => ({ ...brief(byId.get(m.drop)), keptDate: byId.get(m.keep)?.date })),
+    transfers: plan.transfers.map(([a, b]) => ({ ...brief(byId.get(a)), other: brief(byId.get(b)) })),
+    total: plan.remove.length + plan.payments.length + plan.merge.length + plan.transfers.length,
+  }
+}
+
 export async function removeDuplicateTransactions() {
   const [txns, cards] = await Promise.all([db.transactions.toArray(), db.creditCards.toArray()])
   const plan = planCleanup(txns, cards)

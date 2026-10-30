@@ -9,6 +9,7 @@ import { applyTxnToCard } from '../lib/ingestSMS'
 import { askConfirm } from '../lib/confirm'
 import { merchantKey, saveRule } from '../lib/merchantRules'
 import { seedMcc } from '../lib/mcc'
+import { SHOW_MCC } from '../lib/features'
 import { tagCardRewards, tagAllCards } from '../lib/rewardTagging'
 import { txnName } from '../lib/txnName'
 import { useOptions } from '../lib/options'
@@ -113,9 +114,11 @@ export default function TxnEditSheet({ txn, onClose }) {
               <Picker value={f.paymentMode} options={modes} onChange={v => setF({ ...f, paymentMode: v })} icon={<Wallet size={I} />} title="Paid via" placeholder="Select" />
             </Field>
           </div>
+          {SHOW_MCC && (
           <Field label="MCC (optional)" hint="Lets card reward rules treat this spend the way the bank does">
             <Picker value={String(f.mcc || '')} options={mccRows.map(m => ({ value: String(m.code), label: `${m.code} · ${m.name}`, sub: m.category }))} onChange={v => setF({ ...f, mcc: v })} title="Merchant category code" placeholder="Not set" clearLabel="Not set" />
           </Field>
+          )}
           <Field label="Card or account">
             <Picker value={String(f.cardId)} options={cards.map(c => ({ value: String(c.id), label: cardTitle(c) }))}
               onChange={v => setF({ ...f, cardId: v })} icon={<CreditCard size={I} />} title="Card or account" placeholder="None (cash / other)" clearLabel="None (bank account / cash)" />

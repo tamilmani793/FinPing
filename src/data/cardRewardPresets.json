@@ -1,0 +1,719 @@
+{
+  "_about": "Reward rules read from the issuers' own terms (HDFC Millennia T&C 20 Jul 2026, Swiggy HDFC T&C 18 Sep 2026, HDFC UPI RuPay T&C 27 Mar 2025, HDFC MITC v4.17 Oct 2026, SBI Cashback T&C kit, HSBC Live+ service guide + key fact statement). Shapes follow rewardTypes.d.ts (CardRewardRules). Rates are { value, per } in rupees, so 1 CashPoint = Rs 0.25 is already converted. Nothing here is personal data.",
+  "cards": [
+    {
+      "key": "hdfc-millennia",
+      "name": "HDFC Millennia",
+      "issuer": "HDFC Bank",
+      "rewardType": "points",
+      "valuePerPoint": 1,
+      "capPeriod": "calendarMonth",
+      "postedOn": "first week of the next calendar month, by settlement/posting date",
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100
+        },
+        "minSpend": 0,
+        "spendBlock": 100,
+        "capPerCycle": null,
+        "rounding": "floor",
+        "accelerated": [
+          {
+            "id": "online-10",
+            "label": "5% on Amazon, BookMyShow, Cult.fit, Flipkart, Myntra, Sony LIV, Swiggy, Tata CLiQ, Uber, Zomato",
+            "rate": {
+              "value": 5,
+              "per": 100
+            },
+            "capPerCycle": 1000,
+            "merchants": [
+              "amazon",
+              "bookmyshow",
+              "cult.fit",
+              "cultfit",
+              "flipkart",
+              "myntra",
+              "sony liv",
+              "sonyliv",
+              "tata cliq",
+              "tatacliq",
+              "swiggy",
+              "uber",
+              "zomato"
+            ],
+            "notes": "Needs the merchant's own terminal/merchant ID. Non-EMI only. MCC 6540 never earns 5%. Uber earns 5% only on MCC 4121. Purchases through SmartBuy or PayZapp earn 1%. Gift/prepaid card and voucher purchases on these merchants earn 1%.",
+            "mccs": [],
+            "categories": [],
+            "excludeMccs": [
+              6540,
+              6541
+            ]
+          }
+        ],
+        "baseCap": 1000,
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983,
+            6513,
+            6540,
+            6541,
+            8211,
+            8220,
+            8241,
+            8244,
+            8249,
+            8299
+          ],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet",
+            "EMI",
+            "Government",
+            "Cash advance",
+            "Card bill payment",
+            "Fees and charges"
+          ],
+          "notes": "Education through third-party apps earns nothing since 1 Sep 2024 (direct to school/college site or POS still earns). Rent and government earn nothing since 1 Jan 2023. EMI (even if closed early) and wallet loads earn nothing since 1 Sep 2024.",
+          "merchants": []
+        },
+        "capPeriod": "calendarMonth",
+        "baseCapNote": "1% category has its own 1,000 CashPoint cap, separate from the 5% cap",
+        "pointValue": 1
+      },
+      "redemption": {
+        "statementCredit": "1 CashPoint = Rs 1; minimum 500 CashPoints; Rs 50 fee per redemption; max 3,000 points per calendar month",
+        "smartBuyFlightsHotels": "1 CashPoint = Rs 0.30, up to 50% of the booking, 50,000 points per month cap",
+        "catalogue": "Rs 99 + tax handling fee per request; up to 70% of voucher value in points",
+        "expiry": "2 years from earning"
+      },
+      "benefits": [
+        "Welcome: 1,000 CashPoints when the joining fee is paid; nothing on renewal fee",
+        "Quarterly milestone: Rs 1 lakh net spend in a calendar quarter gives a Rs 1,000 voucher (SMS within 30 working days, valid 120 days); EMI principal counts, SmartEMI/Dial an EMI does not",
+        "1% fuel surcharge waiver on Rs 400 to Rs 5,000, up to Rs 250 per statement cycle",
+        "Domestic lounge access removed from 1 Dec 2023"
+      ],
+      "feesAndCharges": {
+        "rentOrEducationViaThirdPartyApps": "1% fee, capped Rs 3,000 per transaction (from 1 Aug 2024)",
+        "fuelAbove15000PerTxn": "1% on the whole amount, capped Rs 3,000",
+        "utilitiesAbove50000PerTxn": "1% on the whole amount, capped Rs 3,000 (insurance is not utility)",
+        "annualFeeWaiver": "Rs 1 lakh spend a year",
+        "lateFeeByTotalDue": {
+          "upTo100": 0,
+          "101to500": 100,
+          "501to1000": 500,
+          "1001to5000": 600,
+          "5001to10000": 750,
+          "10001to25000": 900,
+          "25001to50000": 1100,
+          "above50000": 1300
+        },
+        "overlimit": "2.5% of the overlimit amount, minimum Rs 550",
+        "financeCharge": "3.75% a month (45% a year) for most variants",
+        "catalogueRedemptionFee": "Rs 99 + GST"
+      },
+      "effectiveFrom": "2026-07-20",
+      "publishedOn": "2026-07-20",
+      "source": "HDFC Millennia T&C (published 20 Jul 2026, sections 25 Apr 2025)"
+    },
+    {
+      "key": "hdfc-swiggy",
+      "name": "Swiggy HDFC Bank Credit Card (original, not Ornge or BLCK)",
+      "issuer": "HDFC Bank",
+      "network": "Mastercard World",
+      "rewardType": "cashback",
+      "capPeriod": "billingCycle",
+      "postedOn": "day by day from 18 Apr 2026, settled on the statement date; earlier statements credited to the Swiggy account or set against the next statement",
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1,
+          "per": 100
+        },
+        "minSpend": 100,
+        "capPerCycle": null,
+        "baseCap": 500,
+        "rounding": "round",
+        "roundingNote": "Terms say nearest rupee per transaction, but the worked example rounds 6.5 down to 6. Treat .5 as down.",
+        "accelerated": [
+          {
+            "id": "swiggy-10",
+            "label": "10% on the Swiggy app: Food, Instamart, Dineout",
+            "rate": {
+              "value": 10,
+              "per": 100
+            },
+            "minSpend": 249,
+            "capPerCycle": 1500,
+            "merchants": [
+              "swiggy"
+            ],
+            "notes": "Minimum Rs 249 per transaction from 21 Apr 2026. Swiggy Money wallet, Swiggy Liquor and Swiggy Minis do not count. Matched on the merchant and terminal IDs.",
+            "mccs": [],
+            "categories": []
+          },
+          {
+            "id": "online-5",
+            "label": "5% on select online merchants (apparel, electronics, department stores, pet, home decor, personal care, local cabs, entertainment, pharmacies, discount stores)",
+            "rate": {
+              "value": 5,
+              "per": 100
+            },
+            "minSpend": 100,
+            "capPerCycle": 1500,
+            "mccs": [
+              5137,
+              5139,
+              5611,
+              5621,
+              5631,
+              5641,
+              5651,
+              5655,
+              5661,
+              5691,
+              5697,
+              5699,
+              5948,
+              5200,
+              5300,
+              5311,
+              5331,
+              5949,
+              5973,
+              1731,
+              5045,
+              5046,
+              5065,
+              5099,
+              5722,
+              5732,
+              5734,
+              5946,
+              7372,
+              7622,
+              7623,
+              7629,
+              7631,
+              4411,
+              4899,
+              5193,
+              5992,
+              7032,
+              7033,
+              7333,
+              7832,
+              7911,
+              7922,
+              7929,
+              7933,
+              7991,
+              7996,
+              7997,
+              5198,
+              5211,
+              5231,
+              5251,
+              5712,
+              5713,
+              5714,
+              5718,
+              5719,
+              5950,
+              7641,
+              5122,
+              5912,
+              5975,
+              8042,
+              8043,
+              5977,
+              7230,
+              7297,
+              7298,
+              4121,
+              4111,
+              5511,
+              5521,
+              7512,
+              5192,
+              5733,
+              5735,
+              5941,
+              5942,
+              5945,
+              5995,
+              7829,
+              7941,
+              5399,
+              5411
+            ],
+            "merchants": [
+              "ola",
+              "uber",
+              "zoom",
+              "ani technologies",
+              "flipkart",
+              "amazon",
+              "meesho",
+              "ajio",
+              "cleartrip"
+            ],
+            "notes": "Online only, and only select merchants under these MCCs. MCC 5411 (grocery) counts only for Amazon and Flipkart (from 10 May 2025). Grocery and gift cards on other merchants earn nothing. Cleartrip earns 5% by merchant name from 17 Apr 2026.",
+            "categories": []
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983,
+            6513,
+            6540,
+            6541,
+            5944,
+            5094,
+            5051
+          ],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Jewellery",
+            "Government",
+            "Gift cards",
+            "Prepaid card",
+            "Wallet",
+            "EMI",
+            "Smartpay",
+            "Smartbuy portal",
+            "Cash advance",
+            "Foreign currency purchase and fees",
+            "Travellers cheques"
+          ],
+          "notes": "Once a purchase is converted to EMI the cashback is reversed in the next statement, even if the EMI is later foreclosed. The Swiggy HDFC T&C does not list education, so do not exclude it here (the pasted summary did).",
+          "merchants": []
+        },
+        "capPeriod": "billingCycle",
+        "spendBlock": 0
+      },
+      "reversals": "A refund or EMI conversion reverses the cashback in the statement where it happens, with its own cap per category; it does not matter that the original cycle hit the cap.",
+      "benefits": [
+        "Welcome: Swiggy One for 3 months on activation within 37 days (12 months if applied through the Swiggy app on or after 22 May 2025)",
+        "Birthday week: extra 10% off Dineout up to Rs 500 on Rs 3,000 or more, once per cardholder",
+        "Cleartrip: 20% off hotels and 6.35% off flights with coupon CTSWHDFC (limited period from 17 Apr 2026)"
+      ],
+      "feesAndCharges": {
+        "joiningAndRenewal": "Rs 500",
+        "renewalWaiver": "Rs 2 lakh spend in a year",
+        "financeCharge": "3.75% a month (45% a year)",
+        "lateFeeByTotalDue": "same HDFC slab as Millennia"
+      },
+      "effectiveFrom": "2026-04-21",
+      "publishedOn": "2026-09-18",
+      "source": "Swiggy HDFC Bank Credit Card T&C (published 18 Sep 2026)"
+    },
+    {
+      "key": "hdfc-upi-rupay",
+      "name": "HDFC Bank UPI RuPay Credit Card",
+      "issuer": "HDFC Bank",
+      "network": "RuPay (virtual only)",
+      "rewardType": "points",
+      "valuePerPoint": 0.25,
+      "capPeriod": "calendarMonth",
+      "postedOn": "first week of the next calendar month, by settlement date",
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100
+        },
+        "minSpend": 100,
+        "capPerCycle": null,
+        "baseCap": 500,
+        "rounding": "floor",
+        "accelerated": [
+          {
+            "id": "grocery-dining-3",
+            "label": "3% points on groceries, supermarkets, dining and all PayZapp",
+            "rate": {
+              "value": 3,
+              "per": 100
+            },
+            "capPerCycle": 500,
+            "mccs": [
+              5411,
+              5812,
+              5814
+            ],
+            "merchants": [
+              "payzapp"
+            ],
+            "notes": "Only these MCCs qualify. If the MCC is missing the spend drops to 1%. Extra PayZapp points are credited as PayZapp CashPoints.",
+            "categories": []
+          },
+          {
+            "id": "utility-2",
+            "label": "2% points on utilities",
+            "rate": {
+              "value": 2,
+              "per": 100
+            },
+            "capPerCycle": 500,
+            "mccs": [
+              4900
+            ],
+            "categories": [],
+            "merchants": []
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983,
+            6513,
+            6540,
+            6541
+          ],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "EMI (EasyEMI, SmartEMI, Dial an EMI)",
+            "Insurance",
+            "Government",
+            "Education",
+            "Wallet/gift/prepaid loads and vouchers",
+            "Cash advance",
+            "Card bill payment",
+            "Fees and charges"
+          ],
+          "merchants": []
+        },
+        "capPeriod": "calendarMonth",
+        "spendBlock": 0,
+        "pointValue": 0.25
+      },
+      "example": "Rs 15,000 month: 9,000 grocery/dining x3% = 270, 1,000 utility x2% = 20, 2,000 other x1% = 20, fuel and EMI nothing: total 310 points = Rs 77.50",
+      "redemption": {
+        "statementCredit": "1 point = Rs 0.25; minimum 2,000 points (Rs 500); no handling fee; cap 50,000 points a month",
+        "smartBuy": "1 point = Rs 0.25, up to 50% of flights/hotels, 50,000 points a month",
+        "catalogue": "Rs 99 + tax handling fee",
+        "expiry": "2 years from earning"
+      },
+      "benefits": [
+        "Linked to UPI apps; UPI purchases earn points",
+        "Virtual card only, shown in HDFC MyCards"
+      ],
+      "feesAndCharges": {
+        "joiningFee": "Rs 99",
+        "renewalWaiver": "Rs 25,000 retail spend in the previous year (cash advances, card bill payment, fees and EMI do not count)",
+        "fuelSurchargeWaiver": "not applicable",
+        "cashbackMinimumInMitc": "the MITC lists a Rs 250 minimum for the cashback redemption on this variant, which conflicts with the T&C's 2,000 points (Rs 500). Verify in NetBanking."
+      },
+      "effectiveFrom": "2025-03-27",
+      "publishedOn": "2025-03-27",
+      "source": "HDFC Bank UPI RuPay Credit Card T&C (27 Mar 2025)"
+    },
+    {
+      "key": "sbi-cashback",
+      "name": "SBI Cashback Card",
+      "issuer": "SBI Card",
+      "rewardType": "cashback",
+      "capPeriod": "billingCycle",
+      "postedOn": "within 2 working days of statement generation, as a statement credit",
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1,
+          "per": 100
+        },
+        "minSpend": 100,
+        "capPerCycle": 4000,
+        "rounding": "floor",
+        "accelerated": [
+          {
+            "id": "online-5",
+            "label": "5% on online spends",
+            "rate": {
+              "value": 5,
+              "per": 100
+            },
+            "capPerCycle": 2000,
+            "notes": "Online is decided by the network's online indicator, not by the merchant. Anything not flagged online is offline. FinPing has no online/offline flag on a transaction yet, so add merchant words (amazon, flipkart...) to this rule for it to apply; everything else is paid the 1% offline rate.",
+            "mccs": [],
+            "categories": [],
+            "merchants": []
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983,
+            6540,
+            6541,
+            6513,
+            7349,
+            5051,
+            5094,
+            7631,
+            5944,
+            5111,
+            5192,
+            5942,
+            5943,
+            8211,
+            8220,
+            8241,
+            8244,
+            8249,
+            8299,
+            8351,
+            4900,
+            4814,
+            4816,
+            4899,
+            9399,
+            5960,
+            6300,
+            6381,
+            5947,
+            4011,
+            4112,
+            6011,
+            6012,
+            6051,
+            7993,
+            7994,
+            5816,
+            4784,
+            9222,
+            9311,
+            9402
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet",
+            "Rent",
+            "Jewellery",
+            "Education",
+            "Utility",
+            "Insurance",
+            "Gift/novelty shops",
+            "Railways",
+            "Quasi cash",
+            "Digital gaming",
+            "Tolls",
+            "Government",
+            "Balance transfer",
+            "Cash advance",
+            "ATM",
+            "Financial charges",
+            "Standing instructions or Fetch and Pay on SBI platforms",
+            "Flexipay",
+            "Merchant EMI"
+          ],
+          "notes": "Cashback reversed on EMI conversion in the same statement month; a foreclosed EMI never gives it back. Refunds reverse the cashback. A reversal after the cap was reached cannot be used to earn more.",
+          "merchants": []
+        },
+        "capPeriod": "billingCycle",
+        "spendBlock": 0,
+        "baseCap": 2000
+      },
+      "capChange": "The kit says Rs 2,000 online + Rs 2,000 offline with a Rs 4,000 total per statement cycle. The Rs 5,000 figure in your note is not in this document.",
+      "benefits": [
+        "1% fuel surcharge waiver on Rs 500 to Rs 3,000, up to Rs 100 per statement cycle (fuel earns no cashback)"
+      ],
+      "feesAndCharges": {
+        "contactlessLimit": "Rs 5,000 without PIN"
+      },
+      "effectiveFrom": "2024-01-01",
+      "publishedOn": "2024-01-01",
+      "source": "SBI Cashback Card T&C kit"
+    },
+    {
+      "key": "hsbc-live-plus",
+      "name": "HSBC Live+",
+      "issuer": "HSBC",
+      "network": "Visa (per the service guide)",
+      "rewardType": "cashback",
+      "capPeriod": "billingCycle",
+      "capPeriodNote": "Documents say 'up to Rs 1,200 a month' and credit it within 45 days of the statement date, so it is tied to the statement cycle in practice. Confirm on a real statement.",
+      "postedOn": "within 45 days of the statement date (illustration: statement 2nd, credit on the 17th of the following month)",
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1.5,
+          "per": 100
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "rounding": "floor",
+        "accelerated": [
+          {
+            "id": "lifestyle-10",
+            "label": "10% on dining, food delivery, grocery, shopping and utilities",
+            "rate": {
+              "value": 10,
+              "per": 100
+            },
+            "capPerCycle": 1200,
+            "mccs": [
+              5411,
+              5422,
+              5441,
+              5451,
+              5462,
+              5499,
+              5921,
+              5811,
+              5812,
+              5813,
+              5814,
+              4814,
+              4900,
+              4812,
+              5261,
+              5309,
+              5310,
+              5311,
+              5331,
+              5399,
+              5611,
+              5621,
+              5631,
+              5641,
+              5651,
+              5655,
+              5661,
+              5681,
+              5691,
+              5697,
+              5698,
+              5699,
+              5732,
+              5735,
+              5931,
+              5933,
+              5941,
+              5945,
+              5948,
+              5950,
+              5964,
+              5965,
+              5969,
+              5977,
+              5992,
+              5993,
+              5997,
+              5998,
+              5999,
+              7251,
+              7296,
+              7622,
+              7631
+            ],
+            "excludeMerchants": [
+              "amazon",
+              "flipkart",
+              "myntra"
+            ],
+            "notes": "Amazon, Flipkart and Myntra stay at 1.5%. Cashback is by MCC only. The Bank's classification is final. The MCC table in the PDF is laid out in columns that extract out of order, so verify the shopping codes against the PDF before relying on them.",
+            "categories": [],
+            "merchants": []
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983,
+            6540,
+            6513,
+            6300,
+            6010,
+            6011,
+            6012,
+            7995,
+            7399,
+            8062,
+            8211,
+            8220,
+            8241,
+            8244,
+            8249,
+            8299,
+            9222,
+            9223,
+            9311,
+            9399,
+            9402,
+            9405,
+            9950,
+            4829,
+            4111,
+            4784,
+            7012,
+            5960,
+            8398,
+            8351,
+            8641,
+            8734,
+            9211
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet",
+            "Rent",
+            "Insurance",
+            "Education and government",
+            "Financial institutions",
+            "Gambling",
+            "Money transfer",
+            "Business to business",
+            "Charity",
+            "Hospitals",
+            "Jewellery and antiques",
+            "Instant EMI (IEMI)",
+            "International spends (no 1.5%)"
+          ],
+          "notes": "International spends no longer earn 1.5% because the forex mark-up is 1.99%. Instant EMI is treated as a loan and earns nothing. Cashback on reversed or cancelled spends is recovered from the next statement.",
+          "merchants": []
+        },
+        "capPeriod": "billingCycle",
+        "spendBlock": 0,
+        "baseCap": null
+      },
+      "benefits": [
+        "Lounge: 3 complimentary visits a year (2 domestic, one per 6 months; 1 international from 1 Sep 2026)",
+        "Live+ Reserve: curated chef menus and dining offers",
+        "No separate reward points programme"
+      ],
+      "feesAndCharges": {
+        "joiningFee": 999,
+        "annualFee": 999,
+        "annualFeeWaiver": "spend of Rs 2,00,000 a year; fee reversed in the next statement after the anniversary year",
+        "creditPeriodDays": 45,
+        "financeCharge": "3.75% a month (45% a year), from the date of transaction",
+        "lateFee": "100% of minimum due, minimum Rs 250 and maximum Rs 1,200 a month; charged if not paid within 3 days of the due date",
+        "overlimit": "2.5% of the overlimit amount",
+        "forexMarkup": "1.99% (3.5% on the Platinum cards)",
+        "cashAdvance": "1% processing fee plus taxes",
+        "paymentAtBranch": "Rs 100"
+      },
+      "effectiveFrom": "2026-09-01",
+      "publishedOn": "2026-09-01",
+      "source": "HSBC Live+ service guide and key fact statement"
+    }
+  ],
+  "format": "finping-reward-rules",
+  "revision": "2026-10-30"
+}

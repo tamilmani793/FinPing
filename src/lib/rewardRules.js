@@ -6,8 +6,10 @@
 
 export const EMPTY_TOTALS = () => ({ earned: 0, byRule: {} })
 
+// capPeriod: caps reset every billing cycle ('billingCycle') or every calendar month ('calendarMonth', HDFC Millennia and UPI RuPay)
 export const DEFAULT_RULES = cardId => ({
   cardId, enabled: true, rewardType: 'cashback', base: { value: 1, per: 100, blockBased: false }, minSpend: 0, capPerCycle: null, rounding: 'floor',
+  capPeriod: 'billingCycle', baseCap: null, spendBlock: 0, pointValue: null,
   accelerated: [], exclusions: { mccs: [], categories: [], merchants: [] },
 })
 
@@ -24,6 +26,9 @@ function rewardAt(amount, rate, rounding, type) {
   return Math.round(f(raw / unit + 1e-9) * unit * 100) / 100
 }
 
+// the rate as shown on a transaction: cashback "5%", points "5 pts/₹100"
+// a points card with a known rupee value per point is shown as a percentage too (5 pts per ₹100 at ₹1 a point = 5%)
+const rateShort = (rate, type, pointValue) => (type === 'points' && num(pointValue) > 0 ? `${Math.round(num(rate?.value) * num(pointValue) / (num(rate?.per) || 100) * 10000) / 100}%` : type === 'points' ? `${num(rate?.value)} pt${num(rate?.value) === 1 ? '' : 's'}/₹${num(rate?.per)}` : `${Math.round(num(rate?.value) / (num(rate?.per) || 100) * 10000) / 100}%`)
 const rateOf = r => (num(r?.per) > 0 ? num(r.value) / num(r.per) : 0)
 
 // does this transaction fall under a rule's mccs / categories / merchants?
@@ -63,28 +68,42 @@ export function calculateExpectedReward(transaction, cardRules, currentCycleTota
   const totals = currentCycleTotal || EMPTY_TOTALS()
   const baseRate = rateOf(cardRules.base)
   const rounding = cardRules.rounding || 'floor'
+  // some cards earn only on whole blocks of the spend (HDFC Millennia: multiples of ₹100, the remainder earns nothing)
+  const block = num(cardRules.spendBlock)
+  const earnable = block > 0 ? Math.floor(amount / block) * block : amount
+  if (!(earnable > 0)) return none('minSpend', `Below the spend block of ₹${block}`, type)
 
-  // the best accelerated rule that applies (highest rate wins); its own minimum spend and its own cycle cap are honoured
+  // the best accelerated rule that applies (highest rate wins); its own minimum spend and its own cycle cap are honoured.
+  // A rule can leave out merchants / MCCs that would otherwise match it (HSBC Live+: Amazon, Flipkart and Myntra stay at the base rate).
   let best = null
   for (const rule of cardRules.accelerated || []) {
     if (matchesRule(rule, transaction, mccMap) == null) continue
+    if (matchesRule({ mccs: rule.excludeMccs, merchants: rule.excludeMerchants }, transaction, mccMap) != null) continue
     if (amount < num(rule.minSpend)) continue
     if (!best || rateOf(rule.rate) > rateOf(best.rate)) best = rule
   }
 
+  // the base rate, held to its own cap when the card has one (HDFC Millennia 1% category, SBI offline 1%)
+  const baseResult = (label = 'Base rate') => {
+    const raw = rewardAt(earnable, cardRules.base, rounding, type)
+    const left = cardRules.baseCap != null && cardRules.baseCap !== '' ? Math.max(0, num(cardRules.baseCap) - num(totals.byRule?.base)) : Infinity
+    const amt = Math.min(raw, left)
+    return { amount: Math.round(amt * 100) / 100, rule: { id: 'base', label, kind: 'base' }, multiplier: 1, rate: rateShort(cardRules.base, type, cardRules.pointValue), capped: raw > left, reason: raw > left ? `Base rate capped at ${cardRules.baseCap}` : undefined }
+  }
+
   let result
   if (best) {
-    const raw = rewardAt(amount, best.rate, rounding, type)
+    const raw = rewardAt(earnable, best.rate, rounding, type)
     const left = best.capPerCycle != null && best.capPerCycle !== '' ? Math.max(0, num(best.capPerCycle) - num(totals.byRule?.[best.id])) : Infinity
     if (left <= 0) {
       // the accelerated cap is used up: the base rate applies from here
-      result = { amount: rewardAt(amount, cardRules.base, rounding, type), rule: { id: 'base', label: 'Base rate (accelerated cap reached)', kind: 'base' }, multiplier: 1, capped: true, reason: `${best.label} cap reached for this cycle` }
+      result = { ...baseResult('Base rate (accelerated cap reached)'), capped: true, reason: `${best.label} cap reached for this period` }
     } else {
       const amt = Math.min(raw, left)
-      result = { amount: Math.round(amt * 100) / 100, rule: { id: best.id, label: best.label, kind: 'accelerated' }, multiplier: baseRate > 0 ? Math.round((rateOf(best.rate) / baseRate) * 100) / 100 : 0, capped: raw > left, reason: raw > left ? `${best.label} capped at ${best.capPerCycle}` : undefined }
+      result = { amount: Math.round(amt * 100) / 100, rule: { id: best.id, label: best.label, kind: 'accelerated' }, multiplier: baseRate > 0 ? Math.round((rateOf(best.rate) / baseRate) * 100) / 100 : 0, rate: rateShort(best.rate, type, cardRules.pointValue), capped: raw > left, reason: raw > left ? `${best.label} capped at ${best.capPerCycle}` : undefined }
     }
   } else {
-    result = { amount: rewardAt(amount, cardRules.base, rounding, type), rule: { id: 'base', label: 'Base rate', kind: 'base' }, multiplier: 1, capped: false }
+    result = baseResult()
   }
 
   // the card's overall cap for the cycle
@@ -95,5 +114,46 @@ export function calculateExpectedReward(transaction, cardRules, currentCycleTota
   return { ...result, type }
 }
 
-// a reward for display: "✨ +₹25" for cashback, "🪙 +15 Pts" for points
-export const rewardPill = r => (r && r.amount > 0 ? (r.type === 'points' ? `🪙 +${Math.round(r.amount).toLocaleString('en-IN')} Pts` : `✨ +₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) : null)
+// ---- the rules in plain words (shown at the top of the Reward rules sheet) ----
+const rupees = n => '₹' + Number(n).toLocaleString('en-IN')
+const rateWords = (rate, type) => (type === 'points' ? `${num(rate?.value)} point${num(rate?.value) === 1 ? '' : 's'} per ${rupees(rate?.per)}` : `${num(rate?.value)}%`)
+const nameList = (items, max = 4) => (items.length <= max ? items.join(', ') : `${items.slice(0, max).join(', ')} and ${items.length - max} more`)
+const whatOf = m => {
+  const seen = new Set() // "cult.fit" and "cultfit" are one merchant to read
+  const merchants = (m.merchants || []).filter(x => { const k = String(x).toLowerCase().replace(/[^a-z0-9]/g, ''); if (seen.has(k)) return false; seen.add(k); return true })
+  const parts = [...(m.categories || []), ...merchants.map(x => x.replace(/\b\w/g, c => c.toUpperCase()))]
+  const codes = (m.mccs || []).length
+  if (codes) parts.push(`${codes} merchant code${codes === 1 ? '' : 's'}`)
+  return parts.length ? nameList(parts) : 'nothing selected yet'
+}
+
+/** @returns {{ icon: string, text: string }[]} one line per thing the card does */
+export function describeRules(rules) {
+  if (!rules) return []
+  const type = rules.rewardType === 'points' ? 'points' : 'cashback'
+  const per = rules.capPeriod === 'calendarMonth' ? 'calendar month' : 'billing cycle'
+  const cap = v => (v != null && v !== '' ? ` (up to ${type === 'points' ? v + ' points' : rupees(v)} a ${per})` : '')
+  const lines = []
+  for (const a of rules.accelerated || []) {
+    let t = `${rateWords(a.rate, type)} on ${whatOf(a)}${cap(a.capPerCycle)}`
+    if (num(a.minSpend) > 0) t += `, on spends of ${rupees(a.minSpend)} or more`
+    const out = [...(a.excludeMerchants || []), ...((a.excludeMccs || []).length ? [`${a.excludeMccs.length} merchant codes`] : [])]
+    if (out.length) t += `, but not ${nameList(out, 3)}`
+    lines.push({ icon: '⭐', text: t })
+  }
+  let base = `${rateWords(rules.base, type)} on everything else${cap(rules.baseCap)}`
+  if (num(rules.minSpend) > 0) base += `, on spends of ${rupees(rules.minSpend)} or more`
+  if (num(rules.spendBlock) > 0) base += `. Only whole ${rupees(rules.spendBlock)} count: ${rupees(rules.spendBlock * 12 + Math.round(rules.spendBlock / 2))} earns on ${rupees(rules.spendBlock * 12)}`
+  lines.push({ icon: '➕', text: base })
+  const ex = rules.exclusions || {}
+  const exWhat = [...(ex.categories || []), ...(ex.merchants || [])]
+  if ((ex.mccs || []).length) exWhat.push(`${ex.mccs.length} merchant codes`)
+  if (exWhat.length) lines.push({ icon: '🚫', text: `Nothing on ${nameList(exWhat, 6)}` })
+  if (rules.capPerCycle != null && rules.capPerCycle !== '') lines.push({ icon: '🔒', text: `At most ${type === 'points' ? rules.capPerCycle + ' points' : rupees(rules.capPerCycle)} in total a ${per}` })
+  lines.push({ icon: '🔁', text: `Caps start again every ${per}${rules.rounding === 'floor' || !rules.rounding ? '; rewards are rounded down' : ''}` })
+  return lines
+}
+
+// a reward for display:"✨ +₹25" for cashback, "🪙 +15 Pts" for points
+// the percentage / rate follows when the tag carries it: "✨ +₹62 · 5%"; a spend held back by a cap says so
+export const rewardPill = r => (r && r.amount > 0 ? (r.type === 'points' ? `🪙 +${Math.round(r.amount).toLocaleString('en-IN')} Pts` : `✨ +₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' (cap)' : '') : null)

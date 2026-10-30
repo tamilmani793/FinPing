@@ -5,7 +5,7 @@ import { INDIAN_CARDS, catalogEntries } from './indianCards'
 import { POLICY_TYPES, INSURERS, POLICY_CATALOG } from './policies'
 
 // Every dropdown in the app reads its choices from here. The built-in choices are the starting point; anything
-// you change in Profile -> Dropdown options is kept on this phone (and in your backup) and replaces the built-in list.
+// you change in Profile -> Customise is kept on this phone (and in your backup) and replaces the built-in list.
 //
 //   kind 'text'  : a list of names                                  (banks, networks, insurers...)
 //   kind 'rich'  : names with an extra field (icon, bank, partner)  (categories, debt types, card names)
@@ -25,6 +25,7 @@ const DEBT_TYPES = [
 const CATEGORIES = [
   ['Food Delivery', '🍔'], ['E-Commerce', '🛍'], ['Utilities & Bills', '⚡'], ['Transport', '🚗'], ['Health', '💊'], ['Fuel', '⛽'], ['Rent', '🏠'],
   ['Grocery', '🥦'], ['Travel Online', '✈️'], ['Entertainment', '🎬'], ['Insurance', '🛡'], ['EMI', '🏦'], ['Investment', '📈'], ['UPI Scan & Pay', '📲'],
+  ['Wallet Load', '👛'], ['Government & Tax', '🏛'], ['Education', '🎓'], ['Jewellery & Gold', '💍'],
   ['Cashback', '💚'], ['Salary', '💼'], ['Transfer', '🔁'], ['General', '💳'],
 ].map(([name, icon]) => ({ name, icon }))
 

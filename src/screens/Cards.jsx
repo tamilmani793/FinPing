@@ -22,6 +22,12 @@ import TxnEditSheet from '../components/TxnEditSheet'
 import { syncCardAmounts } from '../lib/cardSync'
 import { tagCardRewards } from '../lib/rewardTagging'
 import { rewardPill } from '../lib/rewardRules'
+import { filterTxns, defaultFilter } from '../lib/dateRange'
+import { autoApplyPresets } from '../lib/rulesPack'
+import { cashbackSummary } from '../lib/cashback'
+import PeriodFilter from '../components/PeriodFilter'
+import { moveToCategory } from '../lib/bulkCategory'
+import BulkCategoryBar from '../components/BulkCategoryBar'
 import RewardRulesSheet from '../components/RewardRulesSheet'
 import RewardsAuditSheet from '../components/RewardsAuditSheet'
 import { isNative, syncInbox } from '../lib/nativeSms'
@@ -215,31 +221,54 @@ function Portfolio({ cards, byCard, onOpen, onAdd }) {
 
 function TxnList({ card, list, emptyText, cards = [] }) {
   const [edit, setEdit] = useState(null)
+  const { showNotification } = useStore()
+  // select several of this card's transactions and move them to another category together
+  const [selecting, setSelecting] = useState(false)
+  const [picked, setPicked] = useState(new Set())
+  useBackHandler(selecting, () => { setSelecting(false); setPicked(new Set()) })
+  const togglePick = id => setPicked(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const moveTo = async category => {
+    if (!category || !picked.size) return
+    const n = await moveToCategory(list.filter(t => picked.has(t.id)), category)
+    showNotification(`${n} transaction${n === 1 ? '' : 's'} moved to ${category}`, 'success')
+    setSelecting(false); setPicked(new Set())
+  }
   const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date))
   const credit = isCredit(card)
   return (
     <>
+      {sorted.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, margin: '0 0 4px' }}>
+          {selecting && <span onClick={() => setPicked(picked.size === sorted.length ? new Set() : new Set(sorted.map(t => t.id)))} style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }}>{picked.size === sorted.length ? 'Unselect all' : `Select all ${sorted.length}`}</span>}
+          <span onClick={() => { setSelecting(v => !v); setPicked(new Set()) }} style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }}>{selecting ? 'Cancel' : 'Select'}</span>
+        </div>
+      )}
       {sorted.map(t => {
         const r = rewardStatus(card, t)
         const via = t.cardId !== card.id ? cards.find(c => c.id === t.cardId) : null // e.g. a debit card on this account
         return (
+          <div key={t.id} style={selecting ? { display: 'flex', alignItems: 'center', gap: 8 } : undefined}>
+          {selecting && <input type="checkbox" checked={picked.has(t.id)} onChange={() => togglePick(t.id)} style={{ width: 20, height: 20, accentColor: 'var(--gold)', flexShrink: 0 }} />}
+          <div style={{ flex: 1, minWidth: 0 }}>
           <TxnRow
-            key={t.id}
             icon={getMerchantIcon(t.merchant)}
             merchant={txnName(t)}
             meta={`${fmtD(t.date)} · ${t.category}${via ? ` · via ${via.name}` : ''}`}
             amount={t.amount}
             isCredit={t.type === 'credit'}
-            onClick={() => setEdit(t)}
+            onClick={() => (selecting ? togglePick(t.id) : setEdit(t))}
             badge={<>{!credit ? null : t.type === 'debit'
               ? (r.eligible
                 ? <span className="badge badge-mint" style={{ fontSize: 9 }}>✅ Rewards</span>
                 : <span className="badge badge-red" style={{ fontSize: 9 }}>⛔ {r.reason}</span>)
               : <span className="badge badge-indigo" style={{ fontSize: 9 }}>{t.kind === 'card_payment' || t.category === 'Card Payment' ? 'Bill payment' : t.category === 'Cashback' ? 'Cashback' : 'Refund'}</span>}{rewardPill(t.expectedReward) && <span className="badge badge-mint" style={{ fontSize: 9, marginLeft: 4 }}>{rewardPill(t.expectedReward)}</span>}</>}
           />
+          </div>
+          </div>
         )
       })}
       {!sorted.length && <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--txt2)', fontSize: 12 }}>{emptyText}</div>}
+      {selecting && <BulkCategoryBar count={picked.size} onPick={moveTo} />}
       {edit && <TxnDetailSheet txn={edit} onClose={() => setEdit(null)} />}
     </>
   )
@@ -247,31 +276,9 @@ function TxnList({ card, list, emptyText, cards = [] }) {
 
 // Transactions of one card or account with a filter: period (7 days, this / last month, 3 months, your own dates)
 // and direction (money in, money out or both). The totals under it follow the filter.
-const PERIODS = [
-  { value: 'all', label: 'All time' }, { value: '7d', label: 'Last 7 days' }, { value: 'month', label: 'This month' },
-  { value: 'lastmonth', label: 'Last month' }, { value: '3m', label: 'Last 3 months' }, { value: 'custom', label: 'Custom dates' },
-]
-function periodRange(period, from, to, now = new Date()) {
-  if (period === '7d') return [startOfDay(subDays(now, 6)), endOfDay(now)]
-  if (period === 'month') return [startOfMonth(now), endOfDay(now)]
-  if (period === 'lastmonth') { const m = subMonths(now, 1); return [startOfMonth(m), endOfMonth(m)] }
-  if (period === '3m') return [startOfDay(subMonths(now, 3)), endOfDay(now)]
-  if (period === 'custom') return [from ? startOfDay(new Date(from + 'T12:00:00')) : null, to ? endOfDay(new Date(to + 'T12:00:00')) : null]
-  return [null, null]
-}
-export function filterTxns(list, { period, from, to, dir }, now = new Date()) {
-  const [a, b] = periodRange(period, from, to, now)
-  return list.filter(t => {
-    const d = new Date(t.date)
-    if (a && d < a) return false
-    if (b && d > b) return false
-    if (dir === 'in' && t.type !== 'credit') return false
-    if (dir === 'out' && t.type !== 'debit') return false
-    return true
-  })
-}
+export { filterTxns }
 function FilteredTxnList({ card, list, cards, emptyText }) {
-  const [f, setF] = useState({ period: 'month', from: '', to: '', dir: 'both' })
+  const [f, setF] = useState(() => defaultFilter())
   const shown = filterTxns(list, f)
   const money = shown // card bill payments count as money in even though they are left out of spending
   const inn = money.filter(t => t.type === 'credit').reduce((a, t) => a + t.amount, 0)
@@ -279,14 +286,7 @@ function FilteredTxnList({ card, list, cards, emptyText }) {
   return (
     <>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
-        <Picker value={f.period} options={PERIODS} onChange={v => setF({ ...f, period: v })} title="Show transactions from" icon={<Calendar size={17} />} />
-        {f.period === 'custom' && (
-          <div className="form-grid">
-            <TextField icon={<Calendar size={17} />} type="date" value={f.from} max={f.to || undefined} onChange={e => setF({ ...f, from: e.target.value })} placeholder="From" aria-label="From date" />
-            <TextField icon={<Calendar size={17} />} type="date" value={f.to} min={f.from || undefined} onChange={e => setF({ ...f, to: e.target.value })} placeholder="To" aria-label="To date" />
-          </div>
-        )}
-        <Segmented value={f.dir} options={[{ value: 'both', label: 'Both' }, { value: 'in', label: 'Money in' }, { value: 'out', label: 'Money out' }]} onChange={v => setF({ ...f, dir: v })} />
+        <PeriodFilter value={f} onChange={setF} direction showRange search />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--txt2)', padding: '0 4px' }}>
           <span>{shown.length} transaction{shown.length === 1 ? '' : 's'}</span>
           <span>{f.dir !== 'out' && <>In <b style={{ color: 'var(--mint-dim)' }}>{formatINR(inn)}</b></>}{f.dir === 'both' && ' · '}{f.dir !== 'in' && <>Out <b style={{ color: 'var(--red-dim)' }}>{formatINR(out)}</b></>}</span>
@@ -365,10 +365,9 @@ function Detail({ card, cards, byCard, onBack }) {
   const spends = txns.filter(t => !isCardPayment(t))
   const spentMonth = spends.filter(t => t.type === 'debit' && new Date(t.date) >= monthStart).reduce((a, t) => a + t.amount, 0)
   // cashback earned, less any that was taken back (a "Cashback_Reversal" debit)
-  const cb = txns.filter(t => t.category === 'Cashback')
-  const cbNet = list => list.reduce((a, t) => a + (t.type === 'credit' ? t.amount : -t.amount), 0)
-  const cbMonth = cbNet(cb.filter(t => new Date(t.date) >= monthStart))
-  const cbAll = cbNet(cb)
+  const cbAllS = cashbackSummary(txns), cbMonthS = cashbackSummary(txns, monthStart)
+  const cbMonth = cbMonthS.net, cbAll = cbAllS.net
+  const [cbOpen, setCbOpen] = useState(false)
   const cycleLine = s.dates.statementDate ? `monthly on the ${ordinal(Number(card.billingCycleDate))}` : undefined
   const exclusions = excludedFor(card)
 
@@ -506,7 +505,21 @@ function Detail({ card, cards, byCard, onBack }) {
                 <button className="btn-secondary" style={{ flex: 1, height: 38, fontSize: 12.5 }} onClick={() => setAuditOpen(true)}>🔎 Rewards audit</button>
               </div>
               <Row k="Cashback this month" v={formatINR(cbMonth)} color="var(--mint-dim)" />
-              <Row k="Cashback all-time" v={formatINR(cbAll)} color="var(--mint-dim)" />
+              <Row k="Cashback all-time" sub={cbAllS.entries.length ? `${cbAllS.entries.length} credit${cbAllS.entries.length === 1 ? '' : 's'} from statements and SMS · since ${fmtD(cbAllS.first)}` : 'none found yet; import a statement'} v={formatINR(cbAll)} color="var(--mint-dim)" />
+              {cbAllS.entries.length > 0 && (
+                <>
+                  <div onClick={() => setCbOpen(v => !v)} style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer', padding: '2px 0 6px' }}>{cbOpen ? '▾ Hide' : '▸ Show'} every cashback credit</div>
+                  {cbOpen && cbAllS.months.map(m => {
+                    const rows = cbAllS.entries.filter(t => { const d = new Date(t.date); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === m.key })
+                    return (
+                      <div key={m.key} style={{ borderTop: '1px solid var(--border)', padding: '6px 0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700 }}><span>{format(new Date(m.key + '-01T12:00:00'), 'MMM yyyy')}</span><span style={{ color: 'var(--mint-dim)' }}>{formatINR(m.amount)}</span></div>
+                        {rows.map(t => <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, color: 'var(--txt2)', padding: '2px 0' }}><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtD(t.date)} · {t.bankNarration || txnName(t)}{t.parsedBy === 'statement' ? ' · statement' : t.rawSMS ? ' · SMS' : ''}</span><span>{t.type === 'credit' ? '+' : '−'}{formatINR(t.amount)}</span></div>)}
+                      </div>
+                    )
+                  })}
+                </>
+              )}
               {card.rewardPoints > 0 && <Row k="Reward points" v={card.rewardPoints.toLocaleString('en-IN')} />}
               <Row k="No rewards on" v={exclusions.length ? exclusions.join(', ') : 'nothing excluded'} />
               <div className="divider" />
@@ -562,8 +575,10 @@ export default function Accounts() {
   const [openId, setOpenId] = useState(null)
   const [newId, setNewId] = useState(null)
   const cards = useLiveQuery(() => db.creditCards.toArray())
+  // a card added just now gets the bundled reward rules if it matches one
+  useEffect(() => { if (cards?.length) autoApplyPresets().then(g => { if (g.length) showNotification(`Reward rules added for ${g.join(', ')}`, 'success') }).catch(() => {}) }, [cards?.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const allTxns = useLiveQuery(() => db.transactions.toArray())
-  const { openCardId, clearOpenCard } = useStore()
+  const { openCardId, clearOpenCard, showNotification } = useStore()
 
   // Another screen asked for a particular card / account (Home list, a transaction's detail).
   useEffect(() => {

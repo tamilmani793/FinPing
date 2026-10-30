@@ -9,16 +9,37 @@ import { getMccMap } from './mcc'
 
 export async function getRules(cardId) { return (await db.card_reward_rules.where('cardId').equals(cardId).first()) || null }
 
-export async function saveRules(rules) {
-  const row = { ...rules, updatedAt: new Date() }
+// Rules are versioned: the row holds the current rules plus effectiveFrom / publishedOn / source, and `history` keeps the older versions.
+// A spend is worked out with the version in force on its date, so a bank's later change never rewrites the past.
+const RULE_FIELDS = ['enabled', 'rewardType', 'base', 'minSpend', 'capPerCycle', 'rounding', 'capPeriod', 'baseCap', 'spendBlock', 'accelerated', 'exclusions', 'effectiveFrom', 'publishedOn', 'source']
+const snapshot = row => Object.fromEntries(RULE_FIELDS.filter(k => row[k] !== undefined).map(k => [k, row[k]]))
+
+export function rulesFor(row, date) {
+  if (!row) return null
+  const ds = format(new Date(date), 'yyyy-MM-dd')
+  if (!row.effectiveFrom || ds >= row.effectiveFrom || !(row.history || []).length) return row
+  const older = [...row.history].sort((a, b) => String(b.effectiveFrom || '').localeCompare(String(a.effectiveFrom || '')))
+  const hit = older.find(h => !h.effectiveFrom || h.effectiveFrom <= ds) || older[older.length - 1]
+  return { ...row, ...hit, cardId: row.cardId }
+}
+
+// `asNewVersion`: keep what was there as history and start the new rules from rules.effectiveFrom (a bank changed its terms)
+export async function saveRules(rules, { asNewVersion = false } = {}) {
   const old = await getRules(rules.cardId)
+  const row = { ...rules, updatedAt: new Date(), history: old?.history || rules.history || [] }
+  if (asNewVersion && old && rules.effectiveFrom) {
+    const prev = snapshot(old)
+    if (!prev.effectiveFrom || prev.effectiveFrom !== rules.effectiveFrom) row.history = [...row.history.filter(h => h.effectiveFrom !== prev.effectiveFrom), prev]
+  }
   if (old) { await db.card_reward_rules.update(old.id, row); row.id = old.id } else row.id = await db.card_reward_rules.add(row)
+  await db.creditCards.update(rules.cardId, { rewardRulesOptOut: false })
   await tagCardRewards(rules.cardId)
   return row
 }
 
 export async function deleteRules(cardId) {
   await db.card_reward_rules.where('cardId').equals(cardId).delete()
+  await db.creditCards.update(cardId, { rewardRulesOptOut: true }) // you removed them on purpose: do not add them again by themselves
   await tagCardRewards(cardId)
 }
 
@@ -44,16 +65,19 @@ export async function tagCardRewards(cardId) {
   const rules = await getRules(cardId)
   const txns = (await db.transactions.where('cardId').equals(cardId).toArray()).sort((a, b) => new Date(a.date) - new Date(b.date) || a.id - b.id)
   const mccMap = rules ? await getMccMap() : {}
-  let totals = EMPTY_TOTALS(), cycle = null, earning = 0
+  let totals = EMPTY_TOTALS(), period = null, earning = 0
   for (const t of txns) {
     let tag
-    if (rules && rules.enabled !== false && t.type === 'debit' && !t.isExcluded && t.kind !== 'card_payment') {
+    const rv = rulesFor(rules, t.date)
+    if (rv && rv.enabled !== false && t.type === 'debit' && !t.isExcluded && t.kind !== 'card_payment') {
       const key = cycleKeyFor(card, t.date)
-      if (key !== cycle) { cycle = key; totals = EMPTY_TOTALS() }
-      const r = calculateExpectedReward(t, rules, totals, mccMap)
+      // caps reset every billing cycle, or every calendar month for cards that say so; a change of rule version also starts afresh
+      const pkey = (rv.capPeriod === 'calendarMonth' ? format(new Date(t.date), 'yyyy-MM') : key) + '|' + (rv.effectiveFrom || '')
+      if (pkey !== period) { period = pkey; totals = EMPTY_TOTALS() }
+      const r = calculateExpectedReward(t, rv, totals, mccMap)
       tag = { ...r, cycleKey: key }
       totals.earned += r.amount
-      if (r.rule.kind === 'accelerated') totals.byRule[r.rule.id] = (totals.byRule[r.rule.id] || 0) + r.amount
+      if (r.rule.kind === 'accelerated' || r.rule.kind === 'base') totals.byRule[r.rule.id] = (totals.byRule[r.rule.id] || 0) + r.amount
       if (r.amount > 0) earning++
     }
     if (!same(t.expectedReward, tag)) await db.transactions.update(t.id, { expectedReward: tag })

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { endOfMonth } from 'date-fns'
 import { IndianRupee, Store, Tag, Wallet, CreditCard, StickyNote } from 'lucide-react'
 import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, TxnRow, LabelCaps, BtnPrimary, formatINR, getMerchantIcon, formatDate } from '../components/UI'
@@ -13,6 +12,10 @@ import { useBackHandler } from '../lib/backNav'
 import { cardTitle } from '../lib/cardCatalog'
 import { txnName } from '../lib/txnName'
 import { rewardPill } from '../lib/rewardRules'
+import { moveToCategory } from '../lib/bulkCategory'
+import { filterTxns, defaultFilter, periodLabel } from '../lib/dateRange'
+import PeriodFilter from '../components/PeriodFilter'
+import BulkCategoryBar from '../components/BulkCategoryBar'
 
 const FILTERS = ['All', 'Food', 'Shopping', 'Utilities', 'Travel', 'Fuel', 'Excluded']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -25,25 +28,28 @@ export default function Expenses() {
   const [showAddForm, setShowAddForm] = useState(false)
   useBackHandler(showAddForm, () => setShowAddForm(false))
   const [editTxn, setEditTxn] = useState(null)
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth())
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  const [flt, setFlt] = useState(() => defaultFilter()) // the same date filter as Cards and Charts
   const { showNotification, composeRequest } = useStore()
   const categoryList = useOptions('categories')
+  // select several transactions and move them to another category in one go
+  const [selecting, setSelecting] = useState(false)
+  const [picked, setPicked] = useState(new Set())
+  useBackHandler(selecting, () => { setSelecting(false); setPicked(new Set()) })
+  const togglePick = id => setPicked(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const moveTo = async category => {
+    if (!category || !picked.size) return
+    const n = await moveToCategory((transactions || []).filter(t => picked.has(t.id)), category)
+    showNotification(`${n} transaction${n === 1 ? '' : 's'} moved to ${category}`, 'success')
+    setSelecting(false); setPicked(new Set())
+  }
 
   useEffect(() => { if (composeRequest > 0) setShowAddForm(true) }, [composeRequest])
 
   const [form, setForm] = useState({ merchant: '', amount: '', category: 'General', paymentMode: 'UPI', cardId: '', notes: '', tags: '' })
   const accountList = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft && c.cardType !== 'unknown')
 
-  const monthStart = new Date(selectedYear, selectedMonth, 1)
-  const monthEnd = endOfMonth(monthStart)
-
-  const transactions = useLiveQuery(() =>
-    db.transactions.filter(t => {
-      const d = new Date(t.date)
-      return d >= monthStart && d <= monthEnd
-    }).toArray()
-  , [selectedMonth, selectedYear])
+  const all = useLiveQuery(() => db.transactions.toArray())
+  const transactions = all ? filterTxns(all, flt, new Date(), accountList) : undefined
 
   const totalSpent = (transactions || []).filter(t => t.type === 'debit' && !t.isExcluded).reduce((s, t) => s + t.amount, 0)
   const totalCredits = (transactions || []).filter(t => t.type === 'credit' && !t.isExcluded).reduce((s, t) => s + t.amount, 0)
@@ -96,17 +102,11 @@ export default function Expenses() {
   }))
 
   return (
-    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150, position: 'relative' }}>
-      <TopBar sub={`Expenses · ${MONTHS[selectedMonth]} ${selectedYear}`} />
+    <div className="screen active" style={{ overflowY: 'auto', paddingBottom: selecting ? 230 : 150, position: 'relative' }}>
+      <TopBar sub={`Expenses · ${flt.period === 'pick' ? `${MONTHS[flt.month]} ${flt.year}` : periodLabel(flt.period)}`} />
 
-      {/* Month Selector */}
-      <div style={{ padding: '10px 16px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <select value={selectedMonth} onChange={e => setSelectedMonth(+e.target.value)} className="input" style={{ flex: 1, height: 40, borderRadius: 14 }}>
-          {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
-        </select>
-        <select value={selectedYear} onChange={e => setSelectedYear(+e.target.value)} className="input" style={{ width: 96, height: 40, borderRadius: 14 }}>
-          {[2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
+      <div style={{ padding: '10px 16px 0' }}>
+        <PeriodFilter value={flt} onChange={setFlt} direction showRange search accounts={accountList} />
       </div>
 
       {/* Summary */}
@@ -129,7 +129,7 @@ export default function Expenses() {
       </div>
 
       <div style={{ padding: '4px 16px 0' }}>
-        <SectionHdr title="By Category" right={<Badge variant="grey">{cats.length} categories</Badge>} />
+        <SectionHdr title="By Category" right={<div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span onClick={() => { setSelecting(v => !v); setPicked(new Set()) }} style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }}>{selecting ? 'Cancel' : 'Select'}</span><Badge variant="grey">{cats.length} categories</Badge></div>} />
 
         <div style={{ marginBottom: 10 }}>
           <button className="btn-secondary" style={{ width: '100%', height: 42, fontSize: 13 }} onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Close' : '+ Add Manually'}</button>
@@ -172,11 +172,16 @@ export default function Expenses() {
           </div>
         )}
 
+        {selecting && (transactions || []).length > 0 && (
+          <div onClick={() => setPicked(prev => (prev.size === transactions.length ? new Set() : new Set(transactions.map(t => t.id))))} style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer', margin: '0 2px 10px' }}>
+            {picked.size === transactions.length ? 'Unselect all' : `Select all ${transactions.length} shown${flt.q ? ` for “${flt.q}”` : ''}`}
+          </div>
+        )}
         {/* Category Accordions */}
         {filteredCats.map(([cat, txns]) => {
           const catTotal = txns.reduce((s, t) => s + (t.type === 'debit' ? t.amount : 0), 0)
           const pct = totalSpent > 0 ? Math.round(catTotal / totalSpent * 100) : 0
-          const isExpanded = expandedCats.has(cat)
+          const isExpanded = expandedCats.has(cat) || !!(flt.q || '').trim() // a search opens every group that has a match
           const isExcluded = txns.some(t => t.isExcluded)
           return (
             <Card key={cat} style={{ padding: '10px 14px', marginBottom: 8 }}>
@@ -197,18 +202,26 @@ export default function Expenses() {
                   <div style={{ height: 3, background: 'var(--track)', borderRadius: 9999, marginBottom: 8, overflow: 'hidden' }}>
                     <div style={{ width: `${pct}%`, height: '100%', background: isExcluded ? 'var(--red)' : 'var(--mint)', borderRadius: 9999 }} />
                   </div>
+                  {selecting && (() => {
+                    const all = txns.every(t => picked.has(t.id))
+                    return <div onClick={() => setPicked(prev => { const n = new Set(prev); txns.forEach(t => (all ? n.delete(t.id) : n.add(t.id))); return n })} style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer', margin: '0 0 6px' }}>{all ? 'Unselect all' : `Select all ${txns.length} in ${cat}`}</div>
+                  })()}
                   {txns.map(t => (
+                    <div key={t.id} style={selecting ? { display: 'flex', alignItems: 'center', gap: 8 } : undefined}>
+                    {selecting && <input type="checkbox" checked={picked.has(t.id)} onChange={() => togglePick(t.id)} style={{ width: 20, height: 20, accentColor: 'var(--gold)', flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
                     <TxnRow
-                      key={t.id}
                       icon={getMerchantIcon(t.merchant)}
                       merchant={txnName(t)}
                       meta={`${formatDate(t.date)} · ${t.paymentMode}${t.rawSMS ? ' · SMS' : ' · Manual'}`}
                       amount={t.amount}
                       isCredit={t.type === 'credit'}
                       tags={t.tags}
-                      onClick={() => setEditTxn(t)}
+                      onClick={() => (selecting ? togglePick(t.id) : setEditTxn(t))}
                       badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : (rewardPill(t.expectedReward) ? <Badge variant="mint" style={{ fontSize: 9 }}>{rewardPill(t.expectedReward)}</Badge> : null)}
                     />
+                    </div>
+                    </div>
                   ))}
                 </>
               )}
@@ -224,6 +237,7 @@ export default function Expenses() {
           </div>
         )}
       </div>
+      {selecting && <BulkCategoryBar count={picked.size} onPick={moveTo} />}
       {editTxn && <TxnDetailSheet txn={editTxn} onClose={() => setEditTxn(null)} />}
     </div>
   )

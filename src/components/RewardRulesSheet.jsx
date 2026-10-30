@@ -3,11 +3,14 @@ import { Plus, Trash2, Pencil } from 'lucide-react'
 import { useStore } from '../store'
 import { askConfirm } from '../lib/confirm'
 import { getRules, saveRules, deleteRules } from '../lib/rewardTagging'
-import { DEFAULT_RULES } from '../lib/rewardRules'
+import { DEFAULT_RULES, describeRules, calculateExpectedReward } from '../lib/rewardRules'
+import { getMccMap } from '../lib/mcc'
+import { SHOW_MCC } from '../lib/features'
 import { cardTitle } from '../lib/cardCatalog'
 import { BtnPrimary } from './UI'
 import { Field, FormHeading, Segmented, TextField, Picker } from './Fields'
 import { useRewardCategories } from './MccMaintainer'
+import RulesUpdateSheet from './RulesUpdateSheet'
 
 // The card's reward rules (table card_reward_rules): reward type, base rate, accelerated categories / MCCs / merchants,
 // exclusions, minimum spend, cycle caps and rounding. Saving re-tags every spend on the card with the reward it should earn.
@@ -59,7 +62,9 @@ function MatchFields({ match, onChange, categories }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Field label="Categories"><Chips all={categories} value={match.categories} onChange={v => onChange({ ...match, categories: v })} /></Field>
+      {SHOW_MCC && (
       <Field label="MCC codes" hint="Comma separated, e.g. 5411, 5499"><TextField value={match.mccsText ?? (match.mccs || []).join(', ')} onChange={e => onChange({ ...match, mccsText: e.target.value, mccs: mccList(e.target.value) })} placeholder="Optional" /></Field>
+      )}
       <Field label="Merchant words" hint="Words in the merchant name, e.g. amazon, flipkart"><TextField value={match.merchantsText ?? (match.merchants || []).join(', ')} onChange={e => onChange({ ...match, merchantsText: e.target.value, merchants: list(e.target.value) })} placeholder="Optional" /></Field>
     </div>
   )
@@ -77,6 +82,13 @@ function AccelSheet({ type, rule, categories, onSave, onClose }) {
           <RateFields type={type} rate={r.rate} onChange={rate => setR({ ...r, rate })} label="Rate for this rule" />
           <FormHeading sub="A spend matching any of these earns this rate">Applies to</FormHeading>
           <MatchFields match={r} onChange={m => setR({ ...r, ...m })} categories={categories} />
+          <FormHeading sub="Even if the above matches, these get the base rate instead (e.g. Amazon, Flipkart on a grocery rule)">Leave out</FormHeading>
+          <div className="form-grid">
+            {SHOW_MCC && (
+            <Field label="MCC codes"><TextField value={r.excludeMccsText ?? (r.excludeMccs || []).join(', ')} onChange={e => setR({ ...r, excludeMccsText: e.target.value, excludeMccs: mccList(e.target.value) })} placeholder="Optional" /></Field>
+            )}
+            <Field label="Merchant words"><TextField value={r.excludeMerchantsText ?? (r.excludeMerchants || []).join(', ')} onChange={e => setR({ ...r, excludeMerchantsText: e.target.value, excludeMerchants: list(e.target.value) })} placeholder="Optional" /></Field>
+          </div>
           <div className="form-grid">
             <Field label="Min spend (₹)" hint="Below this the base rate applies"><TextField type="number" inputMode="decimal" value={num(r.minSpend)} onChange={e => setR({ ...r, minSpend: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="0" /></Field>
             <Field label={`Cap per cycle (${type === 'points' ? 'pts' : '₹'})`}><TextField type="number" inputMode="decimal" value={num(r.capPerCycle)} onChange={e => setR({ ...r, capPerCycle: e.target.value === '' ? null : Number(e.target.value) })} placeholder="No cap" /></Field>
@@ -91,22 +103,55 @@ function AccelSheet({ type, rule, categories, onSave, onClose }) {
   )
 }
 
+// "What would this spend earn?": type a merchant and an amount, see the reward and which rule gave it
+function TryIt({ rules }) {
+  const [merchant, setMerchant] = useState('')
+  const [amount, setAmount] = useState('')
+  const [mcc, setMcc] = useState('')
+  const [map, setMap] = useState({})
+  useEffect(() => { getMccMap().then(setMap).catch(() => {}) }, [])
+  const amt = Number(amount)
+  const r = amt > 0 ? calculateExpectedReward({ amount: amt, type: 'debit', merchant, mcc: mcc || undefined }, rules, undefined, map) : null
+  return (
+    <div style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: 12 }}>
+      <div className="label-caps" style={{ marginBottom: 8 }}>Try a spend</div>
+      <div className="form-grid">
+        <Field label="Merchant"><TextField value={merchant} onChange={e => setMerchant(e.target.value)} placeholder="e.g. Amazon" /></Field>
+        <Field label="Amount (₹)"><TextField type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 1250" /></Field>
+      </div>
+      {SHOW_MCC && (
+      <Field label="Merchant code (optional)" hint="The 4-digit MCC, e.g. 5411 for grocery"><TextField value={mcc} onChange={e => setMcc(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="Optional" /></Field>
+      )}
+      {r && (
+        <div style={{ marginTop: 10, fontSize: 13.5, fontWeight: 700 }}>
+          {r.amount > 0 ? 'Earns ' + (r.type === 'points' ? Math.round(r.amount) + ' points' : '₹' + r.amount) : 'Earns nothing'}
+          <span style={{ fontWeight: 500, color: 'var(--txt2)' }}> · {r.rule.kind === 'base' || r.rule.kind === 'accelerated' ? r.rule.label : r.reason || r.rule.label}{r.capped && r.reason ? ' (' + r.reason + ')' : ''}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function RewardRulesSheet({ card, onClose }) {
   const { showNotification } = useStore()
   const categories = useRewardCategories()
   const [rules, setRules] = useState(null)
   const [edit, setEdit] = useState(null) // { index, rule }
   const [had, setHad] = useState(false)
-  useEffect(() => { getRules(card.id).then(r => { setHad(!!r); setRules(r || DEFAULT_RULES(card.id)) }) }, [card.id])
+  const [updateOpen, setUpdateOpen] = useState(false)
+  const [editing, setEditing] = useState(false) // the form is hidden behind "Edit rules" once rules exist
+  const [changedFrom, setChangedFrom] = useState('') // the date a bank's change applies from; saves a new version instead of overwriting
+  useEffect(() => { getRules(card.id).then(r => { setHad(!!r); setEditing(!r); setRules(r || DEFAULT_RULES(card.id)) }) }, [card.id])
   if (!rules) return null
   const type = rules.rewardType
   const set = patch => setRules(r => ({ ...r, ...patch }))
   const changeType = v => set(v === 'points' ? { rewardType: v, base: { value: 1, per: 100, blockBased: true } } : { rewardType: v, base: { value: 1, per: 100, blockBased: false } })
 
   const save = async () => {
-    const clean = { ...rules, accelerated: rules.accelerated.map(({ mccsText, merchantsText, ...a }) => a), exclusions: (({ mccsText, merchantsText, ...e }) => e)(rules.exclusions) }
+    const clean = { ...rules, accelerated: rules.accelerated.map(({ mccsText, merchantsText, excludeMccsText, excludeMerchantsText, ...a }) => a), exclusions: (({ mccsText, merchantsText, ...e }) => e)(rules.exclusions) }
     if (!(Number(clean.base.value) >= 0) || !(Number(clean.base.per) > 0)) { showNotification('Enter the base rate', 'error'); return }
-    await saveRules(clean); showNotification('Reward rules saved. Spends are tagged again.', 'success'); onClose()
+    if (changedFrom) clean.effectiveFrom = changedFrom
+    await saveRules(clean, { asNewVersion: !!changedFrom }); showNotification('Reward rules saved. Spends are tagged again.', 'success'); onClose()
   }
   const remove = async () => {
     if (!(await askConfirm({ title: 'Remove these reward rules?', message: 'The expected-reward tags on this card are cleared. Transactions are not changed.' }))) return
@@ -120,7 +165,22 @@ export default function RewardRulesSheet({ card, onClose }) {
         <div className="sheet-handle" />
         <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>Reward rules</div>
         <div style={{ fontSize: 12, color: 'var(--txt2)', margin: '2px 0 14px' }}>{cardTitle(card)} · worked out on this phone from your own rules</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {had && (
+          <div style={{ marginBottom: 14 }}>
+            <div className="label-caps" style={{ marginBottom: 6 }}>How this card earns</div>
+            {describeRules(rules).map((l, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, padding: '7px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 13, lineHeight: 1.45 }}><span>{l.icon}</span><span>{l.text}</span></div>
+            ))}
+            <div style={{ marginTop: 10 }}><TryIt rules={rules} /></div>
+            {!editing && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                <button className="btn-ghost" style={{ height: 46, flex: 1 }} onClick={() => setUpdateOpen(true)}>Update rules</button>
+                <BtnPrimary onClick={() => setEditing(true)} style={{ flex: 1 }}>Edit rules</BtnPrimary>
+              </div>
+            )}
+          </div>
+        )}
+        {editing && <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5 }}>
             <input type="checkbox" checked={rules.enabled !== false} onChange={e => set({ enabled: e.target.checked })} style={{ width: 18, height: 18, accentColor: 'var(--gold)' }} /> Work out expected rewards for this card
           </label>
@@ -132,6 +192,14 @@ export default function RewardRulesSheet({ card, onClose }) {
             <Field label={`Card cap per cycle (${type === 'points' ? 'pts' : '₹'})`}><TextField type="number" inputMode="decimal" value={num(rules.capPerCycle)} onChange={e => set({ capPerCycle: e.target.value === '' ? null : Number(e.target.value) })} placeholder="No cap" /></Field>
           </div>
           <Field label="Rounding"><Picker value={rules.rounding || 'floor'} options={ROUNDING} onChange={v => set({ rounding: v })} title="Rounding" /></Field>
+          <div className="form-grid">
+            <Field label={`Base rate cap (${type === 'points' ? 'pts' : '₹'})`} hint="If the base rate has its own cap"><TextField type="number" inputMode="decimal" value={num(rules.baseCap)} onChange={e => set({ baseCap: e.target.value === '' ? null : Number(e.target.value) })} placeholder="No cap" /></Field>
+            <Field label="Earns on blocks of (₹)" hint="e.g. 100: ₹1,250 earns on ₹1,200"><TextField type="number" inputMode="decimal" value={num(rules.spendBlock)} onChange={e => set({ spendBlock: e.target.value === '' ? 0 : Number(e.target.value) })} placeholder="Any amount" /></Field>
+          </div>
+          {type === 'points' && (
+            <Field label="Value of one point (₹)" hint="Shows the reward as a % on each spend, e.g. 1 for Millennia, 0.25 for UPI RuPay"><TextField type="number" inputMode="decimal" value={num(rules.pointValue)} onChange={e => set({ pointValue: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 1" /></Field>
+          )}
+          <Field label="Caps reset every"><Segmented value={rules.capPeriod || 'billingCycle'} options={[{ value: 'billingCycle', label: 'Billing cycle' }, { value: 'calendarMonth', label: 'Calendar month' }]} onChange={v => set({ capPeriod: v })} /></Field>
 
           <div>
             <div className="section-hdr" style={{ marginBottom: 6 }}>
@@ -156,13 +224,22 @@ export default function RewardRulesSheet({ card, onClose }) {
             <MatchFields match={rules.exclusions || {}} onChange={exclusions => set({ exclusions })} categories={categories} />
           </div>
 
+          <div>
+            <FormHeading sub="Leave empty to simply correct these rules. Set a date when the bank changed its terms: earlier spends keep the old rules.">Bank changed its terms?</FormHeading>
+            <Field label="New rules apply from"><TextField type="date" value={changedFrom} onChange={e => setChangedFrom(e.target.value)} /></Field>
+            {(rules.effectiveFrom || rules.source || (rules.history || []).length > 0) && (
+              <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginTop: 6 }}>Current rules{rules.effectiveFrom ? ` from ${rules.effectiveFrom}` : ''}{rules.publishedOn ? ` · published ${rules.publishedOn}` : ''}{rules.source ? ` · ${rules.source}` : ''}{(rules.history || []).length ? ` · ${rules.history.length} earlier version${rules.history.length > 1 ? 's' : ''} kept` : ''}</div>
+            )}
+          </div>
+          <button className="btn-ghost" style={{ height: 46 }} onClick={() => setUpdateOpen(true)}>Update rules: bundled, file or terms PDF</button>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={onClose}>Cancel</button>
             <BtnPrimary onClick={save} style={{ flex: 1 }}>Save rules</BtnPrimary>
           </div>
           {had && <button className="btn-ghost" style={{ color: 'var(--red-dim)', borderColor: 'var(--red-border)', height: 46 }} onClick={remove}>Remove reward rules</button>}
-        </div>
+        </div>}
       </div>
+      {updateOpen && <RulesUpdateSheet card={card} onClose={() => { setUpdateOpen(false); onClose() }} />}
       {edit && <AccelSheet type={type} rule={edit.rule} categories={categories} onClose={() => setEdit(null)} onSave={r => { set({ accelerated: edit.index < 0 ? [...rules.accelerated, r] : rules.accelerated.map((a, i) => (i === edit.index ? r : a)) }); setEdit(null) }} />}
     </div>
   )

@@ -205,3 +205,6 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 42px; 
 .chip { border-radius: 999px; padding: 8px 14px; }
 input[type="date"].input { padding-right: 12px; font-size: 14px; }
 input[type="date"].input::-webkit-calendar-picker-indicator { margin-left: 4px; padding: 0; opacity: .55; }
+
+/* the last row of a list card has no divider under it */
+.rows > div:last-child { border-bottom: none !important; }

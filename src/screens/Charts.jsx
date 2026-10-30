@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { startOfMonth, subDays, subMonths, startOfDay, endOfDay, format, addDays, differenceInCalendarDays } from 'date-fns'
+import { startOfMonth, endOfDay, format, addDays, differenceInCalendarDays } from 'date-fns'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { TrendingUp, BarChart3, PieChart as PieIcon, Calendar } from 'lucide-react'
+import { TrendingUp, BarChart3, PieChart as PieIcon } from 'lucide-react'
 import { db } from '../db/schema'
 import { TopBar, formatINR } from '../components/UI'
 import { flowOf, spendOf, isCreditCard } from '../lib/flow'
-import { Picker, TextField } from '../components/Fields'
+import PeriodFilter from '../components/PeriodFilter'
+import { rangeFor, defaultFilter } from '../lib/dateRange'
 
 const PALETTE = ['#E8466C', '#A855F7', '#F5A524', '#6366F1', '#F97316', '#14B8A6', '#06B6D4', '#84CC16', '#EC4899', '#EAB308', '#8B8B8B']
 const MODES = [
@@ -14,26 +15,14 @@ const MODES = [
   { id: 'bar', label: 'Bar', Icon: BarChart3 },
   { id: 'pie', label: 'Pie', Icon: PieIcon },
 ]
-const PERIODS = [
-  { value: 'month', label: 'This month' }, { value: '7d', label: '7 days' }, { value: '1m', label: '1 month' }, { value: '3m', label: '3 months' },
-  { value: 'fy', label: 'Current financial year' }, { value: 'pfy', label: 'Previous financial year' }, { value: 'custom', label: 'Custom range' },
-]
 const tooltipStyle = { background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 10, fontSize: 12, color: 'var(--txt)' }
 
-// Indian financial year: 1 April to 31 March
-const fyStart = now => new Date(now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1, 3, 1)
-
-// [start, end] of the chosen period
-function rangeFor(period, now, from, to) {
-  if (period === 'month') return [startOfMonth(now), endOfDay(now)]
-  if (period === '7d') return [startOfDay(subDays(now, 6)), endOfDay(now)]
-  if (period === '1m') return [startOfDay(subDays(now, 29)), endOfDay(now)]
-  if (period === '3m') return [startOfDay(subMonths(now, 3)), endOfDay(now)]
-  if (period === 'fy') return [fyStart(now), endOfDay(now)]
-  if (period === 'pfy') { const s = fyStart(now); return [new Date(s.getFullYear() - 1, 3, 1), new Date(s.getFullYear(), 2, 31, 23, 59, 59, 999)] }
-  const a = from ? startOfDay(new Date(from + 'T12:00:00')) : startOfMonth(now)
-  const b = to ? endOfDay(new Date(to + 'T12:00:00')) : endOfDay(now)
-  return [a, b < a ? endOfDay(a) : b]
+// [start, end] of the chosen period (the shared filter; an open end falls back to the start of this month / today)
+const CHART_PERIODS = ['month', 'lastmonth', 'pick', '7d', '30d', '3m', 'fy', 'pfy', 'custom']
+function chartRange(f, now) {
+  const [a, b] = rangeFor(f, now)
+  const start = a || startOfMonth(now), end = b || endOfDay(now)
+  return [start, end < start ? endOfDay(start) : end]
 }
 
 // Daily buckets up to ~31 days, weekly beyond that.
@@ -50,15 +39,13 @@ function buildBuckets(start, now) {
 
 export default function Charts() {
   const [mode, setMode] = useState('area')
-  const [period, setPeriod] = useState('month')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [flt, setFlt] = useState(() => defaultFilter())
   const now = new Date()
-  const [start, end] = rangeFor(period, now, from, to)
+  const [start, end] = chartRange(flt, now)
 
   const transactions = useLiveQuery(
     () => db.transactions.filter(t => new Date(t.date) >= start && new Date(t.date) <= end && !t.isExcluded).toArray(),
-    [period, +start, +end]
+    [flt.period, +start, +end]
   )
   const txns = transactions || []
   const cardList = useLiveQuery(() => db.creditCards.toArray()) || []
@@ -100,14 +87,7 @@ export default function Charts() {
 
         {/* Period */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-          <Picker value={period} options={PERIODS} onChange={setPeriod} title="Show analytics for" icon={<Calendar size={17} />} />
-          {period === 'custom' && (
-            <div className="form-grid">
-              <TextField icon={<Calendar size={17} />} type="date" value={from} max={to || undefined} onChange={e => setFrom(e.target.value)} placeholder="From" aria-label="From date" />
-              <TextField icon={<Calendar size={17} />} type="date" value={to} min={from || undefined} onChange={e => setTo(e.target.value)} placeholder="To" aria-label="To date" />
-            </div>
-          )}
-          <div style={{ fontSize: 11, color: 'var(--txt2)', padding: '0 4px' }}>{format(start, 'd MMM yyyy')} – {format(end, 'd MMM yyyy')}</div>
+          <PeriodFilter value={flt} onChange={setFlt} periods={CHART_PERIODS} title="Show analytics for" showRange />
         </div>
 
         {/* Period summary */}

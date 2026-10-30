@@ -104,19 +104,23 @@ function extractBank(text) {
   return 'Unknown Bank'
 }
 
+const WALLET_LOAD = /wallets*(?:load|top.?up|recharge|credit)|(?:load|add|added|top.?up|topup)(?:ed)?s*(?:moneys*)?(?:to|in|into|on)?s*(?:yours*)?(?:paytm|phonepe|amazon pay|mobikwik|freecharge|payzapp|w+s)?wallet|add(?:ed)? money|amazon pay (?:balance|gift)|pay balance|prepaid (?:card )?(?:load|reload|top.?up)|forex card load|mobikwik|freecharge|paytm wallet|phonepe wallet/i
+
 export function classifyCategory(merchant, text) {
   const mine = ruleFor(merchant) // a category you chose for this merchant wins over the built-in guess
   if (mine) return mine
   // No merchant to go by (a bank's own "EMI ... has been debited" alert): the only thing safe to infer is an EMI
   if (!merchant) return /\bemi\b|loan installment|equated monthly/i.test(text || '') ? 'EMI' : 'General'
   const lower = merchant.toLowerCase()
+  // Loading money into a wallet / prepaid card is its own thing, even when the wallet's name (Paytm, Amazon Pay, PhonePe...) is a known merchant.
+  // Needs a clear sign, so an ordinary UPI payment to Paytm or PhonePe is not mistaken for a load.
+  if (WALLET_LOAD.test(`${merchant} ${text || ''}`)) return 'Wallet Load'
   for (const [key, cat] of Object.entries(MERCHANT_CATEGORY_MAP)) {
     if (lower.includes(key) && cat) return cat
   }
   // Fallback keyword match on full SMS
   const smsLower = text.toLowerCase()
   // Categories that card reward programmes commonly exclude.
-  if (/wallet (?:load|top.?up)|add(?:ed)? money|freecharge|mobikwik|paytm wallet/.test(smsLower)) return 'Wallet Load'
   if (/income tax|\bgst\b|challan|municipal|passport|e-?filing|govt|government/.test(smsLower)) return 'Government & Tax'
   if (/school|college|university|tuition|byju|unacademy|education/.test(smsLower)) return 'Education'
   if (/jewel|tanishq|malabar|kalyan|joyalukkas|\bgold\b/.test(smsLower)) return 'Jewellery & Gold'
