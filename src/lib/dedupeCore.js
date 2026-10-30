@@ -92,7 +92,7 @@ export function planCleanup(txns, cards) {
   const rows = txns.filter(t => t.kind !== 'card_payment' && t.kind !== 'loan_payment' && t.kind !== 'loan_received')
 
   for (const t of rows) {
-    if (!t.rawSMS || t.parsedBy === 'manual') continue
+    if (!t.rawSMS || t.parsedBy === 'manual' || t.stmtKey) continue // a line on the bank statement is never removed as "not money"
     const p = parseSMS(t.rawSMS, '', new Date(t.date))
     if (p && (p.type === 'transaction' || p.type === 'cashback_credited')) continue // a real money movement
     if (p && p.type === 'payment_received') {
@@ -117,8 +117,11 @@ export function planCleanup(txns, cards) {
   const dropped = new Set()
   for (const g of groups) {
     if (g.length < 2) continue
-    const keep = [...g].sort((a, b) => keepScore(b) - keepScore(a) || new Date(a.date) - new Date(b.date))[0]
-    for (const t of g) if (t.id !== keep.id) { plan.merge.push({ keep: keep.id, drop: t.id }); dropped.add(t.id) }
+    // A line that is on the bank statement is the truth: it is never merged away or removed (two real payments of the same
+    // amount on one day are two lines on the statement). Only an SMS copy of such a line can be dropped.
+    const onStatement = g.filter(t => t.stmtKey)
+    const keep = onStatement.length ? onStatement[0] : [...g].sort((a, b) => keepScore(b) - keepScore(a) || new Date(a.date) - new Date(b.date))[0]
+    for (const t of g) if (t.id !== keep.id && !t.stmtKey) { plan.merge.push({ keep: keep.id, drop: t.id }); dropped.add(t.id) }
   }
   plan.transfers = transferPairs(left.filter(t => !dropped.has(t.id)))
   return plan

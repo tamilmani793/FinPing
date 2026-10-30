@@ -1,4 +1,5 @@
 // FinPing — SMS Parser Engine
+import { ruleFor } from './merchantRules'
 // Handles Indian bank SMS patterns from 15+ banks
 
 const MERCHANT_CATEGORY_MAP = {
@@ -104,6 +105,8 @@ function extractBank(text) {
 }
 
 export function classifyCategory(merchant, text) {
+  const mine = ruleFor(merchant) // a category you chose for this merchant wins over the built-in guess
+  if (mine) return mine
   // No merchant to go by (a bank's own "EMI ... has been debited" alert): the only thing safe to infer is an EMI
   if (!merchant) return /\bemi\b|loan installment|equated monthly/i.test(text || '') ? 'EMI' : 'General'
   const lower = merchant.toLowerCase()

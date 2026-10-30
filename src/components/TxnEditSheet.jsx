@@ -7,6 +7,8 @@ import { useStore } from '../store'
 import { cardTitle } from '../lib/cardCatalog'
 import { applyTxnToCard } from '../lib/ingestSMS'
 import { askConfirm } from '../lib/confirm'
+import { merchantKey, saveRule } from '../lib/merchantRules'
+import { txnName } from '../lib/txnName'
 import { useOptions } from '../lib/options'
 import { BtnPrimary } from './UI'
 import { Field, Segmented, TextField, Picker } from './Fields'
@@ -60,6 +62,19 @@ export default function TxnEditSheet({ txn, onClose }) {
       parsedBy: txn.parsedBy === 'auto' ? 'auto-edited' : txn.parsedBy,
       userEdited: true, editedFields, // your changes win over the bank statement and over any SMS
     })
+    // the category changed: offer to fix the same merchant's other transactions (and remember it for new ones)
+    if (changed.includes('category')) {
+      const name = txnName({ ...txn, merchant: f.merchant })
+      const key = merchantKey(name)
+      const same = key ? (await db.transactions.toArray()).filter(t => t.id !== txn.id && merchantKey(txnName(t)) === key && t.category !== f.category && !t.kind && !t.isExcluded) : []
+      if (key && same.length && await askConfirm({ title: `Use "${f.category}" for all ${name}?`, message: `${same.length} other transaction${same.length === 1 ? '' : 's'} from this merchant are in a different category. Change them too, and use this category for new ones.`, confirmLabel: 'Change all', cancelLabel: 'Only this one', danger: false })) {
+        for (const t of same) await db.transactions.update(t.id, { category: f.category, userEdited: true, editedFields: [...new Set([...(t.editedFields || []), 'category'])] })
+        saveRule(name, f.category)
+        showNotification(`${same.length + 1} transactions moved to ${f.category}`, 'success')
+        onClose()
+        return
+      }
+    }
     showNotification('Transaction updated', 'success')
     onClose()
   }

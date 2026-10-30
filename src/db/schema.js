@@ -52,3 +52,15 @@ db.version(6).stores({
 db.version(7).stores({
   deletedTxns: '++id, stmtKey',
 })
+
+// v8: salary tracking (employers, CTC changes, monthly payslips)
+db.version(8).stores({
+  salaryJobs: '++id, employer',
+  salaryRevisions: '++id, jobId, date',
+  salaryRecords: '++id, jobId, month, txnId',
+})
+
+// v9: salary documents (offer letter, payslips, Form 16...) kept on this phone
+db.version(9).stores({
+  salaryDocs: '++id, jobId, month, kind',
+})

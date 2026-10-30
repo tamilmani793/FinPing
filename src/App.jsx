@@ -14,10 +14,11 @@ import Expenses from './screens/Expenses'
 import Charts from './screens/Charts'
 import Profile from './screens/Profile'
 import OptionsPage from './components/OptionsManager'
+import SalaryPage from './components/SalaryPage'
 import Debt from './screens/Debt'
 import Wealth from './screens/Wealth'
 
-const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, debt: Debt, wealth: Wealth }
+const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, salary: SalaryPage, debt: Debt, wealth: Wealth }
 const FAB_TABS = ['home', 'history']
 
 export default function App() {
@@ -76,7 +77,7 @@ export default function App() {
             <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{confirmReq.title}</div>
             {confirmReq.message && <div style={{ fontSize: 13, color: 'var(--txt2)', margin: '6px 0 0', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{confirmReq.message}</div>}
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-              <button className="btn-ghost" style={{ flex: 1, height: 48, fontSize: 14 }} onClick={() => answerConfirm(false)}>Cancel</button>
+              <button className="btn-ghost" style={{ flex: 1, height: 48, fontSize: 14 }} onClick={() => answerConfirm(false)}>{confirmReq.cancelLabel || 'Cancel'}</button>
               <button className="btn-primary" style={{ flex: 1, height: 48, ...(confirmReq.danger ? { background: 'var(--red)', color: '#fff', borderColor: 'var(--red)', boxShadow: 'none' } : {}) }} onClick={() => answerConfirm(true)}>{confirmReq.confirmLabel}</button>
             </div>
           </div>

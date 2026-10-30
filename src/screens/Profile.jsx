@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Sun, Moon, SunMoon, Check, Pencil, X, SlidersHorizontal, Info } from 'lucide-react'
+import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Sun, Moon, SunMoon, Check, Pencil, X, SlidersHorizontal, Info, Briefcase } from 'lucide-react'
 import { format } from 'date-fns'
 import { TopBar, BtnPrimary, Avatar } from '../components/UI'
 import { useStore } from '../store'
@@ -204,6 +204,7 @@ export default function Profile() {
         </div>
 
         <div className="card" style={{ marginBottom: 14, paddingTop: 4, paddingBottom: 4 }}>
+          <Row Icon={Briefcase} title="Salary" sub="Employer, CTC, payslips, tax and PF — checked against your bank credits" onClick={() => setActiveTab('salary')} />
           <Row Icon={Landmark} title="Debt & Loans" sub="EMIs, loans and repayments" onClick={() => setActiveTab('debt')} />
           <Row Icon={TrendingUp} title="Wealth" sub="Investments, SIPs and net worth" onClick={() => setActiveTab('wealth')} />
         </div>
@@ -211,7 +212,8 @@ export default function Profile() {
         <div className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
           <Row Icon={Smartphone} title="SMS tracking" sub={isNative() ? 'Reads bank SMS on this phone' : 'Available in the Android app; paste SMS in the browser'} right={<span />} />
           <Row Icon={ShieldCheck} title="Privacy" sub="All data stays on your device" right={<span />} />
-          <Row Icon={Info} title="FinPing" sub={`Version ${__APP_VERSION__}`} right={<span />} />
+          <Row Icon={Info} title="FinPing" sub={`Version ${__APP_VERSION__}${__BUILD_INFO__.run ? ` · build #${__BUILD_INFO__.run}` : ''}`} right={<span />} />
+          <Row Icon={Info} title="This build" sub={`${format(new Date(__BUILD_INFO__.time), 'd MMM yyyy, h:mm a')} · ${__BUILD_INFO__.commit || 'unknown commit'}${__BUILD_INFO__.dirty ? '+' : ''}${__BUILD_INFO__.branch ? ` · ${__BUILD_INFO__.branch}` : ''}`} right={<span />} />
         </div>
       </div>
     </div>

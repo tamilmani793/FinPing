@@ -2,14 +2,26 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 const base = process.env.BASE_PATH || '/'
 
+// What this build is, so Settings can say which version is installed: when it was built, from which commit and branch, and
+// which CI run (GitHub sets these; on a computer they come from git)
+const git = cmd => { try { return execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { return '' } }
+const buildInfo = {
+  time: new Date().toISOString(),
+  commit: (process.env.GITHUB_SHA || git('git rev-parse HEAD')).slice(0, 7),
+  branch: process.env.BUILD_BRANCH || process.env.GITHUB_REF_NAME || git('git rev-parse --abbrev-ref HEAD'),
+  run: process.env.GITHUB_RUN_NUMBER || '',
+  dirty: !process.env.GITHUB_SHA && !!git('git status --porcelain'),
+}
+
 export default defineConfig({
   base,
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: { __APP_VERSION__: JSON.stringify(pkg.version), __BUILD_INFO__: JSON.stringify(buildInfo) },
   plugins: [
     react(),
     VitePWA({
