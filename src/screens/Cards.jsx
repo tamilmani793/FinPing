@@ -506,6 +506,7 @@ function Detail({ card, cards, byCard, onBack }) {
               </div>
               <Row k="Cashback this month" v={formatINR(cbMonth)} color="var(--mint-dim)" />
               <Row k="Cashback all-time" sub={cbAllS.entries.length ? `${cbAllS.entries.length} credit${cbAllS.entries.length === 1 ? '' : 's'} from statements and SMS · since ${fmtD(cbAllS.first)}` : 'none found yet; import a statement'} v={formatINR(cbAll)} color="var(--mint-dim)" />
+              {Object.keys(cbAllS.tiers).some(k => k !== '0') && <Row k="By cashback rate" sub="net of reversals, all-time" v={Object.entries(cbAllS.tiers).filter(([, v]) => Math.abs(v) >= 0.005).sort((a, b) => Number(a[0]) - Number(b[0])).map(([k, v]) => `${k === '0' ? 'other' : k + '%'} ${formatINR(v, 2)}`).join(' · ')} />}
               {cbAllS.entries.length > 0 && (
                 <>
                   <div onClick={() => setCbOpen(v => !v)} style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer', padding: '2px 0 6px' }}>{cbOpen ? '▾ Hide' : '▸ Show'} every cashback credit</div>
@@ -514,6 +515,7 @@ function Detail({ card, cards, byCard, onBack }) {
                     return (
                       <div key={m.key} style={{ borderTop: '1px solid var(--border)', padding: '6px 0' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700 }}><span>{format(new Date(m.key + '-01T12:00:00'), 'MMM yyyy')}</span><span style={{ color: 'var(--mint-dim)' }}>{formatINR(m.amount)}</span></div>
+                        {Object.keys(m.tiers).some(k => k !== '0') && <div style={{ fontSize: 10.5, color: 'var(--txt2)', padding: '2px 0 3px' }}>{Object.entries(m.tiers).filter(([, v]) => Math.abs(v) >= 0.005).sort((a, b) => Number(a[0]) - Number(b[0])).map(([k, v]) => `${k === '0' ? 'other' : k + '%'} ${formatINR(v, 2)}`).join(' · ')}</div>}
                         {rows.map(t => <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, color: 'var(--txt2)', padding: '2px 0' }}><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtD(t.date)} · {t.bankNarration || txnName(t)}{t.parsedBy === 'statement' ? ' · statement' : t.rawSMS ? ' · SMS' : ''}</span><span>{t.type === 'credit' ? '+' : '−'}{formatINR(t.amount)}</span></div>)}
                       </div>
                     )

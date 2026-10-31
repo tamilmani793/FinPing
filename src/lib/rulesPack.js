@@ -15,6 +15,26 @@ import { DEFAULT_RULES } from './rewardRules'
 export const PACK_FORMAT = 'finping-reward-rules'
 export const bundledPack = () => presets
 
+// Cards you added by uploading a document (or corrected from one) are kept on this phone and listed with the bundled ones.
+// A saved card with the same key as a bundled one replaces it.
+const CUSTOM_KEY = 'finping_custom_cards'
+export const customCards = () => { try { const j = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]'); return Array.isArray(j) ? j : [] } catch { return [] } }
+export function saveCustomCard(entry) {
+  const list = customCards().filter(c => c.key !== entry.key)
+  localStorage.setItem(CUSTOM_KEY, JSON.stringify([...list, entry]))
+}
+export const isCustomCard = key => customCards().some(c => c.key === key)
+export function allPack() {
+  const mine = customCards(), keys = new Set(mine.map(c => c.key))
+  return { ...presets, cards: [...presets.cards.filter(c => !keys.has(c.key)), ...mine] }
+}
+
+// everything about a card that is not a rule: forex, fees, how rewards are credited and redeemed, offers. Kept with the card's rules.
+export const buildInfo = entry => ({
+  postedOn: entry.postedOn || null, redemption: entry.redemption || null, benefits: entry.benefits || null,
+  feesAndCharges: entry.feesAndCharges || null, details: entry.details || null,
+})
+
 export function parsePack(text) {
   let j
   try { j = JSON.parse(text) } catch { throw new Error('That is not a rules file.') }
@@ -31,7 +51,7 @@ const HINTS = [
   ['sbi-cashback', /sbi|state bank/i, /cashback/i],
   ['hsbc-live-plus', /hsbc/i, /live\s*\+|live plus/i],
 ]
-export function suggestEntry(card, pack = presets) {
+export function suggestEntry(card, pack = allPack()) {
   const name = [card?.name, card?.cardName].filter(Boolean).join(' ')
   const bank = [card?.bank, name].filter(Boolean).join(' ')
   const extra = [card?.variant, card?.partner].filter(Boolean).join(' ')
@@ -74,6 +94,7 @@ export function rulesFromEntry(cardId, entry) {
     accelerated: (r.accelerated || []).map(a => ({ ...a })),
     exclusions: { mccs: [], categories: [], merchants: [], ...(r.exclusions || {}) },
     effectiveFrom: entry.effectiveFrom || null, publishedOn: entry.publishedOn || null, source: entry.source || null, presetKey: entry.key || null,
+    info: buildInfo(entry),
   }
 }
 
@@ -165,4 +186,51 @@ export async function autoApplyPresets() {
     added.push(cardTitle(card))
   }
   return added
+}
+
+// Rules saved from a bundled card before it knew about online / in-shop spends: give them the channel, once. Only the channel is added.
+export async function syncChannelRules() {
+  let n = 0
+  const pack = allPack()
+  for (const row of await db.card_reward_rules.toArray()) {
+    const entry = pack.cards.find(c => c.key === row.presetKey)
+    if (!entry) continue
+    let changed = false
+    const accelerated = (row.accelerated || []).map(a => {
+      const own = (entry.rules?.accelerated || []).find(x => x.id === a.id)
+      if (own?.channel && !a.channel) { changed = true; return { ...a, channel: own.channel, notes: own.notes || a.notes } }
+      return a
+    })
+    // the period the bank adds spends up over (SBI Cashback: the calendar month)
+    const capPeriod = entry.rules?.capPeriod && row.capPeriod !== entry.rules.capPeriod && row.presetKey === 'sbi-cashback' ? entry.rules.capPeriod : null
+    if (changed || capPeriod) { await db.card_reward_rules.update(row.id, { accelerated, ...(capPeriod ? { capPeriod } : {}) }); n++ }
+  }
+  return n
+}
+
+// Settlement: SBI Cashback adds spends up per statement cycle (cap per cycle), HSBC Live+ credits up to 45 days after the statement, and the Swiggy card's 10% also covers Bundl Technologies / Instamart lines. Rules saved
+// from an earlier bundle get those fields once; nothing else on them is touched.
+export async function syncSettlementRules() {
+  let n = 0
+  const pack = allPack()
+  for (const row of await db.card_reward_rules.toArray()) {
+    if (!['sbi-cashback', 'hsbc-live-plus', 'hdfc-swiggy'].includes(row.presetKey)) continue
+    const entry = pack.cards.find(c => c.key === row.presetKey)
+    if (!entry?.rules) continue
+    const want = { capPeriod: entry.rules.capPeriod, capPerCycle: entry.rules.capPerCycle, baseCap: entry.rules.baseCap, creditLagDays: entry.rules.creditLagDays }
+    const patch = {}
+    for (const [k, v] of Object.entries(want)) if (v !== undefined && JSON.stringify(row[k] ?? null) !== JSON.stringify(v)) patch[k] = v
+    if (row.presetKey === 'hdfc-swiggy') {
+      // Swiggy's own company name (Bundl Technologies) and Instamart lines earn the 10% on the Swiggy app
+      const own = (entry.rules.accelerated || []).find(x => x.id === 'swiggy-10')
+      const accelerated = (row.accelerated || []).map(a => (a.id === 'swiggy-10' && own ? { ...a, merchants: [...new Set([...(a.merchants || []), ...(own.merchants || [])])] } : a))
+      if (JSON.stringify(accelerated) !== JSON.stringify(row.accelerated || [])) patch.accelerated = accelerated
+    }
+    if (row.presetKey === 'sbi-cashback') {
+      const accelerated = (row.accelerated || []).map(a => { const own = (entry.rules.accelerated || []).find(x => x.id === a.id); return own && own.capPerCycle !== a.capPerCycle ? { ...a, capPerCycle: own.capPerCycle } : a })
+      if (JSON.stringify(accelerated) !== JSON.stringify(row.accelerated || [])) patch.accelerated = accelerated
+    }
+    if (Object.keys(patch).length) { await db.card_reward_rules.update(row.id, patch); n++ }
+  }
+  return n
 }

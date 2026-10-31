@@ -200,3 +200,69 @@ export function rulesFromTerms(rawText, cardId) {
   if (block && toNum(block[1]) >= 10) rules.spendBlock = toNum(block[1])
   return { found: true, rules, notes, published }
 }
+
+// ───────── The whole card from a document ─────────
+// docEntry reads a terms document into a card as the app stores it: name, bank, rules, and the things that are not rules (forex markup, fees, the
+// fee to redeem rewards, how rewards are credited to the statement and how they are redeemed). Whatever the document does not say stays empty.
+
+const sentencesOf = rawText => clean(rawText).replace(/\b(?:rs|inr)\.?\s*(?=\d)/gi, '₹').split(/(?<=[.!?])\s+|•|❖|o\s(?=[A-Z])/).map(s => s.trim()).filter(s => s.length > 10)
+const trim = (s, n = 260) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
+
+export function infoFromTerms(rawText) {
+  const ss = sentencesOf(rawText)
+  const first = fn => ss.find(fn)
+  const money = /₹\s*\d|\d+(?:\.\d+)?\s*%/
+  const forexS = first(s => /forex|foreign currency|cross[- ]currency|currency conversion|mark-?up/i.test(s) && /\d+(?:\.\d+)?\s*%/.test(s))
+  const redeemFeeS = first(s => /redeem|redemption/i.test(s) && /fee|charge|handling/i.test(s) && money.test(s))
+  const creditedS = first(s => /cash\s?back|reward|points?/i.test(s) && /credited|posted|reflect|awarded|accrued|statement/i.test(s) && !/redeem|redemption|expire/i.test(s))
+  const redeemS = ss.filter(s => /redeem|redemption/i.test(s) && !/fee|charge|handling/i.test(s)).slice(0, 3)
+  const fuelS = first(s => /fuel surcharge/i.test(s))
+  const feeOf = word => { const m = clean(rawText).replace(/\b(?:rs|inr)\.?\s*(?=\d)/gi, '₹').match(new RegExp(`${word}[^.₹\\d]{0,40}₹\\s*(\\d[\\d,]*)`, 'i')); return m ? toNum(m[1]) : null }
+  const fees = {}
+  const fx = forexS && forexS.match(/(\d+(?:\.\d+)?)\s*%/)
+  if (fx) { fees.forexMarkup = `${fx[1]}%`; fees.forexMarkupNote = trim(forexS) }
+  if (redeemFeeS) fees.rewardsRedemptionFee = trim(redeemFeeS)
+  const jf = feeOf('joining fee'), af = feeOf('(?:annual|renewal|membership) fee')
+  if (jf != null) fees.joiningFee = jf
+  if (af != null) fees.annualFee = af
+  if (fuelS) fees.fuelSurcharge = trim(fuelS)
+  return {
+    postedOn: creditedS ? trim(creditedS) : null,
+    redemption: redeemS.length ? { how: redeemS.map(s => trim(s)) } : null,
+    feesAndCharges: Object.keys(fees).length ? fees : null,
+  }
+}
+
+const BANK_WORDS = [
+  ['HDFC Bank', /hdfc/i], ['ICICI Bank', /icici/i], ['SBI Card', /\bsbi\b|state bank/i], ['Axis Bank', /axis bank|\baxis\b/i], ['Kotak Mahindra Bank', /kotak/i],
+  ['American Express', /american express|\bamex\b/i], ['HSBC', /hsbc/i], ['IDFC FIRST Bank', /idfc/i], ['IndusInd Bank', /indusind/i], ['Yes Bank', /yes bank/i],
+  ['RBL Bank', /\brbl\b/i], ['Standard Chartered', /standard chartered/i], ['Federal Bank', /federal bank/i], ['AU Small Finance Bank', /\bau small/i], ['Bank of Baroda', /baroda|\bbob\b/i],
+]
+
+// the card's name and bank, as far as the document says
+export function guessCard(rawText, fileName = '') {
+  const head = clean(rawText).slice(0, 4000)
+  const bank = (BANK_WORDS.find(([, re]) => re.test(head)) || [])[0] || ''
+  const m = head.match(/((?:[A-Z][A-Za-z0-9+&'.-]*\s+){0,5}[A-Z][A-Za-z0-9+&'.-]*\s+(?:Credit\s+)?Card)\b/)
+  let name = m ? m[1].replace(/\s+/g, ' ').trim() : ''
+  if (!name || /^(the|this|your|credit|card)\b/i.test(name)) name = String(fileName).replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim()
+  return { name, bank }
+}
+
+export function docEntry(rawText, fileName = '') {
+  const r = rulesFromTerms(rawText, 0)
+  if (!r.found) return { found: false }
+  const { name, bank } = guessCard(rawText, fileName)
+  const info = infoFromTerms(rawText)
+  const slug = String(name || bank || 'card').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'card'
+  const words = String(name).toLowerCase().replace(/credit card|card/g, '').replace(bank.toLowerCase(), '').trim()
+  const { cardId, ...rules } = r.rules
+  return {
+    found: true, notes: r.notes,
+    entry: {
+      key: 'custom-' + slug, name: name || 'New card', issuer: bank, network: null, rewardType: rules.rewardType,
+      effectiveFrom: r.published || new Date().toISOString().slice(0, 10), publishedOn: r.published || null, source: `Terms document: ${fileName || 'uploaded file'}`,
+      match: [words || String(name).toLowerCase()].filter(Boolean), rules, ...info,
+    },
+  }
+}

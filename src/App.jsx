@@ -2,10 +2,10 @@ import { useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { relinkTransactions } from './lib/relink'
 import { removeDuplicateTransactions } from './lib/dedupeCleanup'
-import { recategoriseWalletLoads, recategoriseAtm } from './lib/recategorise'
+import { recategoriseWalletLoads, recategoriseAtm, recategoriseGuesses } from './lib/recategorise'
 import { migrateSimpleCategories } from './lib/categoryMigrate'
 import { tagAllCards } from './lib/rewardTagging'
-import { autoApplyPresets } from './lib/rulesPack'
+import { autoApplyPresets, syncChannelRules, syncSettlementRules } from './lib/rulesPack'
 import { postDueEmis } from './lib/emiEngine'
 import { useStore } from './store'
 import { initBackNav, exitApp } from './lib/backNav'
@@ -64,6 +64,22 @@ export default function App() {
           const w = await recategoriseWalletLoads()
           localStorage.setItem('finping_walletload_v1', '1')
           if (w > 0) showNotification(`${w} wallet load${w === 1 ? '' : 's'} moved to the Wallet Load category`, 'success')
+        }
+        // Once after this update: SBI Cashback's online rate needs to know which spends are online
+        if (!localStorage.getItem('finping_channel_v2')) {
+          if (await syncChannelRules() > 0) tagAllCards().catch(() => {})
+          localStorage.setItem('finping_channel_v2', '1')
+        }
+        // Once: SBI Cashback per statement cycle, HSBC Live+ credit lag; the reward tags follow
+        if (!localStorage.getItem('finping_settlement_v2')) {
+          if (await syncSettlementRules() > 0) tagAllCards().catch(() => {})
+          localStorage.setItem('finping_settlement_v2', '1')
+        }
+        // Once after this update: categories guessed from loose words in the SMS are guessed again with the corrected rules
+        if (!localStorage.getItem('finping_catguess_v1')) {
+          const g = await recategoriseGuesses()
+          localStorage.setItem('finping_catguess_v1', '1')
+          if (g > 0) showNotification(`${g} transaction${g === 1 ? '' : 's'} moved to a better category`, 'success')
         }
         // Once after this update: cash withdrawals (names with ATM) get the ATM Withdrawal category
         if (!localStorage.getItem('finping_atm_v1')) {

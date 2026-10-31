@@ -31,14 +31,36 @@ function rewardAt(amount, rate, rounding, type) {
 const rateShort = (rate, type, pointValue) => (type === 'points' && num(pointValue) > 0 ? `${Math.round(num(rate?.value) * num(pointValue) / (num(rate?.per) || 100) * 10000) / 100}%` : type === 'points' ? `${num(rate?.value)} pt${num(rate?.value) === 1 ? '' : 's'}/₹${num(rate?.per)}` : `${Math.round(num(rate?.value) / (num(rate?.per) || 100) * 10000) / 100}%`)
 const rateOf = r => (num(r?.per) > 0 ? num(r.value) / num(r.per) : 0)
 
+// Online or in a shop? Cards such as SBI Cashback pay more on online spends. The bank decides this from the network's own flag, which the
+// phone never sees, so it is worked out from what we have: your choice on the transaction wins, then the way it was paid (UPI, net banking,
+// wallet), a web address or "online/ecom" in the text, and well-known online-only brands. Anything else counts as in a shop.
+const ONLINE_TEXT = /\becom\b|e-?com\b|\bonline\b|www\.|\.com\b|\.in\b|\.co\b|razorpay|payu|billdesk|ccavenue|cashfree|\bpaytm\b|phonepe|gpay|google ?pay/i
+const ONLINE_BRANDS = ['amazon', 'flipkart', 'myntra', 'ajio', 'nykaa', 'meesho', 'swiggy', 'zomato', 'zepto', 'blinkit', 'bigbasket', 'instamart', 'makemytrip', 'goibibo', 'cleartrip', 'irctc',
+  'yatra', 'bookmyshow', 'netflix', 'spotify', 'hotstar', 'primevideo', 'google', 'apple', 'microsoft', 'uber', 'rapido', 'pharmeasy', 'tata1mg', 'lenskart', 'tatacliq', 'airbnb', 'agoda', 'booking.com']
+export function isOnline(txn) {
+  if (txn?.channel === 'online') return true
+  if (txn?.channel === 'offline') return false
+  if (['UPI', 'NetBanking', 'Wallet'].includes(txn?.paymentMode)) return true
+  const text = `${txn?.merchant || ''} ${txn?.bankNarration || ''}`.toLowerCase()
+  if (ONLINE_TEXT.test(text)) return true
+  const flat = text.replace(/[^a-z0-9.]/g, '')
+  return ONLINE_BRANDS.some(b => flat.includes(b))
+}
+
 // does this transaction fall under a rule's mccs / categories / merchants?
-//   - an MCC on the transaction is matched exactly; without one, the category you mapped that MCC to stands in for it
+//   - an MCC is matched only against the MCC on the transaction itself. A spend with no MCC is never matched by code: standing in a whole category for a
+//     code made every Shopping spend look like a bookstore (MCC 5942) and lose its cashback. Categories and merchant words are matched on their own.
 export function matchesRule(match, txn, mccMap = {}) {
   if (!match) return null
+  // a rule for online (or in-shop) spends only: with nothing else listed, that is all it needs; with a list, the spend must also be on it
+  if (match.channel) {
+    if ((match.channel === 'online') !== isOnline(txn)) return null
+    if (!(match.mccs || []).length && !(match.categories || []).length && !(match.merchants || []).length) return match.channel === 'online' ? 'online' : 'in shops'
+  }
   const mcc = txn.mcc != null && txn.mcc !== '' ? String(txn.mcc) : ''
   const category = txn.category || ''
   for (const code of match.mccs || []) {
-    if (mcc) { if (String(code) === mcc) return `MCC ${code}` } else if (category && mccMap[String(code)]?.category === category) return `MCC ${code} (${category})`
+    if (mcc && String(code) === mcc) return `MCC ${code}`
   }
   if (category && (match.categories || []).includes(category)) return category
   const text = `${txn.merchant || ''} ${txn.bankNarration || ''}`.toLowerCase()
@@ -111,7 +133,8 @@ export function calculateExpectedReward(transaction, cardRules, currentCycleTota
     const left = Math.max(0, num(cardRules.capPerCycle) - num(totals.earned))
     if (result.amount > left) result = { ...result, amount: Math.round(left * 100) / 100, capped: true, reason: `Card cap of ${cardRules.capPerCycle} per cycle reached` }
   }
-  return { ...result, type }
+  const channel = (cardRules.accelerated || []).some(a => a.channel) ? (isOnline(transaction) ? 'online' : 'offline') : undefined
+  return { ...result, type, ...(channel ? { channel } : {}) }
 }
 
 // ---- the rules in plain words (shown at the top of the Reward rules sheet) ----
@@ -124,6 +147,7 @@ const whatOf = m => {
   const parts = [...(m.categories || []), ...merchants.map(x => x.replace(/\b\w/g, c => c.toUpperCase()))]
   const codes = (m.mccs || []).length
   if (codes) parts.push(`${codes} merchant code${codes === 1 ? '' : 's'}`)
+  if (m.channel) parts.push(m.channel === 'online' ? 'online spends' : 'spends in shops')
   return parts.length ? nameList(parts) : 'nothing selected yet'
 }
 
@@ -156,4 +180,4 @@ export function describeRules(rules) {
 
 // a reward for display:"✨ +₹25" for cashback, "🪙 +15 Pts" for points
 // the percentage / rate follows when the tag carries it: "✨ +₹62 · 5%"; a spend held back by a cap says so
-export const rewardPill = r => (r && r.amount > 0 ? (r.type === 'points' ? `🪙 +${Math.round(r.amount).toLocaleString('en-IN')} Pts` : `✨ +₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' (cap)' : '') : null)
+export const rewardPill = r => (r && r.amount > 0 ? (r.type === 'points' ? `🪙 +${Math.round(r.amount).toLocaleString('en-IN')} Pts` : `✨ +₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' (cap)' : '') + (r.channel ? (r.channel === 'online' ? ' · Online' : ' · In shop') : '') : null)

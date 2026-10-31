@@ -11,6 +11,8 @@ import { BtnPrimary } from './UI'
 import { Field, FormHeading, Segmented, TextField, Picker } from './Fields'
 import { useRewardCategories } from './MccMaintainer'
 import RulesUpdateSheet from './RulesUpdateSheet'
+import { CardInfoSections } from './CardInfo'
+import { suggestEntry, buildInfo } from '../lib/rulesPack'
 
 // The card's reward rules (table card_reward_rules): reward type, base rate, accelerated categories / MCCs / merchants,
 // exclusions, minimum spend, cycle caps and rounding. Saving re-tags every spend on the card with the reward it should earn.
@@ -92,6 +94,9 @@ function AccelSheet({ type, rule, categories, onSave, onDelete, onClose }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Field label="Name"><TextField value={r.label} onChange={e => setR({ ...r, label: e.target.value })} placeholder="e.g. 5% on grocery" /></Field>
           <RateFields type={type} rate={r.rate} onChange={rate => setR({ ...r, rate })} label="Rate for this rule" />
+          <Field label="Kind of spend" hint="Some cards pay more online (the bank decides from the network's online flag). Pick Online and the rule needs nothing else listed below.">
+            <Segmented value={r.channel || 'any'} options={[{ value: 'any', label: 'Any' }, { value: 'online', label: 'Online' }, { value: 'offline', label: 'In shop' }]} onChange={v => setR({ ...r, channel: v === 'any' ? undefined : v })} />
+          </Field>
           <FormHeading sub="A spend matching any of these earns this rate">Applies to</FormHeading>
           <MatchFields match={r} onChange={m => setR({ ...r, ...m })} categories={categories} />
           <FormHeading sub="Even if the above matches, these get the base rate instead (e.g. Amazon, Flipkart on a grocery rule)">Leave out</FormHeading>
@@ -185,6 +190,9 @@ export default function RewardRulesSheet({ card, onClose }) {
   const setUpMyself = async () => { await saveRules(cleaned(rules)); setHad(true); setManage(true) }
   const rateText = r => (type === 'points' ? `${r.value} pts per ₹${r.per}` : `${r.value}%`)
   const newRule = () => ({ id: 'r' + Date.now().toString(36), label: '', rate: type === 'points' ? { value: 2, per: 100, blockBased: true } : { value: 5, per: 100, blockBased: false }, categories: [], mccs: [], merchants: [], minSpend: '', capPerCycle: null })
+  // forex, fees and how rewards are credited and redeemed: saved with the rules, or from the matching bundled card when the rules were saved earlier
+  const hasInfo = x => !!x && Object.values(x).some(v => v != null && v !== '')
+  const info = hasInfo(rules.info) ? rules.info : buildInfo(suggestEntry(card) || {})
   const exclText = [...(rules.exclusions?.categories || []), ...(rules.exclusions?.merchants || []), ...(rules.exclusions?.mccs || []).map(m => 'MCC ' + m)].join(', ') || 'nothing excluded'
 
   const Icon = ({ I, label, onClick }) => <div className="picker-close" style={{ width: 36, height: 36 }} role="button" aria-label={label} title={label} onClick={onClick}><I size={17} /></div>
@@ -240,6 +248,7 @@ export default function RewardRulesSheet({ card, onClose }) {
               ))}
             </div>
             <TryIt rules={rules} />
+            <div style={{ marginTop: 14 }}><CardInfoSections info={info} /></div>
           </>
         )}
 
@@ -247,7 +256,7 @@ export default function RewardRulesSheet({ card, onClose }) {
           <div className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
             {rules.accelerated.map((a, i) => (
               <Row key={a.id} first={i === 0} title={a.label} onClick={() => setEdit({ index: i, rule: a })}
-                sub={`${rateText(a.rate)} · ${[...(a.categories || []), ...(a.mccs || []).map(m => 'MCC ' + m), ...(a.merchants || [])].join(', ') || 'nothing selected'}${a.capPerCycle ? ` · cap ${a.capPerCycle}` : ''}`} />
+                sub={`${rateText(a.rate)} · ${[...(a.channel ? [a.channel === 'online' ? 'online spends' : 'spends in shops'] : []), ...(a.categories || []), ...(a.mccs || []).map(m => 'MCC ' + m), ...(a.merchants || [])].join(', ') || 'nothing selected'}${a.capPerCycle ? ` · cap ${a.capPerCycle}` : ''}`} />
             ))}
             <Row first={!rules.accelerated.length} title="All other spends" sub={rateText(rules.base)} onClick={() => setRateEdit(true)} />
             <Row title="No reward on" sub={exclText} onClick={() => setExclEdit(true)} />

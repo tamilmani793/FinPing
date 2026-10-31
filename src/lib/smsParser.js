@@ -14,10 +14,13 @@ const MERCHANT_CATEGORY_MAP = {
   netflix: 'Entertainment', spotify: 'Entertainment', hotstar: 'Entertainment',
   sonyliv: 'Entertainment', bookmyshow: 'Entertainment', pvr: 'Entertainment', inox: 'Entertainment',
   airtel: 'Utilities & Bills', jio: 'Utilities & Bills', bsnl: 'Utilities & Bills',
-  bescom: 'Utilities & Bills', msedcl: 'Utilities & Bills', tata: 'Utilities & Bills',
+  bescom: 'Utilities & Bills', msedcl: 'Utilities & Bills', tatapower: 'Utilities & Bills', tataplay: 'Utilities & Bills', tatasky: 'Utilities & Bills', reliancejio: 'Utilities & Bills',
+  tataneu: 'Shopping', '1mg': 'Health',
   pharmeasy: 'Health', netmeds: 'Health', apollo: 'Health',
   lic: 'Insurance', hdfc: null, icici: null, sbi: null, axis: null,
 }
+
+const MERCHANT_KEYS = Object.entries(MERCHANT_CATEGORY_MAP).sort((a, b) => b[0].length - a[0].length)
 
 function extractAmount(text) {
   const patterns = [
@@ -104,7 +107,7 @@ function extractBank(text) {
   return 'Unknown Bank'
 }
 
-const WALLET_LOAD = /wallets*(?:load|top.?up|recharge|credit)|(?:load|add|added|top.?up|topup)(?:ed)?s*(?:moneys*)?(?:to|in|into|on)?s*(?:yours*)?(?:paytm|phonepe|amazon pay|mobikwik|freecharge|payzapp|w+s)?wallet|add(?:ed)? money|amazon pay (?:balance|gift)|pay balance|prepaid (?:card )?(?:load|reload|top.?up)|forex card load|mobikwik|freecharge|paytm wallet|phonepe wallet/i
+const WALLET_LOAD = /wallet\s*(?:load|top.?up|recharge|credit)|(?:load|add|added|top.?up|topup)(?:ed)?\s*(?:money\s*)?(?:to|in|into|on)?\s*(?:your\s*)?(?:paytm|phonepe|amazon pay|mobikwik|freecharge|payzapp|\w+\s)?\s*wallet|add(?:ed)? money|amazon pay (?:balance|gift)|pay balance|prepaid (?:card )?(?:load|reload|top.?up)|forex card load|mobikwik|freecharge|paytm wallet|phonepe wallet/i
 
 export function classifyCategory(merchant, text) {
   const mine = ruleFor(merchant) // a category you chose for this merchant wins over the built-in guess
@@ -117,22 +120,25 @@ export function classifyCategory(merchant, text) {
   if (WALLET_LOAD.test(`${merchant} ${text || ''}`)) return 'Wallet Load'
   // A cash withdrawal: the name has ATM in it ("ATM ONE", "ATW-...-ATM")
   if (/\batm\b/i.test(merchant)) return 'ATM Withdrawal'
-  for (const [key, cat] of Object.entries(MERCHANT_CATEGORY_MAP)) {
-    if (lower.includes(key) && cat) return cat
+  // longest name first; a short name ("ola", "jio", "hp", "lic") must be a whole word, so "Jiomart" is not "Jio" and "Zola" is not "Ola"
+  const flat = lower.replace(/[^a-z0-9]/g, '')
+  for (const [key, cat] of MERCHANT_KEYS) {
+    if (!cat) continue
+    if (key.length > 5 ? flat.includes(key) : new RegExp('(?<![a-z0-9])' + key + '(?![a-z0-9])').test(lower)) return cat
   }
   // Fallback keyword match on full SMS
   const smsLower = text.toLowerCase()
   // Categories that card reward programmes commonly exclude.
-  if (/income tax|\bgst\b|challan|municipal|passport|e-?filing|govt|government/.test(smsLower)) return 'Government & Tax'
-  if (/school|college|university|tuition|byju|unacademy|education/.test(smsLower)) return 'Education'
+  if (/income tax|\bgst\b|challan|municipal|passport|e-?filing|\bgovt\b|\bgovernment\b/.test(smsLower)) return 'Government & Tax'
+  if (/\b(?:school|college|university|tuition|byju|unacademy|education)\b/.test(smsLower)) return 'Education'
   if (/jewel|tanishq|malabar|kalyan|joyalukkas|\bgold\b/.test(smsLower)) return 'Jewellery & Gold'
-  if (/rent|house|flat|pg/.test(smsLower)) return 'Rent'
-  if (/emi|loan installment|equated/.test(smsLower)) return 'EMI'
-  if (/insurance|premium|policy/.test(smsLower)) return 'Insurance'
-  if (/fuel|petrol|diesel/.test(smsLower)) return 'Fuel'
-  if (/electricity|water|gas|bill|utility/.test(smsLower)) return 'Utilities & Bills'
-  if (/upi|scan|qr/.test(smsLower)) return 'UPI Scan & Pay'
-  if (/sip|mutual fund|nav|units allotted/.test(smsLower)) return 'Investment'
+  if (/\b(?:rent|rental|house rent)\b|\bpg\b|\bflat\b/.test(smsLower)) return 'Rent'
+  if (/\bemi\b|loan installment|equated/.test(smsLower)) return 'EMI'
+  if (/\binsurance\b|\bpolicy\b|premium (?:due|payment|paid)/.test(smsLower)) return 'Insurance'
+  if (/\b(?:fuel|petrol|diesel)\b/.test(smsLower)) return 'Fuel'
+  if (/\b(?:electricity|water|gas|utility)\b|\bbills?\b/.test(smsLower)) return 'Utilities & Bills'
+  if (/\bupi\b|\bscan\b|\bqr\b/.test(smsLower)) return 'UPI Scan & Pay'
+  if (/\bsip\b|mutual fund|\bnav\b|units allotted/.test(smsLower)) return 'Investment'
   return 'General'
 }
 

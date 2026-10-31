@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { FileText, PackageOpen } from 'lucide-react'
 import { useStore } from '../store'
 import { getRules } from '../lib/rewardTagging'
-import { bundledPack, suggestEntry, rulesFromEntry, applyEntry, diffRules } from '../lib/rulesPack'
-import { readTermsText, rulesFromTerms } from '../lib/termsAssist'
+import { allPack, suggestEntry, rulesFromEntry, applyEntry, diffRules } from '../lib/rulesPack'
+import { readTermsText, rulesFromTerms, infoFromTerms } from '../lib/termsAssist'
 import { describeRules } from '../lib/rewardRules'
 import { cardTitle } from '../lib/cardCatalog'
 import { BtnPrimary } from './UI'
@@ -63,7 +63,7 @@ export default function RulesUpdateSheet({ card, onClose, onEdit }) {
   const open = async list => { setCurrent(await getRules(card.id)); setEntries(list); setView('review') }
 
   const useBundled = async () => {
-    const pack = bundledPack(), hit = suggestEntry(card, pack)
+    const pack = allPack(), hit = suggestEntry(card, pack)
     const list = pack.cards.map(c => ({ ...c, _suggested: hit && c.key === hit.key }))
     await open(list)
   }
@@ -77,7 +77,7 @@ export default function RulesUpdateSheet({ card, onClose, onEdit }) {
       const r = rulesFromTerms(text, card.id)
       if (!r.found) { setPdf({ name: f.name, found: false }); setView('pdf'); return }
       const from = r.published || today()
-      await applyEntry(card.id, { key: null, effectiveFrom: from, publishedOn: r.published, source: `Terms document: ${f.name}`, rules: r.rules })
+      await applyEntry(card.id, { key: null, effectiveFrom: from, publishedOn: r.published, source: `Terms document: ${f.name}`, rules: r.rules, ...infoFromTerms(text) })
       setPdf({ name: f.name, found: true, from, notes: r.notes, lines: describeRules(r.rules) }); setView('pdf')
       showNotification('Reward rules updated from the document. Spends are tagged again.', 'success')
     } catch (err) { showNotification(err?.name === 'PasswordException' ? 'That PDF is password protected' : 'Could not read that PDF', 'error') } finally { setBusy(false) }

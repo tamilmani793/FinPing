@@ -1,45 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, Plus } from 'lucide-react'
+import AddCardFromDoc from './AddCardFromDoc'
 import { db } from '../db/schema'
 import { cardTitle } from '../lib/cardCatalog'
-import { bundledPack, rulesFromEntry, suggestEntry } from '../lib/rulesPack'
+import { allPack, rulesFromEntry, suggestEntry, isCustomCard } from '../lib/rulesPack'
+import { Section, CardInfoSections } from './CardInfo'
 import { describeRules } from '../lib/rewardRules'
 
 // Profile -> Customise -> Rules -> All card rules: every card in the rules that came with the app, with its rules and details in plain words.
 // Read only. To use a card's rules, open that card's own Reward rules and choose "Rules from the app".
-
-const words = k => String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase())
-const money = v => (typeof v === 'number' ? v.toLocaleString('en-IN') : v)
-
-// any value from the pack as readable lines: text, numbers, lists and groups of those
-function Lines({ value, depth = 0 }) {
-  if (value == null || value === '') return null
-  if (Array.isArray(value)) {
-    return <div>{value.map((v, i) => (typeof v === 'object' ? <div key={i} style={{ marginBottom: 6 }}><Lines value={v} depth={depth + 1} /></div> : <div key={i} style={{ display: 'flex', gap: 6 }}><span>•</span><span>{money(v)}</span></div>))}</div>
-  }
-  if (typeof value === 'object') {
-    return (
-      <div>
-        {Object.entries(value).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length)).map(([k, v]) => (
-          <div key={k} style={{ marginBottom: 4 }}>
-            {typeof v === 'object' ? <><div style={{ fontWeight: 700, fontSize: 12 }}>{words(k)}</div><div style={{ paddingLeft: depth ? 8 : 10 }}><Lines value={v} depth={depth + 1} /></div></> : <span><b style={{ fontWeight: 700 }}>{words(k)}:</b> {typeof v === 'boolean' ? (v ? 'Yes' : 'No') : money(v)}</span>}
-          </div>
-        ))}
-      </div>
-    )
-  }
-  return <span>{money(value)}</span>
-}
-
-function Section({ title, children }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div className="label-caps" style={{ color: 'var(--gold-dim)', marginBottom: 6 }}>{title}</div>
-      <div className="card" style={{ fontSize: 12.5, lineHeight: 1.5, paddingTop: 10, paddingBottom: 10 }}>{children}</div>
-    </div>
-  )
-}
 
 function Detail({ entry, mine, onBack }) {
   const rules = rulesFromEntry(0, entry)
@@ -70,10 +40,7 @@ function Detail({ entry, mine, onBack }) {
           </Section>
         )}
 
-        {entry.benefits?.length > 0 && <Section title="Benefits"><Lines value={entry.benefits} /></Section>}
-        {extras && <Section title="Forex, offers, lounges and eligibility"><Lines value={extras} /></Section>}
-        {entry.feesAndCharges && <Section title="Fees and charges"><Lines value={entry.feesAndCharges} /></Section>}
-        {entry.redemption && <Section title="Redeeming rewards"><Lines value={entry.redemption} /></Section>}
+        <CardInfoSections info={entry} />
 
         <Section title="Where this comes from">
           <div>{entry.source || 'Not recorded'}</div>
@@ -87,20 +54,23 @@ function Detail({ entry, mine, onBack }) {
   )
 }
 
-function Header({ title, onBack }) {
+function Header({ title, onBack, right }) {
   return (
     <div style={{ padding: '14px 18px 12px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg0)' }}>
       <div onClick={onBack} style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ChevronLeft size={18} /></div>
-      <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em', minWidth: 0 }}>{title}</div>
+      <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em', minWidth: 0, flex: 1 }}>{title}</div>
+      {right}
     </div>
   )
 }
 
 export default function CardRulesLibrary({ onBack }) {
-  const pack = bundledPack()
+  const pack = allPack() // read again after a card is added
   const cards = useLiveQuery(() => db.creditCards.toArray()) || []
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(null)
+  const [adding, setAdding] = useState(false)
+  const [, setVer] = useState(0)
 
   // which of your cards each entry would be used for
   const mineBy = useMemo(() => {
@@ -121,9 +91,9 @@ export default function CardRulesLibrary({ onBack }) {
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 110 }}>
-      <Header title="All card rules" onBack={onBack} />
+      <Header title="All card rules" onBack={onBack} right={<div className="picker-close" style={{ width: 36, height: 36 }} role="button" aria-label="Add a card from a document" title="Add a card from a document" onClick={() => setAdding(true)}><Plus size={17} /></div>} />
       <div style={{ padding: '0 18px' }}>
-        <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '0 2px 10px' }}>{pack.cards.length} credit cards with the rules that came with the app. Tap a card to read its rules, fees and offers. Your own cards are marked.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '0 2px 10px' }}>{pack.cards.length} credit cards with the rules that came with the app. Tap a card to read its rules, fees and offers. Your own cards are marked. Use + to add a card from its terms document.</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg1)', border: '1px solid var(--border2)', borderRadius: 14, padding: '0 12px', height: 42, marginBottom: 12 }}>
           <Search size={16} color="var(--txt2)" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search a card or bank" style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: 'var(--txt)', fontSize: 14, fontFamily: 'inherit', minWidth: 0 }} />
@@ -147,6 +117,7 @@ export default function CardRulesLibrary({ onBack }) {
           </div>
         ))}
       </div>
+      {adding && <AddCardFromDoc onClose={() => setAdding(false)} onSaved={() => setVer(v => v + 1)} />}
     </div>
   )
 }

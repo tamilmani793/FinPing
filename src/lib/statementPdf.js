@@ -273,15 +273,37 @@ export function findCardSummary(lines) {
   // "C | 3,66,000 | C | 3,53,787 | C | 1,46,400": total limit, available limit, available cash limit
   const lim = text.find(t => /^[C₹\s|]*\d[\d,]{4,}[\s|C₹]+\d[\d,]{3,}[\s|C₹]+\d[\d,]{3,}[\s|]*$/.test(t))
   if (lim) { const n = lim.match(/\d[\d,]*\d/g).map(num); out.creditLimit = n[0]; out.availableCredit = n[1] }
-  // reward points: a row "opening | earned | disbursed | lapsed" under the Reward Points heading, then the closing balance on its own line
-  const ri = text.findIndex(t => /reward points/i.test(t) && /opening balance/i.test(t))
-  if (ri >= 0) {
-    for (let k = ri + 1; k < Math.min(text.length, ri + 5); k++) {
-      if (/^\d[\d,]*\s*\|\s*\d[\d,]*\s*\|\s*\d[\d,]*\s*\|\s*\d[\d,]*$/.test(text[k]) && /^\d[\d,]*$/.test(text[k + 1] || '')) {
-        const row = text[k].match(/\d[\d,]*/g).map(num) // opening | earned | disbursed | lapsed
-        out.rewardPoints = num(text[k + 1]); out.rewardsOpening = row[0]; out.rewardsEarned = row[1]; break
+  // Reward points, any page. Two layouts:
+  //   a heading "Reward Points" with the closing balance under it, then a header row "Opening Balance | Earned | Disbursed | Adjusted/Lapsed" and a row of four numbers
+  //   (HDFC Millennia and others); or one line holding "reward points" and "opening balance" followed by the row of four numbers.
+  const all = lines.map(l => l.map(c => c.text).join(' | '))
+  const nums = t => (String(t || '').match(/\d[\d,]*/g) || []).map(num)
+  const hi = all.findIndex(t => /opening balance/i.test(t) && /earned/i.test(t) && /(disbursed|redeemed)/i.test(t))
+  const oldStyle = all.findIndex(t => /reward points/i.test(t) && /opening balance/i.test(t))
+  const hdr = hi >= 0 ? hi : oldStyle
+  if (hdr >= 0) {
+    const row = nums(all[hdr + 1])
+    if (row.length >= 4) {
+      out.rewardsOpening = row[0]; out.rewardsEarned = row[1]; out.rewardsDisbursed = row[2]; out.rewardsLapsed = row[3]
+      // the closing balance: a lone number under the "Reward Points" heading just above, or the number on the line after the row
+      let closing = null
+      for (let k = hdr - 1; k >= Math.max(0, hdr - 6) && closing == null; k--) {
+        if (/^[|\s]*reward points[|\s]*$/i.test(all[k]) && nums(all[k + 1]).length === 1) closing = nums(all[k + 1])[0]
       }
+      if (closing == null && nums(all[hdr + 2]).length === 1 && /^[|\s]*[\d,]+[|\s]*$/.test(all[hdr + 2])) closing = nums(all[hdr + 2])[0]
+      out.rewardPoints = closing != null ? closing : Math.max(0, row[0] + row[1] - row[2] - row[3])
     }
+  }
+  // "Rewards Program Points Summary": where the points of the cycle came from, one row per programme ("1% CashBack on all_other_Spends | 15 pts")
+  const pi = all.findIndex(t => /rewards? program(?:me)? points summary/i.test(t))
+  if (pi >= 0) {
+    const programs = []
+    for (let k = pi + 1; k < Math.min(all.length, pi + 40); k++) {
+      const m = all[k].match(/^[|\s]*(\d+)[\s|]+(.+?)[\s|]+(\d[\d,]*)\s*(?:pts?|points?)/i)
+      if (m) programs.push({ name: m[2].replace(/[\s|]+/g, ' ').trim(), points: num(m[3]) })
+      else if (programs.length) break
+    }
+    if (programs.length) out.rewardPrograms = programs
   }
   return out.totalDue != null && out.statementDate ? out : null
 }

@@ -21,6 +21,8 @@ export interface RuleMatch {
   categories?: string[]
   /** Words to look for in the merchant name / bank narration, e.g. 'amazon' */
   merchants?: string[]
+  /** 'online' or 'offline': the rule only applies to spends of that kind (SBI Cashback pays 5% online). With no other list it needs nothing else. */
+  channel?: 'online' | 'offline'
 }
 
 export interface AcceleratedRule extends RuleMatch {

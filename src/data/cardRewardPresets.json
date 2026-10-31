@@ -151,7 +151,9 @@
             "minSpend": 249,
             "capPerCycle": 1500,
             "merchants": [
-              "swiggy"
+              "swiggy",
+              "bundl",
+              "instamart"
             ],
             "notes": "Minimum Rs 249 per transaction from 21 Apr 2026. Swiggy Money wallet, Swiggy Liquor and Swiggy Minis do not count. Matched on the merchant and terminal IDs.",
             "mccs": [],
@@ -426,7 +428,7 @@
       "issuer": "SBI Card",
       "rewardType": "cashback",
       "capPeriod": "billingCycle",
-      "postedOn": "within 2 working days of statement generation, as a statement credit",
+      "postedOn": "Spends are added up over each statement cycle (previous statement date + 1 day to this statement date), capped at Rs 5,000 per cycle, and the cashback is credited to the card account after the statement date",
       "rules": {
         "rewardType": "cashback",
         "base": {
@@ -434,7 +436,7 @@
           "per": 100
         },
         "minSpend": 100,
-        "capPerCycle": 4000,
+        "capPerCycle": 5000,
         "rounding": "floor",
         "accelerated": [
           {
@@ -444,11 +446,12 @@
               "value": 5,
               "per": 100
             },
-            "capPerCycle": 2000,
-            "notes": "Online is decided by the network's online indicator, not by the merchant. Anything not flagged online is offline. FinPing has no online/offline flag on a transaction yet, so add merchant words (amazon, flipkart...) to this rule for it to apply; everything else is paid the 1% offline rate.",
+            "capPerCycle": 5000,
+            "notes": "Online is decided by the bank from the network's online flag. FinPing works it out from how the spend was paid, a web address or 'online' in the name, and well-known online brands; you can set Online or In shop on any transaction to correct it. Spends not counted as online earn the 1% offline rate (cap Rs 2,000 each for online and offline, Rs 4,000 in total per statement cycle).",
             "mccs": [],
             "categories": [],
-            "merchants": []
+            "merchants": [],
+            "channel": "online"
           }
         ],
         "exclusions": {
@@ -525,7 +528,7 @@
         },
         "capPeriod": "billingCycle",
         "spendBlock": 0,
-        "baseCap": 2000
+        "baseCap": null
       },
       "capChange": "The kit says Rs 2,000 online + Rs 2,000 offline with a Rs 4,000 total per statement cycle. The Rs 5,000 figure in your note is not in this document.",
       "benefits": [
@@ -714,7 +717,8 @@
         "capPeriod": "billingCycle",
         "spendBlock": 0,
         "baseCap": null,
-        "capPeriodNote": "The page says Rs 1,200 per month; the bank credits it by statement cycle, so the cap follows the billing cycle"
+        "capPeriodNote": "The page says Rs 1,200 per month; the bank credits it by statement cycle, so the cap follows the billing cycle",
+        "creditLagDays": 45
       },
       "benefits": [
         "Lounge: 3 complimentary visits a year (2 domestic, one per 6 months; 1 international from 1 Sep 2026)",

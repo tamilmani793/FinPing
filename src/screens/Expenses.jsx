@@ -218,7 +218,7 @@ export default function Expenses() {
                       isCredit={t.type === 'credit'}
                       tags={t.tags}
                       onClick={() => (selecting ? togglePick(t.id) : setEditTxn(t))}
-                      badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : (rewardPill(t.expectedReward) ? <Badge variant="mint" style={{ fontSize: 9 }}>{rewardPill(t.expectedReward)}</Badge> : null)}
+                      badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : (rewardPill(t.expectedReward) ? <Badge variant="mint" style={{ fontSize: 9 }}>{rewardPill(t.expectedReward)}</Badge> : (t.expectedReward && t.expectedReward.rule && ['excluded', 'minSpend'].includes(t.expectedReward.rule.kind) ? <Badge variant="grey" style={{ fontSize: 9 }}>No reward</Badge> : null))}
                     />
                     </div>
                     </div>

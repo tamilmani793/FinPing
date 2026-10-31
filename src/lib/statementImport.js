@@ -38,7 +38,7 @@ export async function planStatement(account, rows) {
 
 // Applies the plan: corrects matched entries, adds the missing ones, removes the chosen extras.
 export async function applyStatement(account, plan, { removeIds = [], setBalance = true, updateBill = false } = {}) {
-  await db.transaction('rw', db.transactions, db.creditCards, async () => {
+  await db.transaction('rw', db.transactions, db.creditCards, db.reward_statements, async () => {
     for (const { row, txn } of plan.matched) {
       const fields = correction(row, txn)
       if (txn._loose) fields.cardId = account.id // it is now known to be this account's
@@ -66,7 +66,7 @@ async function applyCardSummary(card, sm) {
   const patch = { statementBalance: sm.totalDue, pendingDue: sm.totalDue, minimumDue: sm.minDue || 0, unbilled: 0, statusPaid: sm.totalDue <= 0 }
   if (!fresh.cycleSet || !(Number(fresh.billingCycleDate) >= 1)) { patch.billingCycleDate = String(sm.statementDate.getDate()); patch.cycleSet = true }
   if (sm.rewardPoints != null) patch.rewardPoints = sm.rewardPoints
-  if (sm.rewardsEarned != null) await saveRewardStatement(card.id, sm.statementDate, { earned: sm.rewardsEarned, opening: sm.rewardsOpening ?? null, closing: sm.rewardPoints ?? null })
+  if (sm.rewardsEarned != null) await saveRewardStatement(card.id, sm.statementDate, { earned: sm.rewardsEarned, opening: sm.rewardsOpening ?? null, closing: sm.rewardPoints ?? null, disbursed: sm.rewardsDisbursed ?? null, lapsed: sm.rewardsLapsed ?? null, programs: sm.rewardPrograms || null })
   patch.statementPurchases = sm.purchases != null ? sm.purchases : null
   if (sm.dueDate && !(Number(fresh.paymentDueDays) > 0)) patch.paymentDueDays = Math.max(0, Math.round((sm.dueDate - sm.statementDate) / 86400000))
   const merged = { ...fresh, ...patch }

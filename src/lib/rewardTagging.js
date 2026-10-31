@@ -75,7 +75,8 @@ export async function tagCardRewards(cardId) {
       const pkey = (rv.capPeriod === 'calendarMonth' ? format(new Date(t.date), 'yyyy-MM') : key) + '|' + (rv.effectiveFrom || '')
       if (pkey !== period) { period = pkey; totals = EMPTY_TOTALS() }
       const r = calculateExpectedReward(t, rv, totals, mccMap)
-      tag = { ...r, cycleKey: key }
+      // a card whose caps run over the calendar month (HDFC Millennia points) is compared month by month; the others by billing cycle
+      tag = { ...r, cycleKey: rv.capPeriod === 'calendarMonth' ? format(new Date(t.date), 'yyyy-MM') : key }
       totals.earned += r.amount
       if (r.rule.kind === 'accelerated' || r.rule.kind === 'base') totals.byRule[r.rule.id] = (totals.byRule[r.rule.id] || 0) + r.amount
       if (r.amount > 0) earning++
@@ -92,10 +93,10 @@ export async function tagAllCards() {
 }
 
 // What the statement said the bank credited for a cycle (points earned / closing balance); used by the audit
-export async function saveRewardStatement(cardId, statementDate, { earned = null, opening = null, closing = null } = {}) {
+export async function saveRewardStatement(cardId, statementDate, { earned = null, opening = null, closing = null, disbursed = null, lapsed = null, programs = null } = {}) {
   const cycleKey = format(new Date(statementDate), 'yyyy-MM-dd')
   const old = await db.reward_statements.where('cardId').equals(cardId).filter(r => r.cycleKey === cycleKey).first()
-  const row = { cardId, cycleKey, earned, opening, closing, addedAt: new Date() }
+  const row = { cardId, cycleKey, earned, opening, closing, disbursed, lapsed, programs, addedAt: new Date() }
   if (old) await db.reward_statements.update(old.id, row); else await db.reward_statements.add(row)
 }
 
