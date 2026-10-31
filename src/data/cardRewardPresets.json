@@ -1,5 +1,5 @@
 {
-  "_about": "Reward rules read from the issuers' own terms (HDFC Millennia T&C 20 Jul 2026, Swiggy HDFC T&C 18 Sep 2026, HDFC UPI RuPay T&C 27 Mar 2025, HDFC MITC v4.17 Oct 2026, SBI Cashback T&C kit, HSBC Live+ service guide + key fact statement). Shapes follow rewardTypes.d.ts (CardRewardRules). Rates are { value, per } in rupees, so 1 CashPoint = Rs 0.25 is already converted. Nothing here is personal data.",
+  "_about": "Reward rules read from the issuers' own terms (HDFC Millennia T&C 20 Jul 2026, Swiggy HDFC T&C 18 Sep 2026, HDFC UPI RuPay T&C 27 Mar 2025, HDFC MITC v4.17 Oct 2026, SBI Cashback T&C kit, HSBC Live+ service guide + key fact statement). Shapes follow rewardTypes.d.ts (CardRewardRules). Rates are { value, per } in rupees, so 1 CashPoint = Rs 0.25 is already converted. Nothing here is personal data. Cards added 31 Oct 2026 from each issuer's own card page, T&C or MITC (source and date saved on every card); cards whose rates could not be confirmed from an official source were left out. Details the app cannot model (tiers, shared caps, per-quarter caps, day-of-week rates, online vs offline) are in each card's notes. Categories use the app's simple list (see CATEGORY_LIST in src/lib/options.js); spend types with no matching category are kept as plain text in exclusions.otherSpendTypes.",
   "cards": [
     {
       "key": "hdfc-millennia",
@@ -72,12 +72,12 @@
           "categories": [
             "Fuel",
             "Rent",
-            "Wallet",
+            "Wallet Load",
             "EMI",
-            "Government",
-            "Cash advance",
-            "Card bill payment",
-            "Fees and charges"
+            "Government & Tax",
+            "ATM Withdrawal",
+            "Card Payment",
+            "Fees & Charges"
           ],
           "notes": "Education through third-party apps earns nothing since 1 Sep 2024 (direct to school/college site or POS still earns). Rent and government earn nothing since 1 Jan 2023. EMI (even if closed early) and wallet loads earn nothing since 1 Sep 2024.",
           "merchants": []
@@ -283,20 +283,20 @@
           "categories": [
             "Fuel",
             "Rent",
-            "Jewellery",
-            "Government",
-            "Gift cards",
-            "Prepaid card",
-            "Wallet",
+            "Jewellery & Gold",
+            "Government & Tax",
+            "Wallet Load",
             "EMI",
-            "Smartpay",
-            "Smartbuy portal",
-            "Cash advance",
-            "Foreign currency purchase and fees",
-            "Travellers cheques"
+            "ATM Withdrawal"
           ],
           "notes": "Once a purchase is converted to EMI the cashback is reversed in the next statement, even if the EMI is later foreclosed. The Swiggy HDFC T&C does not list education, so do not exclude it here (the pasted summary did).",
-          "merchants": []
+          "merchants": [],
+          "otherSpendTypes": [
+            "Smartpay",
+            "Smartbuy portal",
+            "Foreign currency purchase and fees",
+            "Travellers cheques"
+          ]
         },
         "capPeriod": "billingCycle",
         "spendBlock": 0
@@ -384,14 +384,14 @@
           "categories": [
             "Fuel",
             "Rent",
-            "EMI (EasyEMI, SmartEMI, Dial an EMI)",
+            "EMI",
             "Insurance",
-            "Government",
+            "Government & Tax",
             "Education",
-            "Wallet/gift/prepaid loads and vouchers",
-            "Cash advance",
-            "Card bill payment",
-            "Fees and charges"
+            "Wallet Load",
+            "ATM Withdrawal",
+            "Card Payment",
+            "Fees & Charges"
           ],
           "merchants": []
         },
@@ -500,28 +500,28 @@
           ],
           "categories": [
             "Fuel",
-            "Wallet",
+            "Wallet Load",
             "Rent",
-            "Jewellery",
+            "Jewellery & Gold",
             "Education",
-            "Utility",
+            "Utilities & Bills",
             "Insurance",
-            "Gift/novelty shops",
-            "Railways",
-            "Quasi cash",
-            "Digital gaming",
-            "Tolls",
-            "Government",
-            "Balance transfer",
-            "Cash advance",
-            "ATM",
-            "Financial charges",
-            "Standing instructions or Fetch and Pay on SBI platforms",
-            "Flexipay",
-            "Merchant EMI"
+            "ATM Withdrawal",
+            "Gaming & Gambling",
+            "Government & Tax",
+            "Transfer",
+            "Fees & Charges",
+            "EMI"
           ],
           "notes": "Cashback reversed on EMI conversion in the same statement month; a foreclosed EMI never gives it back. Refunds reverse the cashback. A reversal after the cap was reached cannot be used to earn more.",
-          "merchants": []
+          "merchants": [],
+          "otherSpendTypes": [
+            "Gift/novelty shops",
+            "Railways",
+            "Tolls",
+            "Standing instructions or Fetch and Pay on SBI platforms",
+            "Flexipay"
+          ]
         },
         "capPeriod": "billingCycle",
         "spendBlock": 0,
@@ -542,7 +542,7 @@
       "key": "hsbc-live-plus",
       "name": "HSBC Live+",
       "issuer": "HSBC",
-      "network": "Visa (per the service guide)",
+      "network": "Visa Infinite",
       "rewardType": "cashback",
       "capPeriod": "billingCycle",
       "capPeriodNote": "Documents say 'up to Rs 1,200 a month' and credit it within 45 days of the statement date, so it is tied to the statement cycle in practice. Confirm on a real statement.",
@@ -625,7 +625,7 @@
               "flipkart",
               "myntra"
             ],
-            "notes": "Amazon, Flipkart and Myntra stay at 1.5%. Cashback is by MCC only. The Bank's classification is final. The MCC table in the PDF is laid out in columns that extract out of order, so verify the shopping codes against the PDF before relying on them.",
+            "notes": "Amazon, Flipkart and Myntra stay at 1.5%. Cashback is by MCC only. The Bank's classification is final. The MCC table in the PDF is laid out in columns that extract out of order, so verify the shopping codes against the PDF before relying on them. Cap Rs 1,200 per month. Amazon, Flipkart and Myntra purchases earn 1.5% and are not eligible for the 10%. Cashback depends on the merchant category the bank assigns to the transaction.",
             "categories": [],
             "merchants": []
           }
@@ -671,26 +671,50 @@
           ],
           "categories": [
             "Fuel",
-            "Wallet",
+            "Wallet Load",
             "Rent",
             "Insurance",
-            "Education and government",
-            "Financial institutions",
+            "Education",
+            "Government & Tax",
+            "Gaming & Gambling",
+            "Transfer",
+            "Jewellery & Gold",
+            "EMI"
+          ],
+          "notes": "International spends no longer earn 1.5% because the forex mark-up is 1.99%. Instant EMI is treated as a loan and earns nothing. Cashback on reversed or cancelled spends is recovered from the next statement. Toll, cash withdrawals, card repayments, foreign currency, crypto, broker, wholesale club and local bus and metro spends are excluded by merchant code; the app's categories cannot tell all of these apart.",
+          "merchants": [],
+          "excludedSpendTypes": [
+            "Fuel",
+            "Wallet loads",
+            "Rent payments",
+            "Business transactions",
+            "Education fees",
+            "Government payments",
+            "Insurance premiums",
+            "Jewellery purchases",
             "Gambling",
-            "Money transfer",
+            "Toll payments",
+            "Cash withdrawals and credit card repayments",
+            "Foreign currency, liquid and cryptocurrency purchases",
+            "Stock broker transactions",
+            "Money transfers",
+            "Charity donations",
+            "Wholesale club purchases",
+            "Hospital payments",
+            "Local bus and metro transportation"
+          ],
+          "otherSpendTypes": [
+            "Financial institutions",
             "Business to business",
             "Charity",
             "Hospitals",
-            "Jewellery and antiques",
-            "Instant EMI (IEMI)",
             "International spends (no 1.5%)"
-          ],
-          "notes": "International spends no longer earn 1.5% because the forex mark-up is 1.99%. Instant EMI is treated as a loan and earns nothing. Cashback on reversed or cancelled spends is recovered from the next statement.",
-          "merchants": []
+          ]
         },
         "capPeriod": "billingCycle",
         "spendBlock": 0,
-        "baseCap": null
+        "baseCap": null,
+        "capPeriodNote": "The page says Rs 1,200 per month; the bank credits it by statement cycle, so the cap follows the billing cycle"
       },
       "benefits": [
         "Lounge: 3 complimentary visits a year (2 domestic, one per 6 months; 1 international from 1 Sep 2026)",
@@ -705,15 +729,3806 @@
         "financeCharge": "3.75% a month (45% a year), from the date of transaction",
         "lateFee": "100% of minimum due, minimum Rs 250 and maximum Rs 1,200 a month; charged if not paid within 3 days of the due date",
         "overlimit": "2.5% of the overlimit amount",
-        "forexMarkup": "1.99% (3.5% on the Platinum cards)",
-        "cashAdvance": "1% processing fee plus taxes",
-        "paymentAtBranch": "Rs 100"
+        "forexMarkup": "1.99%",
+        "cashAdvance": "1% processing fee plus taxes (HSBC key fact statement)",
+        "paymentAtBranch": "Rs 100",
+        "joiningFeeNote": "Rs 999 + GST",
+        "annualFeeNote": "Rs 999 + GST",
+        "forexMarkupNote": "The earlier text (3.5% on the Platinum cards) is about HSBC's other cards, not Live+",
+        "fuelSurcharge": "No waiver. A 1% fuel surcharge applies",
+        "interestPerMonth": "3.75% a month",
+        "rewardsRedemptionFee": "Nil",
+        "cashAdvanceConflict": "Card Insider (29 Jul 2026) says 2.5% with a minimum of Rs 500. The bank's own key fact statement is kept above; check your statement."
       },
       "effectiveFrom": "2026-09-01",
       "publishedOn": "2026-09-01",
-      "source": "HSBC Live+ service guide and key fact statement"
+      "source": "HSBC Live+ service guide and key fact statement; extra details from Card Insider page \"HSBC Live+ Credit Card\" updated 29 Jul 2026 (third party, pasted by the user); HSBC service guide and key fact statement are the official sources",
+      "networkNote": "Issued on Visa Infinite instead of Visa Signature (Card Insider, 29 Jul 2026). The HSBC service guide only says Visa.",
+      "match": [
+        "live+",
+        "live +",
+        "live plus"
+      ],
+      "details": {
+        "bestFor": [
+          "Travel",
+          "Food",
+          "Utility bills"
+        ],
+        "forex": {
+          "markupPercent": 1.99,
+          "note": "Low forex markup on international spends (entry-level cashback cards usually charge about 3.5%).",
+          "earnsCashbackOnInternational": false,
+          "cashbackNote": "International spends do NOT earn the 1.5% unlimited cashback, even with the lower markup. The app cannot tell international from domestic spends, so such a spend may show the 1.5% rate; the bank will not credit it."
+        },
+        "welcome": [
+          {
+            "name": "Welcome cashback",
+            "value": 1000,
+            "unit": "INR cashback",
+            "condition": "Log in to the HSBC India Mobile Banking app and spend Rs 25,000 within 30 days of card issuance."
+          },
+          {
+            "name": "Welcome voucher (limited-time Visa offer)",
+            "value": 750,
+            "unit": "INR voucher",
+            "condition": "Activate the card with one transaction of Rs 300 or more. Voucher for Amazon Pay, Zomato or Swiggy.",
+            "limitedTime": true
+          }
+        ],
+        "lounge": {
+          "domesticPerYear": 2,
+          "domesticRule": "One visit every six months, at participating lounges in India",
+          "internationalPerYear": 1,
+          "internationalRule": "Through the Visa Airport Companion Program (from 1 Sep 2026 per the service guide)"
+        },
+        "movieOffer": "Buy 1 Get 1 free on movie tickets, up to Rs 200 off the second ticket",
+        "cashbackPosting": "Credited as cashback within 45 days after the statement is generated; no points to redeem; redemption fee nil",
+        "liveReserve": {
+          "validFrom": "2026-08-01",
+          "validTo": "2027-07-31",
+          "summary": "Curated dining and lifestyle programme for activated Live+ cardholders, run with Times Prime",
+          "diningBenefits": [
+            "Chef-curated set menu",
+            "Complimentary beverage",
+            "Complimentary dessert"
+          ],
+          "diningRules": "Only one dining benefit (set menu, beverage or dessert) per table per reservation; subject to availability, blackout dates and each restaurant's terms; the food bill is paid at the restaurant",
+          "lifestyleBrands": [
+            "Toni & Guy",
+            "Sony LIV",
+            "TUMI",
+            "other partners on the Live+ Reserve portal"
+          ],
+          "brandsNote": "The list of partners can change during the offer period",
+          "howToRedeem": [
+            "Open the Live+ Reserve portal (dinewithtimesprime.com/hsbcliveplus) after activating the card",
+            "Verify the registered mobile number with an OTP",
+            "Complete a Rs 1 verification transaction with the Live+ card",
+            "Browse restaurants or lifestyle offers and book or redeem"
+          ],
+          "eligible": "Primary and add-on cardholders"
+        },
+        "eligibility": {
+          "age": {
+            "salaried": "18 to 65",
+            "selfEmployed": "25 to 65"
+          },
+          "minAnnualIncomeINR": {
+            "salaried": 600000,
+            "selfEmployed": 1200000
+          },
+          "resident": "Indian resident",
+          "cities": [
+            "Ahmedabad",
+            "Amritsar",
+            "Bengaluru",
+            "Chandigarh",
+            "Chennai",
+            "Coimbatore",
+            "Delhi NCR",
+            "Gurgaon",
+            "Hyderabad",
+            "Indore",
+            "Jaipur",
+            "Kochi",
+            "Kolkata",
+            "Lucknow",
+            "Mumbai",
+            "Nagpur",
+            "Noida",
+            "Pune",
+            "Surat",
+            "Vadodara"
+          ]
+        },
+        "pros": [
+          "Cashback, lounge access, Visa Infinite benefits and the Live+ Reserve for a Rs 999 + GST annual fee",
+          "10% cashback on utility bills (up to Rs 1,200 a month), which many cashback cards no longer give",
+          "Cashback is credited automatically"
+        ],
+        "cons": [
+          "Many merchant categories are excluded; the merchant category assigned by the bank decides",
+          "No cashback on international spends"
+        ]
+      }
+    },
+    {
+      "key": "hdfc-infinia",
+      "name": "HDFC Infinia",
+      "issuer": "HDFC Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-07-01",
+      "publishedOn": "2026-10-29",
+      "source": "Infinia Rewards Points Program T&C (latest item effective 1 Jul 2026) - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/infinia-credit-card/rewards-points-program-terms-and-conditions.pdf ; earn rate 5 RP per Rs 150 from Infinia product page https://www.hdfc.bank.in/credit-cards/infinia-credit-card ; statement-cycle cap and multiples of 150 from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf ; no change on 15 May 2026 per HDFC notice 'Updates on your credit card rewards, fees and charges' effective 15 May 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/generic-mailer-tnc.pdf",
+      "match": [
+        "infinia"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 5,
+          "per": 150,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": 200000,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 150,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [
+            5816
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hdfc-diners-black",
+      "name": "HDFC Diners Club Black",
+      "issuer": "HDFC Bank",
+      "network": "Diners Club",
+      "rewardType": "points",
+      "effectiveFrom": "2026-06-01",
+      "publishedOn": "2026-10-29",
+      "source": "Diners Club Black Metal Edition T&C dated 1 Jun 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/diners-club-black-metal-edition-credit-card/diners-club-metal-tandc.pdf ; earn rate 5 RP per Rs 150 from product page https://www.hdfc.bank.in/credit-cards/diners-club-black-credit-card ; Diners Black Metal Rewards T&C 19 Aug 2024 https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/diners-club-black-metal-edition-credit-card/diners6.pdf ; cap and multiples of 150 from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf ; no change on 15 May 2026 per HDFC notice 'Updates on your credit card rewards, fees and charges' effective 15 May 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/generic-mailer-tnc.pdf",
+      "match": [
+        "diners black",
+        "diners club black"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 5,
+          "per": 150,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": 75000,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 150,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [
+            5816
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hdfc-regalia-gold",
+      "name": "HDFC Regalia Gold",
+      "issuer": "HDFC Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-05-15",
+      "publishedOn": "2026-10-29",
+      "source": "Regalia Gold feature-change notice (5 RP per Rs 200 effective 15 May 2026) - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/pdf/common/Credit-Cards/Regalia-Gold-Product-feature-change.pdf ; HDFC notice 'Updates on your credit card rewards, fees and charges' effective 15 May 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/generic-mailer-tnc.pdf ; Regalia Gold Rewards Points T&C https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/regalia-gold-credit-card/rewards-points-terms-and-conditions.pdf ; statement-cycle cap 50,000 and Rs 0.15 per point statement credit from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf",
+      "match": [
+        "regalia gold"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 5,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": 50000,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 200,
+        "pointValue": 0.15,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [
+            5816
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hdfc-moneyback-plus",
+      "name": "HDFC MoneyBack+",
+      "issuer": "HDFC Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-05-15",
+      "publishedOn": "2026-10-29",
+      "source": "HDFC notice 'Updates on your credit card rewards, fees and charges' effective 15 May 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/generic-mailer-tnc.pdf (Money Back Plus 2 CashPoints per Rs 200) ; product page https://www.hdfc.bank.in/credit-cards/moneyback-plus-credit-card (2 CashPoints per Rs 200; 10X on Amazon, Flipkart, Swiggy, Reliance Smart SuperStore, BigBasket) ; MoneyBack+ FAQ (10X cap 2,500 CashPoints per calendar month, exclusions; file dated Sep 2025) https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/moneyback-plus-credit-card/pdf/mbp_faqs.pdf ; statement-cycle cap 15,000 and 20 paise per point from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf",
+      "match": [
+        "moneyback+",
+        "moneyback plus",
+        "money back plus",
+        "moneyback +"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": 15000,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 200,
+        "pointValue": 0.2,
+        "accelerated": [
+          {
+            "id": "mb-10x",
+            "label": "10X CashPoints on Amazon, Flipkart, Swiggy, Reliance Smart SuperStore, BigBasket",
+            "rate": {
+              "value": 20,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "amazon",
+              "flipkart",
+              "swiggy",
+              "reliance smart",
+              "bigbasket",
+              "big basket"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 2500,
+            "notes": "Rate is 10 times the 2 per Rs 200 base, as the bank page says 10X (up to 2.5% value back). Cap of 2,500 CashPoints per calendar month is from the FAQ; the app caps per cycle. Non-EMI only, app/website/physical stores. Credited on the merchant's terminal/merchant IDs."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5816
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hdfc-tata-neu-infinity",
+      "name": "Tata Neu Infinity HDFC Bank",
+      "issuer": "HDFC Bank",
+      "network": "Visa / RuPay",
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-24",
+      "publishedOn": "2026-10-24",
+      "source": "Terms & Conditions Tata Neu Infinity HDFC Bank Credit Card, updated 24 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/tata-neu-infinity-credit-card/pdf/tata_neu_infinity_card_tnc.pdf ; statement-cycle cap 50,000 from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf ; no change per HDFC notice 'Updates on your credit card rewards, fees and charges' effective 15 May 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/generic-mailer-tnc.pdf",
+      "match": [
+        "neu infinity",
+        "tata neu infinity"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1.5,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": 50000,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 1,
+        "accelerated": [
+          {
+            "id": "neu-partner-5",
+            "label": "5% NeuCoins on partner Tata brands (non-EMI)",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "croma",
+              "tata cliq",
+              "tatacliq",
+              "westside",
+              "ihcl",
+              "air india",
+              "1mg",
+              "cult.fit",
+              "cultfit",
+              "tata play",
+              "tataplay",
+              "tata pay",
+              "bigbasket",
+              "big basket",
+              "titan",
+              "tanishq",
+              "qmin"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "1.5% base + 3.5% additional, given only when the merchant's terminal/merchant ID is recognised. Fair usage policy (Annex 1) limits eligible spend per month and per year per brand (for example Croma Rs 6,00,000 a month, Tata CliQ Rs 3,00,000, Westside Rs 8,00,000, IHCL Rs 2,00,000, Air India Rs 1,00,000, BigBasket Rs 1,00,000, Titan/Tanishq Rs 6,00,000, Qmin Rs 50,000); the app does not model spend caps. Not for UPI spends on the RuPay variant."
+          },
+          {
+            "id": "neu-upi",
+            "label": "0.5% NeuCoins on UPI spends (RuPay variant)",
+            "rate": {
+              "value": 0.5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [
+              "UPI Scan & Pay"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 500,
+            "notes": "RuPay variant only. 0.5% on any UPI ID, plus 1% extra (posted to the Tata Neu account) if the Tata Neu UPI ID is used. Total UPI NeuCoins capped at 500 per month. Applies from 1 Aug 2024."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5816
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hdfc-tata-neu-plus",
+      "name": "Tata Neu Plus HDFC Bank",
+      "issuer": "HDFC Bank",
+      "network": "Visa / RuPay",
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-24",
+      "publishedOn": "2026-10-24",
+      "source": "Terms & Conditions Tata Neu Plus HDFC Bank Credit Card, updated 24 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/tata-neu-plus-hdfc-bank-credit-card/pdfs/tata_neu_plus_card_tnc.pdf ; statement-cycle cap 25,000 from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf ; no change per HDFC notice 'Updates on your credit card rewards, fees and charges' effective 15 May 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/generic-mailer-tnc.pdf",
+      "match": [
+        "neu plus",
+        "tata neu plus"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": 25000,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 1,
+        "accelerated": [
+          {
+            "id": "neu-partner-2",
+            "label": "2% NeuCoins on partner Tata brands (non-EMI)",
+            "rate": {
+              "value": 2,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "croma",
+              "tata cliq",
+              "tatacliq",
+              "westside",
+              "ihcl",
+              "air india",
+              "1mg",
+              "cult.fit",
+              "cultfit",
+              "tata play",
+              "tataplay",
+              "tata pay",
+              "bigbasket",
+              "big basket",
+              "titan",
+              "tanishq",
+              "qmin"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "1% base + 1% additional, given only when the merchant's terminal/merchant ID is recognised. Fair usage policy (Annex 1) limits eligible spend per month and per year per brand (for example Croma Rs 3,00,000 a month, Tata CliQ Rs 2,00,000, Westside Rs 4,00,000, IHCL Rs 1,00,000, Air India Rs 1,00,000, BigBasket Rs 50,000, Titan/Tanishq Rs 3,00,000, Qmin Rs 50,000); the app does not model spend caps. Not for UPI spends on the RuPay variant."
+          },
+          {
+            "id": "neu-upi",
+            "label": "0.25% NeuCoins on UPI spends (RuPay variant)",
+            "rate": {
+              "value": 0.25,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [
+              "UPI Scan & Pay"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 500,
+            "notes": "RuPay variant only. 0.25% on any UPI ID, plus 0.75% extra (posted to the Tata Neu account) if the Tata Neu UPI ID is used. Total UPI NeuCoins capped at 500 per month. Applies from 1 Aug 2024."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5816
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hdfc-pixel-play",
+      "name": "HDFC PIXEL Play",
+      "issuer": "HDFC Bank",
+      "network": "Visa / RuPay",
+      "rewardType": "cashback",
+      "effectiveFrom": "2026-07-30",
+      "publishedOn": "2026-07-30",
+      "source": "Terms & Conditions HDFC Bank PIXEL Play Credit Card, updated 30 Jul 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/fifa-pixel-credit-card/pdf/terms-and-conditions-pixel-play-credit-card-08072026.pdf ; 1 CashPoint = Rs 1 from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf",
+      "match": [
+        "pixel play"
+      ],
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 100,
+        "capPerCycle": null,
+        "baseCap": 15000,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 1,
+        "accelerated": [
+          {
+            "id": "pixel-smartbuy-5",
+            "label": "5% on SmartBuy (IGP, flights, hotels, bus, rail, instant vouchers, Apple)",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "smartbuy"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 100,
+            "capPerCycle": 500,
+            "notes": "Only on successful SmartBuy transactions in those categories. 500 CashPoints a month, after which 1% applies. Also on the card but NOT modelled because they depend on the cardholder's choice in the app: 5% on any two chosen merchant packs (500 CashPoints a month together) and 3% on one chosen platform among PayZapp, Amazon, Flipkart (500 a month). Packs: BookMyShow and Zomato; MakeMyTrip and Uber; Blinkit and Reliance Smart Bazaar; Croma and Reliance Digital; Nykaa and Myntra."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            1361,
+            5172,
+            5541,
+            5542,
+            5983,
+            9752,
+            6513,
+            6540,
+            7349,
+            9211,
+            9222,
+            9223,
+            9311,
+            9399,
+            9402,
+            9405,
+            9950
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hdfc-indianoil",
+      "name": "IndianOil HDFC Bank",
+      "issuer": "HDFC Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-29",
+      "publishedOn": null,
+      "source": "Terms & Conditions Indian Oil HDFC Bank Credit Card (undated PDF) - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/indian-oil-hdfc-bank-credit-card/T-and-C-Indian-Oil-Credit-Card.pdf ; statement-cycle cap 25,000 from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf ; IOCL listed as unchanged in HDFC notice 'Updates on your credit card rewards, fees and charges' effective 15 May 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/generic-mailer-tnc.pdf",
+      "match": [
+        "indianoil",
+        "indian oil",
+        "iocl"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 150,
+          "blockBased": true
+        },
+        "minSpend": 150,
+        "capPerCycle": 25000,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 150,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "iocl-fuel",
+            "label": "5% Fuel Points on IOCL fuel pumps and outlets",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "indian oil",
+              "indianoil",
+              "iocl"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 150,
+            "notes": "Cap is 250 Fuel Points a month for the first 6 months after issue, then 150 (app uses 150). Only card swipes on IOCL POS machines whose terminal/merchant ID IndianOil shares. Fuel at other pumps earns nothing per the bank, but the app cannot tell other pumps apart so they show the base rate. 1 Fuel Point = 1 Reward Point; worth Rs 0.96 on free fuel via XTRAREWARDS and Rs 0.20 as statement credit. Points are posted by calendar month."
+          },
+          {
+            "id": "iocl-grocery",
+            "label": "5% Fuel Points on groceries (MCC 5411, 5499, 5921, 5462)",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [],
+            "mccs": [
+              5411,
+              5499,
+              5921,
+              5462
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 150,
+            "capPerCycle": 100,
+            "notes": "Max 100 Fuel Points a month per category; minimum transaction Rs 150. The table lists these MCCs for groceries; the same document also lists supermarkets as excluded, so edge cases may differ."
+          },
+          {
+            "id": "iocl-bills",
+            "label": "5% Fuel Points on utility and telecom bills (MCC 4812, 4814, 4900)",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [],
+            "mccs": [
+              4812,
+              4814,
+              4900
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 150,
+            "capPerCycle": 100,
+            "notes": "Max 100 Fuel Points a month per category; minimum transaction Rs 150. The table does not spell out whether utility and telecom share one 100 cap; the app gives the 100 cap to the whole rule."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5816
+          ],
+          "categories": [
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI",
+            "Insurance",
+            "Jewellery & Gold"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hdfc-freedom",
+      "name": "HDFC Freedom",
+      "issuer": "HDFC Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-05-15",
+      "publishedOn": "2026-10-29",
+      "source": "HDFC notice 'Updates on your credit card rewards, fees and charges' effective 15 May 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/generic-mailer-tnc.pdf (Freedom 1 per Rs 200) ; product page https://www.hdfc.bank.in/credit-cards/freedom-credit-card (1 Reward Point per Rs 200; 10X on BigBasket, BookMyShow, OYO, Swiggy, Uber) ; 10X cap 2,500 CashPoints per month from Freedom T&C published 13 Aug 2024 https://www.hdfcbank.com/content/api/contentstream-id/723fb80a-2dde-42a3-9793-7ae1be57c87f/6d0db352-ab1f-420b-bec5-fdb38c73a02f (quoted by a search result; the PDF itself was not readable here) ; statement-cycle cap 15,000 from HDFC Part I Key Fact Statement cum MITC v4.17, updated 29 Oct 2026 - https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/cards/credit-cards/personal-mitc/mitc-in-english.pdf",
+      "match": [
+        "freedom"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": 15000,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 200,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "freedom-10x",
+            "label": "10X on BigBasket, BookMyShow, OYO, Swiggy, Uber",
+            "rate": {
+              "value": 10,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "bigbasket",
+              "big basket",
+              "bookmyshow",
+              "oyo",
+              "swiggy",
+              "uber"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 2500,
+            "notes": "Rate is 10 times the 1 per Rs 200 base, as the bank page says 10X. The 2,500 a calendar month cap is from the Aug 2024 T&C and was not re-confirmed in a current document. Non-EMI. Merchant-ID based."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5816
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load",
+            "Rent",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "icici-amazon-pay",
+      "name": "Amazon Pay ICICI Bank Credit Card",
+      "issuer": "ICICI Bank",
+      "network": null,
+      "rewardType": "cashback",
+      "effectiveFrom": "2026-10-15",
+      "publishedOn": "2026-10-15",
+      "source": "ICICI card page https://www.icici.bank.in/personal-banking/cards/credit-card/amazon-pay-credit-card/benefits-features (undated, (c) 2026); ICICI Bank MITC (PDF last-modified 2026-10-15) https://www.icici.bank.in/managed-assets/docs/personal/cards/mitc_cc.pdf. Page states rewards as points (5 per Rs100 Prime, 3 non-Prime, 2 at 100+ partner merchants, 1% elsewhere) credited as Amazon Pay balance; recorded here as percentages. Page does not state a point value. Network not stated.",
+      "match": [
+        "amazon pay"
+      ],
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "amazon-prime-5",
+            "label": "5% on Amazon (Prime members)",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "amazon"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 5 per Rs100 for Prime members, 3 per Rs100 for non-Prime (use 3% if not Prime). Partner merchants (100+) earn 2 per Rs100 but the list is not published on the page, so not encoded."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Rent",
+            "Fuel",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "icici-coral",
+      "name": "ICICI Bank Coral Credit Card",
+      "issuer": "ICICI Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-15",
+      "publishedOn": "2026-10-15",
+      "source": "Card page https://www.icici.bank.in/personal-banking/cards/credit-card/coral-credit-card (page undated); ICICI Bank MITC (PDF last-modified 2026-10-15) https://www.icici.bank.in/managed-assets/docs/personal/cards/mitc_cc.pdf. Network and point value not stated by the bank pages.",
+      "match": [
+        "coral"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "coral-util-ins",
+            "label": "1 point per Rs100 on utility and insurance",
+            "rate": {
+              "value": 1,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Insurance"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 2 points per Rs100 retail, 1 point per Rs100 utility and insurance. The MITC lists per-statement-cycle reward caps for some categories (utility, insurance, grocery/departmental, transport) but the cap figures were not machine-readable, so no cap is recorded. Milestone 2,000 pts on Rs2 lakh spend (+1,000 per extra Rs1 lakh, max 10,000 per anniversary year) not modelled."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet Load"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "icici-platinum-chip",
+      "name": "ICICI Bank Platinum Chip Credit Card",
+      "issuer": "ICICI Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-15",
+      "publishedOn": "2026-10-15",
+      "source": "Card page https://www.icici.bank.in/personal-banking/cards/credit-card/platinum-chip-credit-card (page undated); ICICI Bank MITC (PDF last-modified 2026-10-15) https://www.icici.bank.in/managed-assets/docs/personal/cards/mitc_cc.pdf. Network and point value not stated by the bank pages.",
+      "match": [
+        "platinum chip"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "platchip-util-ins",
+            "label": "1 point per Rs100 on utility and insurance",
+            "rate": {
+              "value": 1,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Insurance"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 2 points per Rs100 retail, 1 point per Rs100 utility and insurance. The MITC lists per-statement-cycle reward caps for some categories (utility, insurance, grocery/departmental, transport) but the cap figures were not machine-readable, so no cap is recorded."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet Load"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "icici-sapphiro",
+      "name": "ICICI Bank Sapphiro Credit Card",
+      "issuer": "ICICI Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-15",
+      "publishedOn": "2026-10-15",
+      "source": "Card page https://www.icici.bank.in/personal-banking/cards/credit-card/sapphiro-card (page undated); ICICI Bank MITC (PDF last-modified 2026-10-15) https://www.icici.bank.in/managed-assets/docs/personal/cards/mitc_cc.pdf. Network and point value not stated by the bank pages.",
+      "match": [
+        "sapphiro"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "sapphiro-util-ins",
+            "label": "1 point per Rs100 on utility and insurance",
+            "rate": {
+              "value": 1,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Insurance"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 4 pts per Rs100 international (not encoded, no international flag), 2 domestic, 1 utility and insurance. The MITC lists per-statement-cycle reward caps for some categories (utility, insurance, grocery/departmental, transport) but the cap figures were not machine-readable, so no cap is recorded. Milestone 4,000 pts on Rs4 lakh (+2,000 per Rs1 lakh, max 20,000 per anniversary year) not modelled."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet Load"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "icici-rubyx",
+      "name": "ICICI Bank Rubyx Credit Card",
+      "issuer": "ICICI Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-15",
+      "publishedOn": "2026-10-15",
+      "source": "Card page https://www.icici.bank.in/personal-banking/cards/credit-card/rubyx-credit-card (page undated); ICICI Bank MITC (PDF last-modified 2026-10-15) https://www.icici.bank.in/managed-assets/docs/personal/cards/mitc_cc.pdf. Network and point value not stated by the bank pages.",
+      "match": [
+        "rubyx"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "rubyx-util-ins",
+            "label": "1 point per Rs100 on utility and insurance",
+            "rate": {
+              "value": 1,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Insurance"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 4 pts per Rs100 international (not encoded), 2 domestic, 1 utility and insurance. The MITC lists per-statement-cycle reward caps for some categories (utility, insurance, grocery/departmental, transport) but the cap figures were not machine-readable, so no cap is recorded. Milestone 3,000 pts on Rs3 lakh (+1,500 per extra Rs1 lakh, max 15,000 per year) not modelled."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet Load"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "icici-hpcl-super-saver",
+      "name": "ICICI Bank HPCL Super Saver Credit Card",
+      "issuer": "ICICI Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2021-06-22",
+      "publishedOn": "2021-06-22",
+      "source": "Terms and Conditions (last updated June 22, 2021) https://www.icici.bank.in/managed-assets/docs/terms-condition/hpcl-super-saver-credit-card-tnc.pdf ; card page https://www.icici.bank.in/personal-banking/cards/credit-card/hpcl-super-saver (undated) ; ICICI Bank MITC (PDF last-modified 2026-10-15) https://www.icici.bank.in/managed-assets/docs/personal/cards/mitc_cc.pdf. Network and point value not stated. Fuel at HPCL pumps earns 4% cashback (capped Rs200 per month, in rupees not points) plus 1% surcharge waiver (txn Rs400-4,000); not encoded as a points rule. Other fuel earns no points.",
+      "match": [
+        "hpcl super saver",
+        "super saver"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "hpcl-util-dept",
+            "label": "20 points per Rs100 on utility and departmental stores",
+            "rate": {
+              "value": 20,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Grocery"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 400,
+            "notes": "T&C: 5% back as reward points (20 pts per Rs100) on utility and departmental stores, capped at 400 points per statement cycle (card page says per month). T&C names utility and departmental stores; card page also names groceries."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "idfc-first-wealth",
+      "name": "IDFC FIRST Wealth Credit Card",
+      "issuer": "IDFC FIRST Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-01-18",
+      "publishedOn": null,
+      "source": "Wealth Reward Points T&C https://www.idfcfirst.bank.in/content/dam/idfcfirstbank/pdf/Wealth-CC-Rewards-Structure-TnC-28-05-25-copy.pdf (undated; cites July 2026 cycle); Important update notice https://www.idfcfirst.bank.in/content/dam/idfcfirstbank/pdf/credit-card/Wealth-1-Credit-Card.pdf (PDF dated 2025-12-17; base changed to Rs200 per point effective 2026-01-18). 1 point = Rs0.25; valid 24 months. Network not stated.",
+      "match": [
+        "wealth"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 3,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.25,
+        "accelerated": [
+          {
+            "id": "wealth-10x-dining-travel",
+            "label": "10X (10 pts per Rs200) on dining and travel",
+            "rate": {
+              "value": 10,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [
+              "Food & Dining",
+              "Travel"
+            ],
+            "merchants": [],
+            "mccs": [
+              5812,
+              5813,
+              5814,
+              3000,
+              3001,
+              3002,
+              3003,
+              3004,
+              3005,
+              3006,
+              3007,
+              3008,
+              3009,
+              3010,
+              3011,
+              3012,
+              3013,
+              3014,
+              3015,
+              3016,
+              3017,
+              3018,
+              3019,
+              3020,
+              3021,
+              3022,
+              3023,
+              3024,
+              3025,
+              3026,
+              3027,
+              3028,
+              3029,
+              3030,
+              3031,
+              3032,
+              3033,
+              3034,
+              3035,
+              3036,
+              3037,
+              3038,
+              3039,
+              3040,
+              3041,
+              3042,
+              3043,
+              3044,
+              3045,
+              3046,
+              3047,
+              3048,
+              3049,
+              3050,
+              3051,
+              3052,
+              3053,
+              3054,
+              3055,
+              3056,
+              3057,
+              3058,
+              3059,
+              3060,
+              3061,
+              3062,
+              3063,
+              3064,
+              3065,
+              3066,
+              3067,
+              3068,
+              3069,
+              3070,
+              3071,
+              3072,
+              3073,
+              3074,
+              3075,
+              3076,
+              3077,
+              3078,
+              3079,
+              3080,
+              3081,
+              3082,
+              3083,
+              3084,
+              3085,
+              3086,
+              3087,
+              3088,
+              3089,
+              3090,
+              3091,
+              3092,
+              3093,
+              3094,
+              3095,
+              3096,
+              3097,
+              3098,
+              3099,
+              3100,
+              3101,
+              3102,
+              3103,
+              3104,
+              3105,
+              3106,
+              3107,
+              3108,
+              3109,
+              3110,
+              3111,
+              3112,
+              3113,
+              3114,
+              3115,
+              3116,
+              3117,
+              3118,
+              3119,
+              3120,
+              3121,
+              3122,
+              3123,
+              3124,
+              3125,
+              3126,
+              3127,
+              3128,
+              3129,
+              3130,
+              3131,
+              3132,
+              3133,
+              3134,
+              3135,
+              3136,
+              3137,
+              3138,
+              3139,
+              3140,
+              3141,
+              3142,
+              3143,
+              3144,
+              3145,
+              3146,
+              3147,
+              3148,
+              3149,
+              3150,
+              3151,
+              3152,
+              3153,
+              3154,
+              3155,
+              3156,
+              3157,
+              3158,
+              3159,
+              3160,
+              3161,
+              3162,
+              3163,
+              3164,
+              3165,
+              3166,
+              3167,
+              3168,
+              3169,
+              3170,
+              3171,
+              3172,
+              3173,
+              3174,
+              3175,
+              3176,
+              3177,
+              3178,
+              3179,
+              3180,
+              3181,
+              3182,
+              3183,
+              3184,
+              3185,
+              3186,
+              3187,
+              3188,
+              3189,
+              3190,
+              3191,
+              3192,
+              3193,
+              3194,
+              3195,
+              3196,
+              3197,
+              3198,
+              3199,
+              3200,
+              3201,
+              3202,
+              3203,
+              3204,
+              3205,
+              3206,
+              3207,
+              3208,
+              3209,
+              3210,
+              3211,
+              3212,
+              3213,
+              3214,
+              3215,
+              3216,
+              3217,
+              3218,
+              3219,
+              3220,
+              3221,
+              3222,
+              3223,
+              3224,
+              3225,
+              3226,
+              3227,
+              3228,
+              3229,
+              3230,
+              3231,
+              3232,
+              3233,
+              3234,
+              3235,
+              3236,
+              3237,
+              3238,
+              3239,
+              3240,
+              3241,
+              3242,
+              3243,
+              3244,
+              3245,
+              3246,
+              3247,
+              3248,
+              3249,
+              3250,
+              3251,
+              3252,
+              3253,
+              3254,
+              3255,
+              3256,
+              3257,
+              3258,
+              3259,
+              3260,
+              3261,
+              3262,
+              3263,
+              3264,
+              3265,
+              3266,
+              3267,
+              3268,
+              3269,
+              3270,
+              3271,
+              3272,
+              3273,
+              3274,
+              3275,
+              3276,
+              3277,
+              3278,
+              3279,
+              3280,
+              3281,
+              3282,
+              3283,
+              3284,
+              3285,
+              3286,
+              3287,
+              3288,
+              3289,
+              3290,
+              3291,
+              3292,
+              3293,
+              3294,
+              3295,
+              3296,
+              3297,
+              3298,
+              3299,
+              3300,
+              3301,
+              3302,
+              3303,
+              3304,
+              3305,
+              3306,
+              3307,
+              3308,
+              3309,
+              3310,
+              3311,
+              3312,
+              3313,
+              3314,
+              3315,
+              3316,
+              3317,
+              3318,
+              3319,
+              3320,
+              3321,
+              3322,
+              3323,
+              3324,
+              3325,
+              3326,
+              3327,
+              3328,
+              3329,
+              3330,
+              3331,
+              3332,
+              3333,
+              3334,
+              3335,
+              3336,
+              3337,
+              3338,
+              3339,
+              3340,
+              3341,
+              3342,
+              3343,
+              3344,
+              3345,
+              3346,
+              3347,
+              3348,
+              3349,
+              3350,
+              3501,
+              3502,
+              3503,
+              3504,
+              3505,
+              3506,
+              3507,
+              3508,
+              3509,
+              3510,
+              3511,
+              3512,
+              3513,
+              3514,
+              3515,
+              3516,
+              3517,
+              3518,
+              3519,
+              3520,
+              3521,
+              3522,
+              3523,
+              3524,
+              3525,
+              3526,
+              3527,
+              3528,
+              3529,
+              3530,
+              3531,
+              3532,
+              3533,
+              3534,
+              3535,
+              3536,
+              3537,
+              3538,
+              3539,
+              3540,
+              3541,
+              3542,
+              3543,
+              3544,
+              3545,
+              3546,
+              3547,
+              3548,
+              3549,
+              3550,
+              3551,
+              3552,
+              3553,
+              3554,
+              3555,
+              3556,
+              3557,
+              3558,
+              3559,
+              3560,
+              3561,
+              3562,
+              3563,
+              3564,
+              3565,
+              3566,
+              3567,
+              3568,
+              3569,
+              3570,
+              3571,
+              3572,
+              3573,
+              3574,
+              3575,
+              3576,
+              3577,
+              3578,
+              3579,
+              3580,
+              3581,
+              3582,
+              3583,
+              3584,
+              3585,
+              3586,
+              3587,
+              3588,
+              3589,
+              3590,
+              3591,
+              3592,
+              3593,
+              3594,
+              3595,
+              3596,
+              3597,
+              3598,
+              3599,
+              3600,
+              3601,
+              3602,
+              3603,
+              3604,
+              3605,
+              3606,
+              3607,
+              3608,
+              3609,
+              3610,
+              3611,
+              3612,
+              3613,
+              3614,
+              3615,
+              3616,
+              3617,
+              3618,
+              3619,
+              3620,
+              3621,
+              3622,
+              3623,
+              3624,
+              3625,
+              3626,
+              3627,
+              3628,
+              3629,
+              3630,
+              3631,
+              3632,
+              3633,
+              3634,
+              3635,
+              3636,
+              3637,
+              3638,
+              3639,
+              3640,
+              3641,
+              3642,
+              3643,
+              3644,
+              3645,
+              3646,
+              3647,
+              3648,
+              3649,
+              3650,
+              3651,
+              3652,
+              3653,
+              3654,
+              3655,
+              3656,
+              3657,
+              3658,
+              3659,
+              3660,
+              3661,
+              3662,
+              3663,
+              3664,
+              3665,
+              3666,
+              3667,
+              3668,
+              3669,
+              3670,
+              3671,
+              3672,
+              3673,
+              3674,
+              3675,
+              3676,
+              3677,
+              3678,
+              3679,
+              3680,
+              3681,
+              3682,
+              3683,
+              3684,
+              3685,
+              3686,
+              3687,
+              3688,
+              3689,
+              3690,
+              3691,
+              3692,
+              3693,
+              3694,
+              3695,
+              3696,
+              3697,
+              3698,
+              3699,
+              3700,
+              3701,
+              3702,
+              3703,
+              3704,
+              3705,
+              3706,
+              3707,
+              3708,
+              3709,
+              3710,
+              3711,
+              3712,
+              3713,
+              3714,
+              3715,
+              3716,
+              3717,
+              3718,
+              3719,
+              3720,
+              3721,
+              3722,
+              3723,
+              3724,
+              3725,
+              3726,
+              3727,
+              3728,
+              3729,
+              3730,
+              3731,
+              3732,
+              3733,
+              3734,
+              3735,
+              3736,
+              3737,
+              3738,
+              3739,
+              3740,
+              3741,
+              3742,
+              3743,
+              3744,
+              3745,
+              3746,
+              3747,
+              3748,
+              3749,
+              3750,
+              3751,
+              3752,
+              3753,
+              3754,
+              3755,
+              3756,
+              3757,
+              3758,
+              3759,
+              3760,
+              3761,
+              3762,
+              3763,
+              3764,
+              3765,
+              3766,
+              3767,
+              3768,
+              3769,
+              3770,
+              3771,
+              3772,
+              3773,
+              3774,
+              3775,
+              3776,
+              3777,
+              3778,
+              3779,
+              3780,
+              3781,
+              3782,
+              3783,
+              3784,
+              3785,
+              3786,
+              3787,
+              3788,
+              3789,
+              3790,
+              3791,
+              3792,
+              3793,
+              3794,
+              3795,
+              3796,
+              3797,
+              3798,
+              3799,
+              3800,
+              3801,
+              3802,
+              3803,
+              3804,
+              3805,
+              3806,
+              3807,
+              3808,
+              3809,
+              3810,
+              3811,
+              3812,
+              3813,
+              3814,
+              3815,
+              3816,
+              3817,
+              3818,
+              3819,
+              3820,
+              3821,
+              3822,
+              3823,
+              3824,
+              3825,
+              3826,
+              3827,
+              3828,
+              3829,
+              3830,
+              3831,
+              3832,
+              3833,
+              3834,
+              3835,
+              3836,
+              3837,
+              3838,
+              3839,
+              3840,
+              3841,
+              3842,
+              3843,
+              3844,
+              3845,
+              3846,
+              3847,
+              3848,
+              3849,
+              3850,
+              3851,
+              3852,
+              3853,
+              7011,
+              4511,
+              4722,
+              4723
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Dining incl. food delivery MCC 5812, 5813, 5814; travel MCC 3000-3350, 3501-3853, 7011, 4511, 4722, 4723 (per T&C note). The 2025-12-17 notice instead describes 10X on incremental monthly spends above Rs20,000 and on birthday spends; the current rewards T&C/pages (10X on dining, travel, international) are used. International purchases cannot be matched by category and are not encoded. Rewards earned only on spends up to the credit limit per cycle; reversed if minimum due not paid by the due date. Birthday 10X not modelled."
+          },
+          {
+            "id": "wealth-1x",
+            "label": "1X (1 pt per Rs200) on insurance, utilities, railway, FASTag",
+            "rate": {
+              "value": 1,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Insurance"
+            ],
+            "merchants": [],
+            "mccs": [
+              4111,
+              4112,
+              4784
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Per T&C: 3 pts on Rent, Government, Wallet Load, Education (same as base); 1 pt on insurance, utilities, railway, FASTag. Railway MCC 4111, 4112 and FASTag MCC 4784 per Jan 2026 notice. Transactions below Rs200 earn nothing."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "idfc-first-select",
+      "name": "IDFC FIRST Select Credit Card",
+      "issuer": "IDFC FIRST Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-01-18",
+      "publishedOn": null,
+      "source": "IDFC FIRST Select Credit Card page https://www.idfcfirst.bank.in/credit-card/select (page undated; cites July 2026 cycle); Important update notice https://www.idfcfirst.bank.in/content/dam/idfcfirstbank/pdf/credit-card/Select-Credit-Card.pdf (base changed from Rs150 to Rs200 per point effective 2026-01-18). 1 point = Rs0.25; valid 24 months. Network not stated on page.",
+      "match": [
+        "select"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 3,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.25,
+        "accelerated": [
+          {
+            "id": "select-10x",
+            "label": "10X (10 pts per Rs200) on dining and travel",
+            "rate": {
+              "value": 10,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [
+              "Food & Dining",
+              "Travel"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 10X on dining, travel and international purchases. MCC definitions for dining/travel are not given on this page, so only categories are used. International purchases not encoded. Birthday 10X not modelled. The Jan 2026 notice instead describes 10X on incremental monthly spends above Rs20,000; the current page is used. Rewards only up to the credit limit per cycle."
+          },
+          {
+            "id": "select-1x",
+            "label": "1X (1 pt per Rs200) on utilities, insurance, railways, FASTag",
+            "rate": {
+              "value": 1,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Insurance"
+            ],
+            "merchants": [],
+            "mccs": [
+              4111,
+              4112,
+              4784
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 1X on utility bill payments, insurance premiums, railway spends and FASTag recharges. Railway/FASTag MCCs per Jan 2026 notice."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "idfc-first-millennia",
+      "name": "IDFC FIRST Millennia Credit Card",
+      "issuer": "IDFC FIRST Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-01-18",
+      "publishedOn": null,
+      "source": "IDFC FIRST Millennia Credit Card page https://www.idfcfirst.bank.in/credit-card/millennia (page undated; cites July 2026 cycle); Important update notice https://www.idfcfirst.bank.in/content/dam/idfcfirstbank/pdf/credit-card/FIRST-Millennia-Credit-Card.pdf (base changed from Rs150 to Rs200 per point effective 2026-01-18). 1 point = Rs0.25; valid 24 months. Network not stated on page.",
+      "match": [
+        "millennia"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 3,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.25,
+        "accelerated": [
+          {
+            "id": "millennia-10x",
+            "label": "10X (10 pts per Rs200) on dining and travel",
+            "rate": {
+              "value": 10,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [
+              "Food & Dining",
+              "Travel"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 10X on dining, travel and international purchases. MCC definitions for dining/travel are not given on this page, so only categories are used. International purchases not encoded. Birthday 10X not modelled. The Jan 2026 notice instead describes 10X on incremental monthly spends above Rs20,000; the current page is used. Rewards only up to the credit limit per cycle."
+          },
+          {
+            "id": "millennia-1x",
+            "label": "1X (1 pt per Rs200) on utilities, insurance, railways, FASTag",
+            "rate": {
+              "value": 1,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Insurance"
+            ],
+            "merchants": [],
+            "mccs": [
+              4111,
+              4112,
+              4784
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Page: 1X on utility bill payments, insurance premiums, railway spends and FASTag recharges. Railway/FASTag MCCs per Jan 2026 notice."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "idfc-first-ashva",
+      "name": "IDFC FIRST Ashva Credit Card",
+      "issuer": "IDFC FIRST Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-05-27",
+      "publishedOn": "2026-05-27",
+      "source": "Ashva Reward Points T&C https://www.idfcfirst.bank.in/content/dam/idfcfirstbank/pdf/Ashva-CC-Rewards-Structure-TnC-28-05-25-copy.pdf (date is PDF last-modified 2026-05-27; filename suggests 28-05-25). Earn: 5 pts per Rs150 up to Rs20,000 per statement cycle; 10 pts per Rs150 on eligible incremental spends above Rs20,000 per cycle (threshold not modelled; base recorded is the 5 pts tier). 1 point = Rs0.25 (Rs0.40 on app hotel/flight bookings). Network not stated.",
+      "match": [
+        "ashva"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 5,
+          "per": 150,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.25,
+        "accelerated": [
+          {
+            "id": "ashva-1x",
+            "label": "1 pt per Rs150 on Fastag, railways, insurance, utilities",
+            "rate": {
+              "value": 1,
+              "per": 150,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Insurance"
+            ],
+            "merchants": [],
+            "mccs": [
+              4784
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Per T&C. 3 pts per Rs150 on Rent, Government, Wallet Load and Education (not encoded as a separate rule; these do not count toward the Rs20,000 threshold). Transactions below Rs150 earn nothing. Points reversed if minimum due not paid."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "axis-ace",
+      "name": "Axis Bank ACE Credit Card",
+      "issuer": "Axis Bank",
+      "network": "Visa",
+      "rewardType": "cashback",
+      "effectiveFrom": "2026-08-28",
+      "publishedOn": null,
+      "source": "Axis Bank ACE Credit Card Cashback Proposition T&C (rates w.e.f. 20 Apr 2024; undated PDF) https://www.axis.bank.in/docs/default-source/default-document-library/credit-card/axis-bank-ace-credit-card-tncs.pdf ; ACE revision effective 20 Jun 2025 https://www.axis.bank.in/docs/default-source/default-document-library/credit-cards/terms-and-conditions-axis-bank-ace-credit-card.pdf ; Axis Bank 'Revision of Axis Bank Credit Card Terms and Conditions' effective 28-08-2026 (gift cards, bridge/road fees and tolls earn nothing) https://campaign.axis.bank.in/generic/terms-and-conditions-generic-all.pdf",
+      "match": [
+        "ace"
+      ],
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1.5,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "gpay-bills-5",
+            "label": "5% on bill payments, DTH and mobile recharge via Google Pay (Android)",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "google pay",
+              "gpay"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 500,
+            "notes": "Electricity, water, gas, LPG, broadband, DTH and mobile recharge, ONLY when paid with the ACE card on Google Pay for Android. Utility spends on any other platform earn nothing (MCC 4814, 4816, 4899, 4900 since 20 Apr 2024). Rs 500 per statement cap is COMBINED across the 5% and 4% rules; it is entered on each rule here, so the true combined total can be lower. Accelerated cashback is credited by merchant ID. Rate valid from 20 Apr 2024 (unchanged 5%)."
+          },
+          {
+            "id": "food-ride-4",
+            "label": "4% on Swiggy, Zomato and Ola",
+            "rate": {
+              "value": 4,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "swiggy",
+              "zomato",
+              "ola cabs",
+              "olacabs"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 500,
+            "notes": "Website and mobile app of Swiggy, Zomato and Ola. Rs 500 per statement cap is COMBINED with the 5% Google Pay rule. Merchant list can change without notice. Bank says capped cashback applies from 15 Jun 2023."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5541,
+            5542,
+            5983,
+            5944,
+            5960,
+            6300,
+            6381,
+            6011,
+            6012,
+            6051,
+            6513,
+            6540,
+            8211,
+            8241,
+            8244,
+            8249,
+            8299,
+            9399,
+            9311,
+            9222,
+            9402
+          ],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet Load",
+            "Jewellery & Gold",
+            "Insurance",
+            "Education",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": [],
+          "notes": "Utility/telecom spends (MCC 4814, 4816, 4899, 4900) earn nothing unless paid via Google Pay, but are NOT listed here because exclusions are applied before the Google Pay rule. EMI and post-facto EMI conversions earn nothing. Cash advances, card bill payments and fees earn nothing. Gift cards, bridge/road fees and tolls earn nothing (from 28 Aug 2026). Cashback is rounded to the nearest rupee per transaction. Base rate was 2% until 19 Apr 2024, 1.5% from 20 Apr 2024."
+        }
+      }
+    },
+    {
+      "key": "axis-flipkart",
+      "name": "Flipkart Axis Bank Credit Card",
+      "issuer": "Axis Bank",
+      "network": null,
+      "rewardType": "cashback",
+      "effectiveFrom": "2026-08-28",
+      "publishedOn": null,
+      "source": "Cashback Terms & Conditions, Flipkart Axis Bank Credit Card (undated PDF) https://www.axis.bank.in/docs/default-source/default-document-library/cashback-tncs---final.pdf ; revision effective 20 Jun 2025 (Myntra 7.5%, quarterly caps) https://www.axis.bank.in/docs/default-source/default-document-library/terms-and-conditions-flipkart-axis-bank-credit-card.pdf ; Axis Bank 'Revision of Axis Bank Credit Card Terms and Conditions' effective 28-08-2026 (gift cards, bridge/road fees and tolls earn nothing) https://campaign.axis.bank.in/generic/terms-and-conditions-generic-all.pdf",
+      "match": [
+        "flipkart"
+      ],
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "myntra-7-5",
+            "label": "7.5% on Myntra",
+            "rate": {
+              "value": 7.5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "myntra"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Effective 20 Jun 2025 (was 1%). Max INR 4,000 cashback per statement quarter, NOT per cycle (the app has no quarterly cap, so none is entered). Gift cards on Myntra earn nothing. Credited by merchant ID."
+          },
+          {
+            "id": "flipkart-5",
+            "label": "5% on Flipkart",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "flipkart"
+            ],
+            "mccs": [],
+            "excludeMerchants": [
+              "flipkart health"
+            ],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Flipkart website and app, excluding Flipkart Health. Max INR 4,000 per statement quarter (not per cycle, so not entered). Gift cards on Flipkart earn nothing."
+          },
+          {
+            "id": "cleartrip-5",
+            "label": "5% on Cleartrip",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "cleartrip"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Max INR 4,000 per statement quarter (not per cycle, so not entered). Quarter follows your statement date, e.g. 16 Mar to 15 Jun."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            6300,
+            6381,
+            5960,
+            6012,
+            6051,
+            4814,
+            4816,
+            4899,
+            4900,
+            8299,
+            8211,
+            8241,
+            8244,
+            8249
+          ],
+          "categories": [
+            "Utilities & Bills",
+            "Education",
+            "Rent",
+            "Wallet Load",
+            "Government & Tax",
+            "Insurance",
+            "Jewellery & Gold",
+            "Fuel",
+            "EMI"
+          ],
+          "merchants": [],
+          "notes": "Per the 20 Jun 2025 revision, exclusions follow spend category (Utility & Telecom, Education, Rent, Wallet load, Government services, Insurance, Gold & Jewellery, Fuel, Financial institutions, Cash advances, Repayments). EMI and post-facto EMI earn nothing. Gift cards on Flipkart/Myntra earn nothing. Gift cards, bridge/road fees and tolls earn nothing (28 Aug 2026). 4% 'Preferred Merchants' exists but the official PDF does not list them, so no rule is recorded (it states only Swiggy food delivery is eligible, not Instamart/Genie). Rent carries a 1% fee (max Rs 1,500)."
+        }
+      }
+    },
+    {
+      "key": "axis-magnus",
+      "name": "Axis Bank MAGNUS Credit Card",
+      "issuer": "Axis Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-08-28",
+      "publishedOn": null,
+      "source": "Revision of MAGNUS T&C effective 20 Jun 2025 https://www.axis.bank.in/docs/default-source/default-document-library/credit-card-tnc/terms-and-conditions-for-magnus-credit-card.pdf ; T&C for MAGNUS Accelerated Reward Points Benefit (undated) https://www.axis.bank.in/docs/default-source/default-document-library/credit-cards/terms-and-conditions-for-accelerated-35-edge-reward-points.pdf ; Revision effective 28-08-2026 https://campaign.axis.bank.in/generic/terms-and-conditions-magnus.pdf",
+      "match": [
+        "magnus"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 12,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [
+            4814,
+            4816,
+            4899,
+            4900,
+            9222,
+            9311,
+            9399,
+            9402,
+            6540,
+            5541,
+            5542,
+            5983,
+            6300,
+            6381,
+            5960,
+            6051,
+            6012,
+            5094,
+            5944
+          ],
+          "categories": [
+            "Utilities & Bills",
+            "Government & Tax",
+            "Wallet Load",
+            "Fuel",
+            "Insurance",
+            "Jewellery & Gold",
+            "EMI"
+          ],
+          "merchants": [],
+          "notes": "TIERED EARN (the app cannot model it per transaction): 12 EDGE Points per Rs 200 on eligible spend up to Rs 1.5 lakh per calendar month; 35 points per Rs 200 on spend above Rs 1.5 lakh up to (credit limit + Rs 1.5 lakh) per calendar month (revision effective 20 Jun 2025); 12 per Rs 200 beyond that. Accelerated points are credited after month end (about 45 days). Rent (MCC 6513) earns only on the first Rs 50,000 per month. EMI is excluded from the accelerated calculation. Gift cards, bridge/road fees and tolls earn nothing (28 Aug 2026). Travel EDGE / Grab Deals / Gyftr have separate bank programs not recorded. No rupee value per point is stated in these documents."
+        }
+      }
+    },
+    {
+      "key": "axis-atlas",
+      "name": "Axis Bank ATLAS Credit Card",
+      "issuer": "Axis Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-08-28",
+      "publishedOn": null,
+      "source": "Atlas Credit Card Features T&Cs (EDGE Miles; undated, exclusions from 20 Apr 2024) https://www.axis.bank.in/docs/default-source/default-document-library/credit-cards/terms-and-conditions-of-features-of-axis-bank-atlas-credit-card.pdf ; Atlas revision effective 20 Jun 2025 https://www.axis.bank.in/docs/default-source/default-document-library/credit-cards/terms-and-conditions-atlas-credit-card.pdf ; Axis Bank 'Revision of Axis Bank Credit Card Terms and Conditions' effective 28-08-2026 (gift cards, bridge/road fees and tolls earn nothing) https://campaign.axis.bank.in/generic/terms-and-conditions-generic-all.pdf",
+      "match": [
+        "atlas"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 1,
+        "accelerated": [
+          {
+            "id": "travel-5",
+            "label": "5 EDGE Miles per Rs 100 on Travel EDGE, airlines and hotels",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "travel edge",
+              "traveledge"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 10000,
+            "notes": "Applies to Axis Travel EDGE portal, direct airline and direct hotel spends (identified by airline/hotel MCC). Bookings via travel agents or online travel agencies earn only the 2 per Rs 100 base. Cap derived from the bank's limit of Rs 2,00,000 spend per month at 5 per Rs 100 = 10,000 miles; above that 2 per Rs 100. Direct airline/hotel MCCs are not enumerated in the document, so only the Travel EDGE merchant name is matched."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Jewellery & Gold",
+            "Rent",
+            "Insurance",
+            "Government & Tax",
+            "Utilities & Bills",
+            "Fuel",
+            "Wallet Load"
+          ],
+          "merchants": [],
+          "notes": "No miles on gold/jewellery, rent, insurance, government, utilities and telecom, fuel, wallet, gift cards, bridge/road fees and tolls. 2 miles per Rs 100 on other spends from 20 Dec 2022 (1 before). Miles cannot be encashed; bank states 1 EDGE Mile = INR 1."
+        }
+      }
+    },
+    {
+      "key": "axis-airtel",
+      "name": "Airtel Axis Bank Credit Card",
+      "issuer": "Axis Bank",
+      "network": null,
+      "rewardType": "cashback",
+      "effectiveFrom": "2026-04-12",
+      "publishedOn": null,
+      "source": "Cashback and Value back Terms & Conditions, Airtel Axis Bank Credit Card (effective from 12 April 2026) https://www.axis.bank.in/docs/default-source/default-document-library/credit-cards/terms-and-conditions-for-cashback-for-airtel-axis-bank-credit-card.pdf",
+      "match": [
+        "airtel"
+      ],
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "airtel-thanks-25",
+            "label": "25% on Airtel mobile, broadband, WiFi and DTH bills via Airtel Thanks app",
+            "rate": {
+              "value": 25,
+              "per": 100,
+              "blockBased": false
+            },
+            "categories": [],
+            "merchants": [
+              "airtel"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Only via the Airtel Thanks app, for active Airtel connections. Capped at TWICE the 1% base cashback earned in the same statement month (so it earns nothing if you have no base spend); the app cannot model this base-linked cap, so none is entered. Also: 10% on other utility bills (electricity, gas etc.) via Airtel Thanks, capped at 1x base cashback; not recorded as a separate rule because it uses the same merchant. Revised capping applies to statements generated on or after 12 Jun 2026."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet Load",
+            "Jewellery & Gold",
+            "Insurance",
+            "Education",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": [],
+          "notes": "No cashback on cash advances/financial institutions, fuel, rent, wallet recharge, jewelry, insurance, education, government, gift cards, bridge/road fees and tolls, EMI and post-facto EMI. Utility and telecom spends outside the Airtel Thanks app earn nothing (not listed here because exclusions are applied before the Airtel rule). 10% value back at Zomato, Blinkit and District Movies (INR 200 per partner per month, min order INR 499 on Zomato/Blinkit) goes to the partner wallet, not as statement cashback, so it is not recorded."
+        }
+      }
+    },
+    {
+      "key": "axis-neo",
+      "name": "Axis Bank NEO Credit Card",
+      "issuer": "Axis Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-08-28",
+      "publishedOn": null,
+      "source": "Axis Bank NEO card page, 'Earn 1 point for every Rs 200 spent' https://www.axis.bank.in/cards/credit-card/axis-bank-neo-credit-card ; NEO EDGE REWARD Points T&Cs (undated) https://www.axis.bank.in/docs/default-source/default-document-library/credit-cards/neo-edge-rewards-mcc-exclusions.pdf ; NEO revision effective 20 Jun 2025 https://www.axis.bank.in/docs/default-source/default-document-library/credit-cards/terms-and-conditions-for-neo-credit-card.pdf ; NEO revision effective 28-08-2026 https://campaign.axis.bank.in/generic/terms-and-conditions-neo.pdf",
+      "match": [
+        "neo"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Utilities & Bills",
+            "Education",
+            "Insurance",
+            "Government & Tax",
+            "Wallet Load",
+            "Fuel"
+          ],
+          "merchants": [],
+          "notes": "No points on utilities and telecom, education, insurance, government, wallet, gold and jewellery, fuel, cash advances, repayments, gift cards, bridge/road fees and tolls. Rent: the older NEO exclusions PDF lists rent as excluded, the 20 Jun 2025 revision says 'Rent (capped at INR 50,000 per month)', so rent is left out of the exclusions as ambiguous. No rupee value per point is stated for NEO. Offers (Zomato, Blinkit, BookMyShow, Paytm) are discounts, not reward points."
+        }
+      }
+    },
+    {
+      "key": "axis-select",
+      "name": "Axis Bank SELECT Credit Card",
+      "issuer": "Axis Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-08-28",
+      "publishedOn": null,
+      "source": "Axis Bank SELECT card page, 'Rewards on every transaction' https://www.axis.bank.in/cards/credit-card/axis-bank-select-credit-card ; SELECT revision effective 20 Jun 2025 https://www.axis.bank.in/docs/default-source/default-document-library/credit-cards/terms-and-conditions-for-select-credit-card.pdf ; SELECT revision effective 28-08-2026 https://campaign.axis.bank.in/generic/terms-and-conditions-select.pdf",
+      "match": [
+        "select"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 10,
+          "per": 200,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.2,
+        "accelerated": [
+          {
+            "id": "retail-2x",
+            "label": "2X (20 points per Rs 200) on retail shopping up to Rs 20,000 a month",
+            "rate": {
+              "value": 20,
+              "per": 200,
+              "blockBased": true
+            },
+            "categories": [
+              "Grocery"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 2000,
+            "notes": "Bank says 'Earn 2X EDGE Reward Points up to cumulative transactions of Rs 20,000 per month; above that 10 points'. Retail shopping = department stores, grocery stores, clothing and accessory stores, women's, children's and family clothing stores, misc apparel. Only Grocery maps to an app category and no MCC numbers are given, so other retail is not matched. Cap of 2,000 points is derived: Rs 20,000 / 200 x 20."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Insurance",
+            "Rent",
+            "Fuel",
+            "Education",
+            "Utilities & Bills",
+            "Wallet Load",
+            "Jewellery & Gold",
+            "Government & Tax"
+          ],
+          "merchants": [],
+          "notes": "No points on insurance, rent, fuel, educational services, utilities and telecom, wallet, gold/jewellery, government services, gift cards, bridge/road fees and tolls. Points are debited if a transaction is converted to EMI. The bank page values the 10,000 welcome points at Rs 2,000, i.e. Rs 0.20 per point."
+        }
+      }
+    },
+    {
+      "key": "sbi-simplyclick",
+      "name": "SimplyCLICK SBI Card",
+      "issuer": "SBI Card",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-03-20",
+      "publishedOn": null,
+      "source": "SimplyCLICK SBI Card T&C, Reward Point section and Exclusive Online Partner table (latest partner dated 20 Mar 2026; undated booklet) https://www.sbicard.com/sbi-card-en/assets/docs/pdf/personal/credit-cards/value-savings/simplyclick/simplyclick-sbi-card-rp-tnc.pdf ; SBI Card Cardholder Agreement https://www.sbicard.com/en/cardholder-agreement.page ; SBI Card customer notices https://www.sbicard.com/en/customer-notices.page",
+      "match": [
+        "simplyclick",
+        "simply click"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "partners-10x",
+            "label": "10X (10 points per Rs 100) online with exclusive partners",
+            "rate": {
+              "value": 10,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "apollo 24",
+              "apollo247",
+              "bookmyshow",
+              "book my show",
+              "cleartrip",
+              "domino",
+              "gyftr",
+              "igp",
+              "myntra",
+              "netmeds",
+              "swiggy",
+              "tata cliq",
+              "tatacliq",
+              "yatra"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [
+              6540,
+              6541
+            ],
+            "minSpend": 0,
+            "capPerCycle": 10000,
+            "notes": "Partners per the T&C table with effective dates: Apollo 24|7 (6 Aug 2021), BookMyShow (15 Sep 2015), Cleartrip (15 Sep 2015), Domino's (1 Aug 2023), GyFTR (1 Aug 2025; e-gift vouchers only via the GyFTR portal), IGP (10 Feb 2025), Myntra (1 Aug 2023), Netmeds (11 Mar 2019), Swiggy (1 Aug 2025), Tata CLiQ (20 Mar 2026), Yatra (1 Aug 2023). A customer notice said Swiggy dropped to 5X from 1 Apr 2025, but the later T&C table lists Swiggy at 10X from 1 Aug 2025. Online only, INR payments, credited by merchant ID; Cleartrip and Yatra affiliate-channel bookings do not earn 10X. 10,000 points per calendar month cap (effective 1 Oct 2020). 5X is also earned on ALL OTHER ONLINE spends (separate cap 10,000 points a month, then 1 per Rs 100); not recorded because the app cannot tell online from offline spends."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983,
+            6540,
+            6541,
+            6513,
+            9399,
+            9311,
+            5816,
+            7993,
+            7994
+          ],
+          "categories": [
+            "Rent",
+            "Wallet Load",
+            "Government & Tax"
+          ],
+          "merchants": [],
+          "notes": "No points on cash advance, balance transfer, encash, Flexipay, offline fuel (MCC 5172, 5541, 5983, 5542), e-wallet loads (6540, 6541), rent from 1 Apr 2024 (6513), government from 1 Jun 2024 (9399, 9311), digital gaming from 1 Dec 2024 (5816, 7993, 7994). Utility bills paid on the SBI Card website/app do not get 5X. Points valid 24 months. No rupee value per point is stated in these documents."
+        }
+      }
+    },
+    {
+      "key": "sbi-simplysave",
+      "name": "SimplySAVE SBI Card",
+      "issuer": "SBI Card",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2022-03-01",
+      "publishedOn": null,
+      "source": "SBI Card Cardholder Agreement, Rewards Program (SimplySAVE: 1 point per Rs 150, 10 per Rs 150 on accelerated categories, w.e.f. 01 Mar 2022; 5,000 point monthly cap) https://www.sbicard.com/en/cardholder-agreement.page ; SimplySAVE Merchant SBI Card T&C booklet (MCC list; undated) https://www.sbicard.com/sbi-card-en/assets/docs/pdf/ekit-tncs/simplySAVE-merchant-tnc-booklet.pdf",
+      "match": [
+        "simplysave",
+        "simply save"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 150,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "promoted-10x",
+            "label": "10 points per Rs 150 on dining, movies, groceries and departmental stores",
+            "rate": {
+              "value": 10,
+              "per": 150,
+              "blockBased": true
+            },
+            "categories": [
+              "Grocery"
+            ],
+            "merchants": [],
+            "mccs": [
+              5311,
+              5411,
+              5812,
+              5813,
+              5814,
+              7832
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 5000,
+            "notes": "MCCs from the SimplySAVE booklet: 5311 department stores, 5411 grocery, 5812/5813/5814 dining, 7832 cinemas. Cap 5,000 points per calendar month; after that 1 point per Rs 150. Grocery and department-store points apply to standalone outlets, not those inside large-format stores or malls. Metro Cash & Carry, Flipkart Wholesale and Walmart (MCC 5311/5411) are identified on a best-effort basis. Booklet text is from the SimplySAVE Merchant variant; the Cardholder Agreement states the same rates for SimplySAVE."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983
+          ],
+          "categories": [],
+          "merchants": [],
+          "notes": "No points on cash advance, balance transfer, encash, Flexipay and fuel (MCC 5172, 5541, 5542, 5983). The SimplySAVE Merchant booklet also says rent (6513), government (9399, 9311) and digital gaming (5816, 7993, 7994) accrual was discontinued; the Cardholder Agreement says this applies to 'certain cards' only, so those MCCs are not added here. Points valid 24 months. No rupee value per point is stated in these documents."
+        }
+      }
+    },
+    {
+      "key": "sbi-prime",
+      "name": "SBI Card PRIME",
+      "issuer": "SBI Card",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2021-02-22",
+      "publishedOn": null,
+      "source": "SBI Card Cardholder Agreement, Rewards Program and monthly caps (7,500 points/month from 1 Aug 2018; birthday cap from 22 Feb 2021) https://www.sbicard.com/en/cardholder-agreement.page ; PRIME T&C booklet (SI09012018) https://www.sbicard.com/sbi-card-en/assets/docs/pdf/personal/credit-cards/rewards/sbi-card-prime/prime-t&c-booklet-combined.pdf ; PRIME brochure https://www.sbicard.com/sbi-card-en/assets/docs/pdf/personal/credit-cards/rewards/sbi-card-prime/prime-web-brochure.pdf",
+      "match": [
+        "prime"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "promoted-10x",
+            "label": "10 points per Rs 100 on dining, departmental stores, groceries and movies",
+            "rate": {
+              "value": 10,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Grocery"
+            ],
+            "merchants": [],
+            "mccs": [
+              5311,
+              5411,
+              5812,
+              5813,
+              5814,
+              7832
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 7500,
+            "notes": "The agreement calls this '5X' and caps cumulative 5X points at 7,500 per month, after which 2 points per Rs 100. Departmental store (5311) and grocery (5411) MCCs are named in the Cardholder Agreement; dining (5812-5814) and cinema (7832) MCCs are copied from the SimplySAVE booklet because the Prime documents only say 'Visa/Mastercard category'. Not recorded: 15 per Rs 100 at Reliance Fresh/Smart/Trends and BigBasket (only in the 2018 booklet, may be outdated), and 20 per Rs 100 on the birthday and a day either side (cap 2,000 points per year, no other accelerated points that period)."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            6540,
+            6541
+          ],
+          "categories": [
+            "Fuel",
+            "Wallet Load"
+          ],
+          "merchants": [],
+          "notes": "No points on balance transfers, cash advances, financial charges, disputed transactions, petrol pump purchases (2018 booklet) and e-wallet loads (MCC 6540, 6541). Rent and government accrual has been discontinued only for 'certain cards' per SBI's list (https://sbicard.com/cardslist); Prime is not confirmed, so not added. Points valid 24 months. No rupee value per point is stated in these documents."
+        }
+      }
+    },
+    {
+      "key": "sbi-elite",
+      "name": "SBI Card ELITE",
+      "issuer": "SBI Card",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2018-08-01",
+      "publishedOn": null,
+      "source": "SBI Card ELITE brochure (2 points per Rs 100, 5X on departmental, grocery, dining; 4 points = Rs 1) https://www.sbicard.com/sbi-card-en/assets/docs/pdf/personal/credit-cards/lifestyle/sbi-card-elite/E-Brochure_FINAL.pdf ; SBI Card Cardholder Agreement, monthly cap 10,000 points from 1 Aug 2018 https://www.sbicard.com/en/cardholder-agreement.page",
+      "match": [
+        "elite"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.25,
+        "accelerated": [
+          {
+            "id": "promoted-5x",
+            "label": "5X (10 points per Rs 100) on dining, departmental stores and groceries",
+            "rate": {
+              "value": 10,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Grocery"
+            ],
+            "merchants": [],
+            "mccs": [
+              5311,
+              5411,
+              5812,
+              5813,
+              5814
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 10000,
+            "notes": "Cumulative 5X points capped at 10,000 per month, after which 2 points per Rs 100. The brochure also lists international spends at 5X while the Cardholder Agreement's Elite cap line names only dining, departmental store and grocery, so international is not included. Departmental (5311) and grocery (5411) MCCs are named in the Cardholder Agreement; dining MCCs (5812-5814) are copied from the SimplySAVE booklet. Metro Cash & Carry, Flipkart Wholesale and Walmart are identified on a best-effort basis."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            6540,
+            6541
+          ],
+          "categories": [
+            "Wallet Load"
+          ],
+          "merchants": [],
+          "notes": "e-wallet loads (MCC 6540, 6541) earn no points. A card-specific Elite T&C booklet could not be retrieved, so other exclusions (fuel, rent, government) are not recorded. Points valid 24 months. 4 reward points = Rs 1 per the brochure."
+        }
+      }
+    },
+    {
+      "key": "sbi-bpcl",
+      "name": "BPCL SBI Card",
+      "issuer": "SBI Card",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2023-07-01",
+      "publishedOn": null,
+      "source": "BPCL SBI Card Terms & Conditions / MITC booklet (undated) https://www.sbicard.com/sbi-card-en/assets/docs/pdf/bpcl-tnc-mitc-booklet-combined.pdf ; BPCL SBI Card T&C https://www.sbicard.com/sbi-card-en/assets/docs/pdf/personal/credit-cards/travel/bpcl-tnc.pdf ; SBI Card Cardholder Agreement (rent discontinued w.e.f. 01 Jul 2023) https://www.sbicard.com/en/cardholder-agreement.page",
+      "match": [
+        "bpcl"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.25,
+        "accelerated": [
+          {
+            "id": "bpcl-fuel-13x",
+            "label": "13 points per Rs 100 on BPCL fuel",
+            "rate": {
+              "value": 13,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "bpcl",
+              "bharat petroleum"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 1300,
+            "notes": "Max 1,300 points per statement cycle and fuel spend counted up to Rs 10,000 per month (13 x 100 = same). Credited by BPCL merchant ID list reviewed monthly. 4.25% value back = 13X (3.25%) plus 1% fuel surcharge waiver on transactions up to Rs 4,000 (waiver max Rs 100 per cycle, not a reward point)."
+          },
+          {
+            "id": "lifestyle-5x",
+            "label": "5 points per Rs 100 on groceries, departmental stores, movies and dining",
+            "rate": {
+              "value": 5,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Grocery"
+            ],
+            "merchants": [],
+            "mccs": [
+              5311,
+              5411,
+              5812,
+              5813,
+              5814,
+              7832
+            ],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 5000,
+            "notes": "Cap 5,000 points per CALENDAR month (w.e.f. 1 Sep 2020), then 1 point per Rs 100. MCCs copied from the SimplySAVE booklet, the BPCL booklet only names the categories."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            6540,
+            6541,
+            6513
+          ],
+          "categories": [
+            "Rent",
+            "Wallet Load"
+          ],
+          "merchants": [],
+          "notes": "1 point per Rs 100 on other spends, EXCEPT fuel: purchases at petrol pumps other than BPCL earn nothing, but Fuel is not listed here because exclusions are applied before the BPCL fuel rule. No points on balance transfers, cash advances, e-wallet loads (6540, 6541), financial charges and disputed transactions; rent discontinued from 1 Jul 2023 (MCC 6513). 1 point = Rs 0.25 (4 points = Rs 1 of fuel). Points valid 24 months per the general MITC."
+        }
+      }
+    },
+    {
+      "key": "kotak-league-platinum",
+      "name": "League Platinum Kotak Credit Card",
+      "issuer": "Kotak Mahindra Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2025-06-01",
+      "publishedOn": null,
+      "source": "Kotak League Platinum Credit Card product page + FAQ (rewards, revisions effective 1 Jun 2025, MCC exclusion list) https://www.kotak.bank.in/en/personal-banking/cards/credit-cards/league-platinum-card.html . Read 2026-10-31. Not modelled: base is 4 pts/Rs150 while anniversary-year spend is up to Rs 2 lakh and 8 pts/Rs150 once it reaches Rs 2 lakh; utility spend earns only up to Rs 35,000 per statement cycle; fuel surcharge waiver. Cash redemption Rs 0.07/pt (min 2,000 pts, from 1 Jun 2025), other redemption Rs 0.10/pt.",
+      "match": [
+        "league platinum"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 4,
+          "per": 150,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.07,
+        "accelerated": [
+          {
+            "id": "special-8x",
+            "label": "8 points per Rs 150 on travel agencies, airlines, electric sales, durable goods, departmental stores",
+            "rate": {
+              "value": 8,
+              "per": 150,
+              "blockBased": true
+            },
+            "categories": [
+              "Travel"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Bank lists special categories as travel agencies and tour operators, package tour operators, airlines and air carriers, electric sales, durable goods, departmental stores. Bank page gives no MCC numbers for these, so only the travel category is mapped; durable goods and departmental stores are not mapped."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983,
+            5960,
+            6300,
+            6381,
+            6399,
+            8211,
+            8220,
+            8241,
+            8244,
+            8249,
+            8299,
+            9222,
+            9223,
+            9311,
+            9399,
+            9402,
+            9405,
+            6513,
+            6540,
+            5816,
+            4011,
+            4112
+          ],
+          "categories": [
+            "Fuel",
+            "Insurance",
+            "Education",
+            "Government & Tax",
+            "Rent",
+            "Wallet Load"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "kotak-royale-signature",
+      "name": "Royale Signature Kotak Credit Card",
+      "issuer": "Kotak Mahindra Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2025-06-01",
+      "publishedOn": null,
+      "source": "Kotak Royale Signature Credit Card features page (marked Discontinued for new applications; existing holders still earn) https://www.kotak.bank.in/en/personal-banking/cards/credit-cards/royale-signature-credit-card/features.html . Read 2026-10-31. Not modelled: from 1 Jun 2025 education and insurance earn points only on spend up to Rs 70,000 per statement cycle, utility up to Rs 50,000, government up to Rs 40,000. Point value not confirmed on the page fetched.",
+      "match": [
+        "royale"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 2,
+          "per": 150,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "travel-dining-4x",
+            "label": "4 points per Rs 150 on hotels, restaurants, travel agencies, tour operators, airlines, international spends",
+            "rate": {
+              "value": 4,
+              "per": 150,
+              "blockBased": true
+            },
+            "categories": [
+              "Travel"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "Bank lists hotels, restaurants, travel agencies and tour operators, package tour operators, airlines and air carriers, and international spends as the 4-point categories. Hotels, restaurants and international spends cannot be mapped to the app categories; the app may need MCC/international handling."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet Load"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "indusind-tiger",
+      "name": "IndusInd Bank Tiger Credit Card",
+      "issuer": "IndusInd Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-31",
+      "publishedOn": null,
+      "source": "IndusInd Bank Tiger Credit Card product page (rewards, Magnificent Rewards Program) https://www.indusind.bank.in/in/en/personal/cards/credit-card/tiger-credit-card.html ; MITC https://www.indusind.bank.in/content/dam/indusind-corporate/credit-cards/MITC_Premium.pdf (reward earn rule not found in the MITC text). No effective date stated; effectiveFrom is the date read. Not modelled: annual-spend slabs, incremental per slab: up to Rs 1,00,000 = 1 pt/Rs100, 1,00,001-2,50,000 = 2x, 2,50,001-5,00,000 = 4x, above 5,00,000 = 6x. Accelerated slabs not earned on utility, insurance, government, education, real estate, rent. Cash redemption max 5,000 pts per calendar month from 1 Sep 2024. 1 pt = Rs 0.40 cash credit.",
+      "match": [
+        "tiger"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.4,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "indusind-legend",
+      "name": "IndusInd Bank Legend Credit Card",
+      "issuer": "IndusInd Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-31",
+      "publishedOn": null,
+      "source": "IndusInd Bank Legend Credit Card product page https://www.indusind.bank.in/in/en/personal/cards/credit-card/legend-credit-card.html . No effective date stated for the current rule; effectiveFrom is the date read. Not modelled: weekend (Sat/Sun) spend earns 2 pts per Rs 100 instead of 1; medical, automobile and telecom earn 1 pt per Rs 100 on weekdays and weekends (from 1 Jan 2022); fuel earns nothing (from 1 Apr 2018); 3,000 bonus points on Rs 5,00,000+ spend within a year of issue. Page does not state a rupee value per point.",
+      "match": [
+        "legend"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "rbl-shoprite",
+      "name": "RBL Bank ShopRite Credit Card",
+      "issuer": "RBL Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2024-10-15",
+      "publishedOn": null,
+      "source": "RBL Bank ShopRite Credit Card product page https://www.rbl.bank.in/personal-banking/cards/credit-cards/shoprite-credit-card ; product T&C https://webassets.rbl.bank.in/document/credit-cards/tnc-shoprite-credit-card.pdf ; MITC https://webassets.rbl.bank.in/document/Credit%20Cards/RBL-MITC-final.pdf . Page read 2026-10-31; 15 Oct 2024 is the date the page states for added exclusions. Page: each reward point redeemable for up to Rs 0.25. Railways treatment is unclear on the page so it is not listed as an exclusion.",
+      "match": [
+        "shoprite"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.25,
+        "accelerated": [
+          {
+            "id": "grocery-20x",
+            "label": "20 points per Rs 100 on grocery",
+            "rate": {
+              "value": 20,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [
+              "Grocery"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 1000,
+            "notes": "Cap is 1,000 reward points per month on grocery spends (page wording). Points credited within 45 days of settlement."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Utilities & Bills",
+            "Insurance",
+            "Rent",
+            "Education",
+            "Wallet Load",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "rbl-fun-plus",
+      "name": "RBL Bank Fun+ Credit Card (BookMyShow)",
+      "issuer": "RBL Bank",
+      "network": "Mastercard",
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-31",
+      "publishedOn": null,
+      "source": "RBL Bank Fun+ Credit Card page (no longer accepting applications; replaced by RBL Bank Play card which has no reward points) https://www.rbl.bank.in/personal-banking/cards/credit-cards/fun-plus-credit-card ; product T&C section 3.4 https://webassets.rbl.bank.in/document/credit-cards/terms-conditions-funplus.pdf (file created 2026-05-18, no effective date stated). effectiveFrom is the date read. Not modelled: 20 pts per Rs 100 on dining on weekends (Sat/Sun only, MCC-based). 12,000 bonus points on Rs 4 lakh annual spend. 12,000 points = Rs 3,000 vouchers on the page, so about Rs 0.25 per point.",
+      "match": [
+        "fun+",
+        "fun plus"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.25,
+        "accelerated": [
+          {
+            "id": "bms-pizzahut-kfc-10x",
+            "label": "10 points per Rs 100 on BookMyShow, Pizza Hut, KFC",
+            "rate": {
+              "value": 10,
+              "per": 100,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "bookmyshow",
+              "pizza hut",
+              "kfc"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 1000,
+            "notes": "T&C: maximum 1,000 accelerated reward points per billing cycle (covers weekend dining and these merchants together). Pizza Hut and KFC identified by dining MCC."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            4011,
+            4112
+          ],
+          "categories": [
+            "Fuel",
+            "Utilities & Bills",
+            "Insurance",
+            "Rent",
+            "Education",
+            "Wallet Load",
+            "Government & Tax",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "federal-scapia",
+      "name": "Federal Scapia Credit Card",
+      "issuer": "Federal Bank",
+      "network": "Visa",
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-31",
+      "publishedOn": null,
+      "source": "Federal Bank Scapia co-branded card page https://www.federal.bank.in/scapia (page last updated 31 Oct 2026; Visa 10% reward on eligible spend, 1 reward = 1 Scapia Coin, 5 coins = Rs 1, no cap stated). MITC v11 (30 Apr 2026) https://www.federal.bank.in/documents/d/guest/mitc-v11-30-4-26-eng could not be read (bot protection), so the list of ineligible spends is NOT confirmed and exclusions are left empty. 10 coins per Rs 100 and Rs 0.20 per coin are derived arithmetic from the page's 10% and 5 coins = Rs 1. RuPay variant earns 5% on spends of Rs 500 or more (not modelled).",
+      "match": [
+        "scapia"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 10,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": 0.2,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [],
+          "categories": [],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "sc-smart",
+      "name": "Standard Chartered Smart Credit Card",
+      "issuer": "Standard Chartered Bank",
+      "network": null,
+      "rewardType": "cashback",
+      "effectiveFrom": "2024-08-21",
+      "publishedOn": null,
+      "source": "Smart Credit Card Terms and Conditions https://av.sc.bank.in/content/docs/in-smartcard-product-terms-and-conditions.pdf ; product page https://www.sc.bank.in/credit-cards/smart-credit-card/ . 21 Aug 2024 is the date the T&C moves the cap to client level. Bank rate is 2% on online and 1% on other (offline) spends; online vs offline is by card-network classification and cannot be mapped to app categories, so base is the 1% offline rate and the 2% online rate is NOT modelled. Caps per statement cycle: Rs 1,000 online plus Rs 500 offline (Rs 1,500 combined used as capPerCycle). No cashback on fuel, returns, finance charges, cash advances; bill payments through Billdesk/StanChart Bill Pay earn only for telecom and utilities billers.",
+      "match": [
+        "smart credit"
+      ],
+      "rules": {
+        "rewardType": "cashback",
+        "base": {
+          "value": 1,
+          "per": 100,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": 1500,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "sc-ultimate",
+      "name": "Standard Chartered Ultimate Credit Card",
+      "issuer": "Standard Chartered Bank",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2023-04-02",
+      "publishedOn": null,
+      "source": "Standard Chartered Ultimate Credit Card Terms and Conditions, Section 3 https://www.sc.bank.in/content/dam/sc/in/credit-cards/docs/in-ultimate-credit-card-tnc.pdf (5 pts per Rs 150, reduced from 2 Apr 2023 to 3 pts per Rs 150 on utilities, supermarkets, insurance, property management, schools, government payments; no points on fuel, ATM, returns, finance charges). Point value not stated in the T&C text read, so pointValue is null. Property management is not mapped to a category.",
+      "match": [
+        "ultimate"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 5,
+          "per": 150,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "billingCycle",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "reduced-3x",
+            "label": "Reduced 3 points per Rs 150 on utilities, supermarkets, insurance, schools, government",
+            "rate": {
+              "value": 3,
+              "per": 150,
+              "blockBased": true
+            },
+            "categories": [
+              "Utilities & Bills",
+              "Grocery",
+              "Insurance",
+              "Education",
+              "Government & Tax"
+            ],
+            "merchants": [],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": null,
+            "notes": "This is a LOWER rate than base, applied to the categories the bank lists (utilities, supermarkets, insurance, property management, schools and government payments). Effective 2 Apr 2023."
+          }
+        ],
+        "exclusions": {
+          "mccs": [
+            5172,
+            5541,
+            5542,
+            5983
+          ],
+          "categories": [
+            "Fuel"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "hsbc-premier",
+      "name": "HSBC Premier Credit Card",
+      "issuer": "HSBC India",
+      "network": "Mastercard",
+      "rewardType": "points",
+      "effectiveFrom": "2026-10-31",
+      "publishedOn": null,
+      "source": "HSBC Rewards Marketplace Terms and Conditions (Premier section) https://www.hsbc.bank.in/content/dam/hsbc/in/documents/hsbc-rewards-tcs.pdf ; rewards page https://www.hsbc.bank.in/credit-cards/products/premier/rewards/ . Document is copyright 2025 with no effective date; effectiveFrom is the date read. 3 pts per Rs 100, no points on fuel (MCC 5541, 5983, 5172, 5542, 5552), cash advances, fees, disputed; no points on Instant EMI. Not modelled: spend in utilities, tax, real estate, non-financial institutions, money transfer, jewelry, insurance, financial institutions, e-wallets, bail and bond, education and government earns points only up to Rs 1,00,000 cumulative per month. Travel with Points portal bookings earn 18 pts/Rs100 flights, 36 hotels, 6 car rental, accelerated cap 18,000 pts per calendar month. Points do not expire. Point value not stated generally (1 pt = Rs 1 on Apple only).",
+      "match": [
+        "hsbc premier"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 3,
+          "per": 100,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [
+            5541,
+            5983,
+            5172,
+            5542,
+            5552
+          ],
+          "categories": [
+            "Fuel"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "federal-onecard",
+      "name": "OneCard (Federal Bank One Co-Branded Credit Card)",
+      "issuer": "Federal Bank (with FPL / OneCard)",
+      "network": null,
+      "rewardType": "points",
+      "effectiveFrom": "2024-12-05",
+      "publishedOn": "2024-12-05",
+      "source": "The Federal Bank One Co-Branded Credit Card MITC, w.e.f. 5 December 2024 https://assets.getonecard.app/assets/legal/MITC_Federal_Bank_1740489777652.pdf (Federal Bank's own page https://www.federal.bank.in/onecard was blocked). 1 reward point per Rs 50, fractional points for smaller amounts. No points on money transfers, rent, fuel (from 15 Dec 2023), cash withdrawals, wallet loads. Not modelled: 5X on the top 2 spend categories each month, only if spend is across at least 3 categories with at least Rs 750 in each (from 6 Jan 2025), credited on the 10th of the next month. Point value not stated in the MITC.",
+      "match": [
+        "onecard",
+        "one card"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 50,
+          "blockBased": false
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Rent",
+            "Wallet Load"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "amex-platinum-travel",
+      "name": "American Express Platinum Travel Credit Card",
+      "issuer": "American Express India",
+      "network": "American Express",
+      "rewardType": "points",
+      "effectiveFrom": "2025-06-12",
+      "publishedOn": null,
+      "source": "American Express Platinum Travel Credit Card page https://www.americanexpress.com/in/credit-cards/platinum-travel-credit-card/ (1 MR point per Rs 50; no points on fuel, insurance, utilities, cash, EMI at POS; EMI exclusion since 15 Mar 2020; milestone bonuses automatic from 9 Mar 2026). 12 Jun 2025 fuel exclusion date comes from Amex India Membership Rewards terms shown in search results, not from this page. Page read 2026-10-31. New applications are paused. Milestone bonus points (Rs 4 lakh = 10,000 pts) not modelled. MR point rupee value not stated.",
+      "match": [
+        "platinum travel"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 50,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Insurance",
+            "Utilities & Bills",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "amex-membership-rewards",
+      "name": "American Express Membership Rewards Credit Card",
+      "issuer": "American Express India",
+      "network": "American Express",
+      "rewardType": "points",
+      "effectiveFrom": "2025-06-12",
+      "publishedOn": null,
+      "source": "American Express Membership Rewards Credit Card page https://www.americanexpress.com/in/credit-cards/membership-rewards-card/ (1 MR point per Rs 50; no points on fuel, insurance, utilities, cash, EMI at POS; EMI exclusion since 15 Mar 2020). 12 Jun 2025 fuel exclusion date from Amex India MR terms in search results. Page read 2026-10-31. New applications are paused. Not modelled: monthly bonus 1,000 pts for 4 transactions of Rs 1,500+ and 1,000 pts for Rs 20,000+ monthly spend (needs enrollment). MR point rupee value not stated.",
+      "match": [
+        "membership rewards"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 50,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Insurance",
+            "Utilities & Bills",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
+    },
+    {
+      "key": "amex-smartearn",
+      "name": "American Express SmartEarn Credit Card",
+      "issuer": "American Express India",
+      "network": "American Express",
+      "rewardType": "points",
+      "effectiveFrom": "2025-06-12",
+      "publishedOn": "2024-08-28",
+      "source": "American Express SmartEarn Credit Card page https://www.americanexpress.com/in/credit-cards/smart-earn-credit-card/ ; partner merchant list (as of 28 Aug 2024) https://www.americanexpress.com/content/dam/amex/in/legal/cmu/merchantlist.pdf . Base 1 MR point per Rs 50; no points on fuel, insurance, utilities, cash, EMI at POS. Partner list may change from time to time; the merchant PDF dated 28 Aug 2024 lists 10X: Zomato, EaseMyTrip, Flipkart, Uber, BookMyShow, Ajio, Nykaa, PVR, BlinkIt, Myntra; 5X: Amazon, while the current page text names fewer merchants. 12 Jun 2025 fuel exclusion date from Amex India MR terms in search results. New applications are paused. MR point rupee value not stated.",
+      "match": [
+        "smartearn",
+        "smart earn"
+      ],
+      "rules": {
+        "rewardType": "points",
+        "base": {
+          "value": 1,
+          "per": 50,
+          "blockBased": true
+        },
+        "minSpend": 0,
+        "capPerCycle": null,
+        "baseCap": null,
+        "capPeriod": "calendarMonth",
+        "rounding": "floor",
+        "spendBlock": 0,
+        "pointValue": null,
+        "accelerated": [
+          {
+            "id": "partners-10x-group1",
+            "label": "10X (10 points per Rs 50) on Flipkart, Uber, BookMyShow, Ajio, Nykaa, PVR, BlinkIt, Myntra",
+            "rate": {
+              "value": 10,
+              "per": 50,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "flipkart",
+              "uber",
+              "bookmyshow",
+              "ajio",
+              "nykaa",
+              "pvr",
+              "blinkit",
+              "myntra"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 500,
+            "notes": "Bank: 10X = 9 extra points per Rs 50 on top of the base 1. 10X points capped at 500 points per month per Card Account jointly for this group. List as of 28 Aug 2024 and may change."
+          },
+          {
+            "id": "partners-10x-group2",
+            "label": "10X (10 points per Rs 50) on Zomato and EaseMyTrip",
+            "rate": {
+              "value": 10,
+              "per": 50,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "zomato",
+              "easemytrip",
+              "easy trip"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 500,
+            "notes": "Capped at 500 points per month per Card Account for Zomato and EaseMyTrip together. List as of 28 Aug 2024 and may change."
+          },
+          {
+            "id": "amazon-5x",
+            "label": "5X (5 points per Rs 50) on Amazon",
+            "rate": {
+              "value": 5,
+              "per": 50,
+              "blockBased": true
+            },
+            "categories": [],
+            "merchants": [
+              "amazon"
+            ],
+            "mccs": [],
+            "excludeMerchants": [],
+            "excludeMccs": [],
+            "minSpend": 0,
+            "capPerCycle": 250,
+            "notes": "Bank: 5X = 4 extra points per Rs 50 on top of the base 1. 5X points capped at 250 points per month per Card Account for Amazon."
+          }
+        ],
+        "exclusions": {
+          "mccs": [],
+          "categories": [
+            "Fuel",
+            "Insurance",
+            "Utilities & Bills",
+            "EMI"
+          ],
+          "merchants": []
+        }
+      }
     }
   ],
   "format": "finping-reward-rules",
-  "revision": "2026-10-30"
+  "revision": "2026-10-31"
 }

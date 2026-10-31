@@ -17,3 +17,18 @@ export async function recategoriseWalletLoads() {
   if (n) tagAllCards().catch(() => {}) // wallet loads earn nothing on most cards, so the expected rewards change
   return n
 }
+
+// Cash withdrawals saved before the ATM Withdrawal category existed: a spend whose name has ATM in it moves there.
+// A category you set yourself, cashback and card payments are left alone.
+export async function recategoriseAtm() {
+  let n = 0
+  for (const t of await db.transactions.toArray()) {
+    if (t.type !== 'debit' || t.kind || t.isExcluded || t.category === 'ATM Withdrawal' || t.category === 'Cashback') continue
+    if ((t.editedFields || []).includes('category')) continue
+    if (!/\batm\b/i.test(t.merchant || '')) continue
+    await db.transactions.update(t.id, { category: 'ATM Withdrawal' })
+    n++
+  }
+  if (n) tagAllCards().catch(() => {})
+  return n
+}

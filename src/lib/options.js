@@ -22,11 +22,12 @@ const DEBT_TYPES = [
   ['FriendLent', 'Lent to friend / family', '🤲'], ['Other', 'Other', '📄'],
 ].map(([id, label, icon]) => ({ id, label, icon }))
 
+// The simple list of transaction categories: one name per kind of spend, so reward rules, MCC codes and reports all use the same words.
 const CATEGORIES = [
-  ['Food Delivery', '🍔'], ['E-Commerce', '🛍'], ['Utilities & Bills', '⚡'], ['Transport', '🚗'], ['Health', '💊'], ['Fuel', '⛽'], ['Rent', '🏠'],
-  ['Grocery', '🥦'], ['Travel Online', '✈️'], ['Entertainment', '🎬'], ['Insurance', '🛡'], ['EMI', '🏦'], ['Investment', '📈'], ['UPI Scan & Pay', '📲'],
-  ['Wallet Load', '👛'], ['Government & Tax', '🏛'], ['Education', '🎓'], ['Jewellery & Gold', '💍'],
-  ['Cashback', '💚'], ['Salary', '💼'], ['Transfer', '🔁'], ['General', '💳'],
+  ['Food & Dining', '🍔'], ['Grocery', '🥦'], ['Shopping', '🛍'], ['Utilities & Bills', '⚡'], ['Travel', '✈️'], ['Transport', '🚗'], ['Fuel', '⛽'],
+  ['Entertainment', '🎬'], ['Health', '💊'], ['Education', '🎓'], ['Insurance', '🛡'], ['Rent', '🏠'], ['EMI', '🏦'], ['Investment', '📈'],
+  ['Government & Tax', '🏛'], ['Jewellery & Gold', '💍'], ['Wallet Load', '👛'], ['ATM Withdrawal', '🏧'], ['UPI Scan & Pay', '📲'],
+  ['Fees & Charges', '🧾'], ['Gaming & Gambling', '🎰'], ['Transfer', '🔁'], ['Cashback', '💚'], ['Salary', '💼'], ['General', '💳'],
 ].map(([name, icon]) => ({ name, icon }))
 
 // the app itself relies on these names, so they cannot be renamed or removed
@@ -116,9 +117,11 @@ export const useOptionNames = key => useOptions(key).map(i => nameOf(key, i))
 const aliases = () => load().categoryAliases || {}
 
 // A category name the parsers produce, mapped through your renames / removals ("Fuel" -> "Petrol" ...)
+// names the app used before the list was simplified: the parsers and old backups may still produce them
+export const LEGACY_CATEGORIES = { 'Food Delivery': 'Food & Dining', 'E-Commerce': 'Shopping', 'Travel Online': 'Travel' }
 export function canonCategory(name) {
   const map = aliases()
-  let n = name, guard = 0
+  let n = LEGACY_CATEGORIES[name] || name, guard = 0
   while (map[n] && guard++ < 5) n = map[n]
   return n
 }

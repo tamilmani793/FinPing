@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { relinkTransactions } from './lib/relink'
 import { removeDuplicateTransactions } from './lib/dedupeCleanup'
-import { recategoriseWalletLoads } from './lib/recategorise'
+import { recategoriseWalletLoads, recategoriseAtm } from './lib/recategorise'
+import { migrateSimpleCategories } from './lib/categoryMigrate'
 import { tagAllCards } from './lib/rewardTagging'
 import { autoApplyPresets } from './lib/rulesPack'
 import { postDueEmis } from './lib/emiEngine'
@@ -53,11 +54,22 @@ export default function App() {
         // Cards in your accounts that match a bundled card get its reward rules (not again if you removed them yourself)
         const given = await autoApplyPresets()
         if (given.length) showNotification(`Reward rules added for ${given.join(', ')}`, 'success')
+        // Once after this update: the category list was simplified, so saved transactions, rules and mappings take the new names
+        if (!localStorage.getItem('finping_simplecats_v1')) {
+          await migrateSimpleCategories()
+          localStorage.setItem('finping_simplecats_v1', '1')
+        }
         // Once after this update: wallet loads that were filed under another category
         if (!localStorage.getItem('finping_walletload_v1')) {
           const w = await recategoriseWalletLoads()
           localStorage.setItem('finping_walletload_v1', '1')
           if (w > 0) showNotification(`${w} wallet load${w === 1 ? '' : 's'} moved to the Wallet Load category`, 'success')
+        }
+        // Once after this update: cash withdrawals (names with ATM) get the ATM Withdrawal category
+        if (!localStorage.getItem('finping_atm_v1')) {
+          const a = await recategoriseAtm()
+          localStorage.setItem('finping_atm_v1', '1')
+          if (a > 0) showNotification(`${a} ATM withdrawal${a === 1 ? '' : 's'} moved to the ATM Withdrawal category`, 'success')
         }
         // Once after this update: expected rewards were tagged without the percentage; work them out again so every spend shows it
         if (!localStorage.getItem('finping_rewardtag_v2')) { await tagAllCards(); localStorage.setItem('finping_rewardtag_v2', '1') }
@@ -86,11 +98,11 @@ export default function App() {
       )}
       <BottomNav />
       {confirmReq && (
-        <div className="overlay" style={{ zIndex: 90, alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => answerConfirm(false)}>
-          <div className="card" style={{ width: '100%', maxWidth: 340, padding: 22, borderRadius: 26 }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{confirmReq.title}</div>
-            {confirmReq.message && <div style={{ fontSize: 13, color: 'var(--txt2)', margin: '6px 0 0', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{confirmReq.message}</div>}
-            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+        <div className="overlay" style={{ zIndex: 90, alignItems: 'center', justifyContent: 'center', padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 24px calc(env(safe-area-inset-bottom, 0px) + 24px)' }} onClick={() => answerConfirm(false)}>
+          <div className="card" style={{ width: '100%', maxWidth: 340, maxHeight: '100%', display: 'flex', flexDirection: 'column', padding: 22, borderRadius: 26 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', flexShrink: 0 }}>{confirmReq.title}</div>
+            {confirmReq.message && <div style={{ fontSize: 13, color: 'var(--txt2)', margin: '6px 0 0', lineHeight: 1.5, whiteSpace: 'pre-line', overflowY: 'auto', minHeight: 0, overflowWrap: 'anywhere' }}>{confirmReq.message}</div>}
+            <div style={{ display: 'flex', gap: 10, marginTop: 18, flexShrink: 0 }}>
               <button className="btn-ghost" style={{ flex: 1, height: 48, fontSize: 14 }} onClick={() => answerConfirm(false)}>{confirmReq.cancelLabel || 'Cancel'}</button>
               <button className="btn-primary" style={{ flex: 1, height: 48, ...(confirmReq.danger ? { background: 'var(--red)', color: '#fff', borderColor: 'var(--red)', boxShadow: 'none' } : {}) }} onClick={() => answerConfirm(true)}>{confirmReq.confirmLabel}</button>
             </div>

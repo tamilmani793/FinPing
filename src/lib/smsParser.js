@@ -3,14 +3,14 @@ import { ruleFor } from './merchantRules'
 // Handles Indian bank SMS patterns from 15+ banks
 
 const MERCHANT_CATEGORY_MAP = {
-  swiggy: 'Food Delivery', zomato: 'Food Delivery', dominos: 'Food Delivery',
+  swiggy: 'Food & Dining', zomato: 'Food & Dining', dominos: 'Food & Dining',
   blinkit: 'Grocery', bigbasket: 'Grocery', zepto: 'Grocery', dmart: 'Grocery',
   reliance: 'Grocery', jiomart: 'Grocery', dunzo: 'Grocery',
   uber: 'Transport', ola: 'Transport', rapido: 'Transport', yulu: 'Transport',
-  irctc: 'Travel Online', makemytrip: 'Travel Online', cleartrip: 'Travel Online', goibibo: 'Travel Online',
+  irctc: 'Travel', makemytrip: 'Travel', cleartrip: 'Travel', goibibo: 'Travel',
   hpcl: 'Fuel', iocl: 'Fuel', bpcl: 'Fuel', indianoil: 'Fuel', hp: 'Fuel', shell: 'Fuel',
-  amazon: 'E-Commerce', flipkart: 'E-Commerce', meesho: 'E-Commerce',
-  myntra: 'E-Commerce', ajio: 'E-Commerce', nykaa: 'E-Commerce', tatacliq: 'E-Commerce',
+  amazon: 'Shopping', flipkart: 'Shopping', meesho: 'Shopping',
+  myntra: 'Shopping', ajio: 'Shopping', nykaa: 'Shopping', tatacliq: 'Shopping',
   netflix: 'Entertainment', spotify: 'Entertainment', hotstar: 'Entertainment',
   sonyliv: 'Entertainment', bookmyshow: 'Entertainment', pvr: 'Entertainment', inox: 'Entertainment',
   airtel: 'Utilities & Bills', jio: 'Utilities & Bills', bsnl: 'Utilities & Bills',
@@ -115,6 +115,8 @@ export function classifyCategory(merchant, text) {
   // Loading money into a wallet / prepaid card is its own thing, even when the wallet's name (Paytm, Amazon Pay, PhonePe...) is a known merchant.
   // Needs a clear sign, so an ordinary UPI payment to Paytm or PhonePe is not mistaken for a load.
   if (WALLET_LOAD.test(`${merchant} ${text || ''}`)) return 'Wallet Load'
+  // A cash withdrawal: the name has ATM in it ("ATM ONE", "ATW-...-ATM")
+  if (/\batm\b/i.test(merchant)) return 'ATM Withdrawal'
   for (const [key, cat] of Object.entries(MERCHANT_CATEGORY_MAP)) {
     if (lower.includes(key) && cat) return cat
   }

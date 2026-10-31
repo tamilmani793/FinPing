@@ -22,14 +22,48 @@ export function parsePack(text) {
   return j
 }
 
-// which pack entry is most likely this card (by the words in its name / variant)
-const HINTS = [['hdfc-millennia', /millennia/i], ['hdfc-swiggy', /swiggy/i], ['hdfc-upi-rupay', /upi.*rupay|rupay.*upi/i], ['sbi-cashback', /sbi.*cashback|cashback.*sbi/i], ['hsbc-live-plus', /live\s*\+|live plus/i]]
+// which pack entry is this card? Judged by the card's own name first, and only for the bank that issues the preset:
+// an HDFC card is never matched to an SBI or HSBC preset, and a word in the network or variant cannot override what the name says.
+const HINTS = [
+  ['hdfc-upi-rupay', /hdfc/i, /rupay|upi/i],
+  ['hdfc-millennia', /hdfc/i, /millennia/i],
+  ['hdfc-swiggy', /hdfc/i, /swiggy/i],
+  ['sbi-cashback', /sbi|state bank/i, /cashback/i],
+  ['hsbc-live-plus', /hsbc/i, /live\s*\+|live plus/i],
+]
 export function suggestEntry(card, pack = presets) {
-  const text = [card?.name, card?.variant, card?.bank, card?.cardName, card?.network].filter(Boolean).join(' ')
+  const name = [card?.name, card?.cardName].filter(Boolean).join(' ')
+  const bank = [card?.bank, name].filter(Boolean).join(' ')
+  const extra = [card?.variant, card?.partner].filter(Boolean).join(' ')
   // the bundled Swiggy rules are for the original card; Ornge and BLCK earn differently, so never guess for them
-  if (/swiggy/i.test(text) && /ornge|orange|blck|black/i.test(text)) return null
-  const hit = HINTS.find(([, re]) => re.test(text))
-  return hit ? pack.cards.find(c => c.key === hit[0]) || null : null
+  if (/swiggy/i.test(name + ' ' + extra) && /ornge|orange|blck|black/i.test(name + ' ' + extra)) return null
+  const find = text => HINTS.find(([, b, re]) => b.test(bank) && re.test(text))
+  // 1) the name; 2) the variant / co-brand; 3) only a RuPay network on an HDFC card with no other product named
+  let hit = find(name) || find(extra)
+  if (!hit && /rupay/i.test(card?.network || '') && /hdfc/i.test(bank) && !/millennia|swiggy|regalia|infinia|diners|moneyback|pixel|tata|indianoil|freedom/i.test(name)) hit = HINTS[0]
+  if (hit) return pack.cards.find(c => c.key === hit[0]) || null
+  return matchByWords(pack, bank, name)
+}
+
+// cards added to the pack with `match` words (lowercase words of the card's name): same bank, and the longest matching word wins
+const ALIASES = { 'state bank of india': ['sbi', 'state bank'], 'american express': ['amex', 'american express'], 'kotak mahindra bank': ['kotak'] }
+const sameBank = (issuer, bank) => {
+  const key = String(issuer || '').toLowerCase(), low = bank.toLowerCase()
+  return low.includes(key) || low.includes(key.split(' ')[0]) || (ALIASES[key] || []).some(a => low.includes(a))
+}
+// whole words only: 'ace' must not match 'place', 'neo' must not match 'neon'
+const wordIn = (text, word) => (' ' + text.split(/[^a-z0-9+]+/).join(' ') + ' ').includes(' ' + word + ' ')
+function matchByWords(pack, bank, name) {
+  const low = name.toLowerCase()
+  let best = null, bestLen = 0
+  for (const c of pack.cards) {
+    if (!Array.isArray(c.match) || !sameBank(c.issuer, bank)) continue
+    for (const w of c.match) {
+      const k = String(w).toLowerCase()
+      if (k && wordIn(low, k) && k.length > bestLen) { best = c; bestLen = k.length }
+    }
+  }
+  return best
 }
 
 // the stored rules for a pack entry (notes and other pack-only text stay out of the database rows)
@@ -116,8 +150,16 @@ export async function autoApplyPresets() {
   const added = []
   for (const card of await db.creditCards.toArray()) {
     if (card.draft || card.rewardRulesOptOut || (card.cardType && card.cardType !== 'credit')) continue
-    if (await getRules(card.id)) continue
     const entry = suggestEntry(card)
+    const had = await getRules(card.id)
+    if (had) {
+      // rules a bundled preset gave this card earlier, from a wrong match (a RuPay card that got Millennia): swap them for the right ones
+      if (!entry || !had.presetKey || had.presetKey === entry.key) continue
+      await db.card_reward_rules.delete(had.id)
+      await applyEntry(card.id, entry)
+      added.push(cardTitle(card))
+      continue
+    }
     if (!entry) continue
     await applyEntry(card.id, entry)
     added.push(cardTitle(card))

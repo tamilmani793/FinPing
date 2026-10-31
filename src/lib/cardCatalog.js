@@ -66,7 +66,7 @@ export const networkLabel = c => [c?.network, c?.variant].filter(Boolean).join('
 // differs per card, so each card keeps its own editable list; this is only the starting point.
 export const EXCLUSION_CATEGORIES = [
   'Fuel', 'Rent', 'Utilities & Bills', 'Insurance', 'EMI', 'Wallet Load', 'Government & Tax',
-  'Education', 'Jewellery & Gold', 'Investment', 'UPI Scan & Pay',
+  'Education', 'Jewellery & Gold', 'Investment', 'UPI Scan & Pay', 'ATM Withdrawal', 'Fees & Charges', 'Gaming & Gambling',
 ]
 export const DEFAULT_EXCLUSIONS = ['Fuel', 'Rent', 'Wallet Load', 'Government & Tax', 'Insurance', 'Jewellery & Gold']
 export const excludedFor = card => (Array.isArray(card?.excludedCategories) ? card.excludedCategories : DEFAULT_EXCLUSIONS)

@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { FileText, Upload, Download, PackageOpen } from 'lucide-react'
+import { FileText, PackageOpen } from 'lucide-react'
 import { useStore } from '../store'
 import { getRules } from '../lib/rewardTagging'
-import { bundledPack, parsePack, suggestEntry, rulesFromEntry, applyEntry, exportPack, shareRulesFile, diffRules } from '../lib/rulesPack'
-import { readTermsText, checkTerms } from '../lib/termsAssist'
+import { bundledPack, suggestEntry, rulesFromEntry, applyEntry, diffRules } from '../lib/rulesPack'
+import { readTermsText, rulesFromTerms } from '../lib/termsAssist'
+import { describeRules } from '../lib/rewardRules'
 import { cardTitle } from '../lib/cardCatalog'
 import { BtnPrimary } from './UI'
 import { Field, TextField } from './Fields'
 
-// Keeps a card's reward rules up to date without a new app build: use the rules bundled with the app, import a rules file, or check a bank's
+// Keeps a card's reward rules up to date without a new app build: use the rules bundled with the app, or check a bank's
 // terms PDF against the rules. Every change is shown first (what differs) and is saved as a new version from a date you choose, so spends
 // before that date are still worked out with the old rules. Everything happens on the phone.
 
@@ -51,7 +52,7 @@ function Review({ card, entries, current, onDone, onBack }) {
   )
 }
 
-export default function RulesUpdateSheet({ card, onClose }) {
+export default function RulesUpdateSheet({ card, onClose, onEdit }) {
   const { showNotification } = useStore()
   const [view, setView] = useState('menu') // menu | review | pdf
   const [entries, setEntries] = useState([])
@@ -66,28 +67,19 @@ export default function RulesUpdateSheet({ card, onClose }) {
     const list = pack.cards.map(c => ({ ...c, _suggested: hit && c.key === hit.key }))
     await open(list)
   }
-  const importFile = async e => {
-    const f = e.target.files?.[0]; e.target.value = ''
-    if (!f) return
-    try {
-      const pack = parsePack(await f.text()), hit = suggestEntry(card, pack)
-      await open(pack.cards.map(c => ({ ...c, _suggested: hit && c.key === hit.key })))
-    } catch (err) { showNotification(err.message, 'error') }
-  }
-  const doExport = async () => {
-    const pack = await exportPack(card.id, cardTitle(card))
-    if (!pack) { showNotification('Save reward rules for this card first', 'error'); return }
-    try { await shareRulesFile(pack, 'finping-reward-rules.json') } catch { /* share sheet closed */ }
-  }
+  // read the document and make its rules the card's rules straight away (the old rules stay as an earlier version)
   const checkPdf = async e => {
     const f = e.target.files?.[0]; e.target.value = ''
     if (!f) return
     setBusy(true)
     try {
-      const rules = await getRules(card.id)
-      if (!rules) { showNotification('Save reward rules for this card first', 'error'); return }
       const text = await readTermsText(await f.arrayBuffer())
-      setPdf({ name: f.name, ...checkTerms(text, rules) }); setView('pdf')
+      const r = rulesFromTerms(text, card.id)
+      if (!r.found) { setPdf({ name: f.name, found: false }); setView('pdf'); return }
+      const from = r.published || today()
+      await applyEntry(card.id, { key: null, effectiveFrom: from, publishedOn: r.published, source: `Terms document: ${f.name}`, rules: r.rules })
+      setPdf({ name: f.name, found: true, from, notes: r.notes, lines: describeRules(r.rules) }); setView('pdf')
+      showNotification('Reward rules updated from the document. Spends are tagged again.', 'success')
     } catch (err) { showNotification(err?.name === 'PasswordException' ? 'That PDF is password protected' : 'Could not read that PDF', 'error') } finally { setBusy(false) }
   }
 
@@ -110,21 +102,30 @@ export default function RulesUpdateSheet({ card, onClose }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {view === 'menu' && (
             <div>
-              <Item icon={PackageOpen} title="Use the rules that came with the app" sub="Millennia, Swiggy, UPI RuPay, SBI Cashback, HSBC Live+. You see what changes first." onClick={useBundled} />
-              <Item icon={Upload} title="Import a rules file" sub="A file exported from another phone or sent to you" file={importFile} accept=".json,application/json" />
-              <Item icon={FileText} title={busy ? 'Reading the PDF…' : "Check a bank's terms PDF"} sub="Lists what the PDF says that your rules do not" file={checkPdf} accept=".pdf,application/pdf" />
-              <Item icon={Download} title="Export these rules" sub="Share this card's rules as a file" onClick={doExport} />
+              <Item icon={FileText} title={busy ? 'Reading the document…' : 'From a document'} sub="Choose the bank's terms PDF. Its rules replace this card's rules automatically." file={checkPdf} accept=".pdf,application/pdf" />
+              <Item icon={PackageOpen} title="Rules from the app" sub="The rules that came with the app for your card. You see what changes before they apply." onClick={useBundled} />
             </div>
           )}
           {view === 'review' && <Review card={card} entries={entries} current={current} onDone={onClose} onBack={() => setView('menu')} />}
           {view === 'pdf' && pdf && (
             <>
-              <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{pdf.name}{pdf.published ? ` · published ${pdf.published}` : ''}</div>
-              <div>
-                {pdf.lines.map((l, k) => <div key={k} style={{ ...row, color: l.tone === 'ok' ? 'var(--green-dim, var(--txt))' : 'var(--txt)' }}>{l.tone === 'diff' ? '• ' : ''}{l.text}</div>)}
+              <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{pdf.name}</div>
+              {pdf.found ? (
+                <>
+                  <div style={{ fontSize: 13.5, fontWeight: 700 }}>Rules updated from this document, from {pdf.from}</div>
+                  <div>
+                    {pdf.lines.map((l, k) => <div key={k} style={{ ...row, display: 'flex', gap: 8 }}><span>{l.icon}</span><span>{l.text}</span></div>)}
+                    {pdf.notes.map((n, k) => <div key={'n' + k} style={{ ...row, color: 'var(--amber-dim)' }}>{n}</div>)}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>Only what the document says is kept. Bank wording varies, so check these against the document. Earlier spends keep the earlier rules.</div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>No reward rates could be read from this document, so your rules are unchanged. Try the terms and conditions PDF that lists the cashback or points, or use the rules from the app.</div>
+              )}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn-ghost" style={{ height: 46, flex: 1 }} onClick={() => (pdf.found ? onClose() : setView('menu'))}>{pdf.found ? 'Done' : 'Back'}</button>
+                {pdf.found && onEdit && <button className="btn-ghost" style={{ height: 46, flex: 1 }} onClick={onEdit}>Fine-tune</button>}
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>This is a prompt to look, not a verdict: bank wording varies. To change a rule, edit it in Reward rules, or import a rules file.</div>
-              <button className="btn-ghost" style={{ height: 46 }} onClick={() => setView('menu')}>Back</button>
             </>
           )}
         </div>

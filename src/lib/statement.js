@@ -434,7 +434,7 @@ export function newEntry(row, accountId, account) {
   const isCard = account && account.cardType !== 'account'
   // on a credit card statement a credit is either the bill being paid (not income) or a refund / cashback
   const cashback = isCard && row.type === 'credit' && /cashback|cash back|reward/i.test(row.narration)
-  const billPaid = isCard && row.type === 'credit' && !cashback && /(payment|paid|received|thank you|bbps|bppy|neft|imps|upi|autopay|online trf|payzapp|net ?banking|cc pay)/i.test(row.narration) && !/(refund|reversal|reversed|crv)/i.test(row.narration)
+  const billPaid = isCard && row.type === 'credit' && !cashback && /(\bpayment\b|\bpaid\b|received|thank you|bbps|bppy|neft|imps|upi|autopay|online trf|payzapp|net ?banking|\bcc pay)/i.test(row.narration) && !/(refund|reversal|reversed|\bcrv\b)/i.test(row.narration)
   const cardBill = !isCard && /\b(cred|cc payment|credit card|cardpay|card bill)\b/i.test(row.narration)
   return {
     date: row.date, amount: row.amount, type: row.type, merchant: billPaid ? 'Card payment' : row.merchant,

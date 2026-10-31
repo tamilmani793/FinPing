@@ -299,7 +299,7 @@ export default function SalaryPage() {
         {/* 3. payslips: filter, the records, then the consolidated details with a chart */}
         <div className="section-hdr" style={{ margin: '14px 0 6px' }}>
           <div className="label-caps" style={{ color: 'var(--gold-dim)' }}>Payslips{byMonth.length ? ' · ' + (shown.length === byMonth.length ? byMonth.length : shown.length + ' of ' + byMonth.length) : ''}</div>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }} onClick={() => setSheet({ type: 'add' })}><Paperclip size={12} style={{ verticalAlign: -1 }} /> Attachment</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }} onClick={() => setSheet({ type: 'add' })} aria-label="Attach payslip" title="Attach payslip"><Paperclip size={16} style={{ verticalAlign: -3 }} /></span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>

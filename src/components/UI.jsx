@@ -158,7 +158,7 @@ export function Notification({ msg, type }) {
   if (!msg) return null
   const color = type === 'success' ? 'var(--mint)' : type === 'error' ? 'var(--red)' : 'var(--amber)'
   return (
-    <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg1)', border: `1px solid ${color}`, borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 500, color, zIndex: 99, boxShadow: '0 8px 24px rgba(90,60,20,0.2)', whiteSpace: 'nowrap' }}>
+    <div style={{ position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 60px)', left: 12, right: 12, margin: '0 auto', width: 'fit-content', maxWidth: 'calc(100vw - 24px)', textAlign: 'center', background: 'var(--bg1)', border: `1px solid ${color}`, borderRadius: 12, padding: '10px 16px', fontSize: 13, fontWeight: 500, lineHeight: 1.4, color, zIndex: 99, boxShadow: '0 8px 24px rgba(90,60,20,0.2)', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
       {msg}
     </div>
   )

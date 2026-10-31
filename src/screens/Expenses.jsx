@@ -24,7 +24,7 @@ const I = 17
 
 export default function Expenses() {
   const [activeFilter, setActiveFilter] = useState(0)
-  const [expandedCats, setExpandedCats] = useState(new Set(['Food Delivery']))
+  const [expandedCats, setExpandedCats] = useState(new Set(['Food & Dining']))
   const [showAddForm, setShowAddForm] = useState(false)
   useBackHandler(showAddForm, () => setShowAddForm(false))
   const [editTxn, setEditTxn] = useState(null)
@@ -64,7 +64,7 @@ export default function Expenses() {
   for (const list of Object.values(catMap)) list.sort((a, b) => new Date(b.date) - new Date(a.date) || b.id - a.id)
   const cats = Object.entries(catMap).sort((a, b) => b[1].reduce((s, t) => s + t.amount, 0) - a[1].reduce((s, t) => s + t.amount, 0))
 
-  const filterMap = { 1: 'Food Delivery', 2: 'E-Commerce', 3: 'Utilities & Bills', 4: 'Travel Online', 5: 'Fuel', 6: 'excluded' }
+  const filterMap = { 1: 'Food & Dining', 2: 'Shopping', 3: 'Utilities & Bills', 4: 'Travel', 5: 'Fuel', 6: 'excluded' }
   const filteredCats = activeFilter === 0 ? cats : cats.filter(([cat]) => {
     if (activeFilter === 6) return catMap[cat]?.some(t => t.isExcluded)
     return cat === filterMap[activeFilter] || cat.toLowerCase().includes(FILTERS[activeFilter].toLowerCase())

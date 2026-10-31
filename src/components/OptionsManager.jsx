@@ -9,6 +9,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import MccMaintainer from './MccMaintainer'
 import { SHOW_MCC } from '../lib/features'
 import RewardRulesSheet from './RewardRulesSheet'
+import CardRulesLibrary from './CardRulesLibrary'
 import { cardTitle } from '../lib/cardCatalog'
 import { Field, TextField, Picker, Segmented } from './Fields'
 import {
@@ -207,6 +208,7 @@ function PageHeader({ title, icon, onBack }) {
   )
 }
 
+const LIBRARY = '__library' // every card's bundled rules, read only
 const MCC = '__mcc' // not a dropdown list: the MCC dictionary is maintained from this page too
 
 // Profile -> Customise: the dropdown lists, plus the rules and codes (MCC categories, card reward rules). Tapping one opens its own page.
@@ -217,6 +219,7 @@ export default function OptionsPage() {
   const [rulesCard, setRulesCard] = useState(null)
   const cards = useLiveQuery(() => db.creditCards.toArray()) || []
   useBackHandler(!!open, () => setOpen(null))
+  if (open === LIBRARY) return <CardRulesLibrary onBack={() => setOpen(null)} />
   if (open === MCC) return <MccMaintainer onBack={() => setOpen(null)} />
   if (open) return <ListPage listKey={open} onClose={() => setOpen(null)} />
   return (
@@ -240,11 +243,21 @@ export default function OptionsPage() {
             <ChevronRight size={18} color="var(--txt3)" />
           </div>
           )}
-          <div onClick={() => setPickCard(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
+          <div onClick={() => setPickCard(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: SHOW_MCC ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}>
             <div className="stat-icon" style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--gold-bg)', fontSize: 17 }}>✨</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>Card reward rules</div>
               <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>Cashback and points rules per card, and updates from a file or terms PDF</div>
+            </div>
+            <ChevronRight size={18} color="var(--txt3)" />
+          </div>
+        </div>
+        <div className="card" style={{ paddingTop: 4, paddingBottom: 4, marginTop: 10 }}>
+          <div onClick={() => setOpen(LIBRARY)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer' }}>
+            <div className="stat-icon" style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--gold-bg)', fontSize: 17 }}>📚</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>All card rules</div>
+              <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>Read the rules, fees and offers of every credit card that came with the app</div>
             </div>
             <ChevronRight size={18} color="var(--txt3)" />
           </div>

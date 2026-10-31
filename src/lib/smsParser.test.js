@@ -7,7 +7,7 @@ const TEST_SMS = [
   {
     label: 'HDFC Credit Card Debit',
     text: 'Rs.1,299.00 spent on HDFC Bank Credit Card XX4092 at AMAZON on 22-Oct-26:10:30. Avl Limit:Rs.48,701.00',
-    expect: { type: 'transaction', amount: 1299, merchant: 'AMAZON', category: 'E-Commerce', cardLast4: '4092', bank: 'HDFC Bank' }
+    expect: { type: 'transaction', amount: 1299, merchant: 'AMAZON', category: 'Shopping', cardLast4: '4092', bank: 'HDFC Bank' }
   },
   {
     label: 'HDFC Card x-format',
@@ -27,7 +27,7 @@ const TEST_SMS = [
   {
     label: 'SBI UPI Debit',
     text: 'Your a/c XXXXX6789 debited by Rs.850.00 on 22-10-26 transfer to SWIGGY Ref No 123456789012.',
-    expect: { type: 'transaction', amount: 850, merchant: 'SWIGGY', category: 'Food Delivery', paymentMode: 'UPI' }
+    expect: { type: 'transaction', amount: 850, merchant: 'SWIGGY', category: 'Food & Dining', paymentMode: 'UPI' }
   },
   {
     label: 'ICICI Statement',

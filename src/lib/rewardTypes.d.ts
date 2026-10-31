@@ -99,3 +99,32 @@ export interface RewardStatement {
   closing: number | null
   addedAt: Date
 }
+
+/**
+ * One card in the bundled rules pack (src/data/cardRewardPresets.json). Only `rules` is used by the engine; the rest is the card's
+ * published details, kept next to the rules so they travel together and can be shown or checked later.
+ */
+export interface PackCard {
+  key: string
+  name: string
+  issuer: string
+  network?: string | null
+  /** lowercase words of the card's name; the card matches when its bank is `issuer` and its name has one of them */
+  match?: string[]
+  rewardType: RewardType
+  effectiveFrom: string | null
+  publishedOn: string | null
+  source: string
+  rules: Omit<CardRewardRules, 'id' | 'cardId' | 'enabled'> & { capPeriod?: 'billingCycle' | 'calendarMonth'; baseCap?: number | null; spendBlock?: number; pointValue?: number | null }
+  /** fees: joining, annual, waiver, finance charge, late fee, forex markup, cash advance... */
+  feesAndCharges?: Record<string, string | number>
+  details?: {
+    bestFor?: string[]
+    /** international spends: markup, and whether they still earn cashback */
+    forex?: { markupPercent: number; note?: string; earnsCashbackOnInternational?: boolean; cashbackNote?: string }
+    welcome?: { name: string; value: number; unit: string; condition: string; limitedTime?: boolean }[]
+    lounge?: { domesticPerYear?: number; domesticRule?: string; internationalPerYear?: number; internationalRule?: string }
+    eligibility?: { age?: Record<string, string>; minAnnualIncomeINR?: Record<string, number>; resident?: string; cities?: string[] }
+    [more: string]: unknown
+  }
+}
