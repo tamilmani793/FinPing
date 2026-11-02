@@ -5,7 +5,6 @@ import { db } from '../db/schema'
 import { TopBar, Card, SectionHdr, Badge, ProgressBar, Divider, LabelCaps, MonoLg, BtnPrimary, formatINR } from '../components/UI'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
-import PoliciesView from '../components/PoliciesView'
 import { addManualRepayment, recordReceipt, undoRepayment } from '../lib/debtBackup'
 import { dailyInterest, splitPayment, lastRepaymentDate } from '../lib/loanMath'
 import { projectSchedule, defaultMode, nextEmiAmount, accrualUntil, FIXED_TYPES } from '../lib/loanSchedule'
@@ -90,7 +89,7 @@ export default function Debt() {
   // A bank's own EMI schedule pasted in: { meta, rows, type } once read, { fromDebt: true } when editing a loan that has one
   const [sched, setSched] = useState(null)
   const [paste, setPaste] = useState({ open: false, text: '', dueDay: '5' })
-  const { showNotification, debtSegment, setDebtSegment } = useStore()
+  const { showNotification } = useStore()
   const { list: debtTypes, icons: DEBT_ICONS, labels: DEBT_LABELS } = useDebtTypes()
   const typeOptions = debtTypes.map(t => ({ value: t.id, label: t.label, icon: t.icon }))
 
@@ -262,12 +261,7 @@ export default function Debt() {
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
       <TopBar title="Debt" />
 
-      {/* Loans | Insurance policies */}
-      <div style={{ padding: '0 16px 12px' }}>
-        <Segmented value={debtSegment} options={[{ value: 'loans', label: 'Loans' }, { value: 'insurance', label: 'Insurance' }]} onChange={setDebtSegment} />
-      </div>
-      {debtSegment === 'insurance' && <PoliciesView />}
-      {debtSegment !== 'insurance' && (
+      {(
         <div style={{ padding: '10px 16px 0' }}>
           {/* Header */}
           <Card style={{ marginBottom: 10 }}>

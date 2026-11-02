@@ -10,14 +10,16 @@ import { useBackHandler } from '../lib/backNav'
 import { askConfirm } from '../lib/confirm'
 import { format } from 'date-fns'
 import { ppfYear, ppfHistory, ppfRateFor, ppfCurrent } from '../lib/ppf'
+import { buildPf, loadPfInputs } from '../lib/pf'
 
-const TYPE_ICONS = { MutualFund: '📈', Stock: '📊', PPF: '🏛', NPS: '🏦', Gold: '🪙', FD: '🔐', Other: '💰' }
-const TYPE_COLORS = { MutualFund: 'var(--mint)', Stock: 'var(--indigo)', PPF: 'var(--amber)', NPS: '#8B5CF6', Gold: '#D97706', FD: '#06B6D4', Other: 'var(--txt3)' }
+const TYPE_ICONS = { EPF: '🏦', MutualFund: '📈', Stock: '📊', PPF: '🏛', NPS: '🏦', Gold: '🪙', FD: '🔐', Other: '💰' }
+const TYPE_COLORS = { EPF: '#0EA5E9', MutualFund: 'var(--mint)', Stock: 'var(--indigo)', PPF: 'var(--amber)', NPS: '#8B5CF6', Gold: '#D97706', FD: '#06B6D4', Other: 'var(--txt3)' }
 
 export default function Wealth() {
   const [addOpen, setAddOpen] = useState(false)
   useBackHandler(addOpen, () => setAddOpen(false))
-  const { showNotification } = useStore()
+  const { showNotification, setActiveTab } = useStore()
+  const pfData = useLiveQuery(async () => buildPf(await loadPfInputs()), [], null) // the EPF balance for the allocation
   const [openId, setOpenId] = useState(null)
   const [assetType, setAssetType] = useState(null)
   const [editing, setEditing] = useState(false) // details are read-only until you tap Edit
@@ -39,20 +41,24 @@ export default function Wealth() {
   const overallReturn = totalInvested > 0 ? ((totalCurrent - totalInvested) / totalInvested * 100).toFixed(1) : 0
   const totalMonthly = 0
 
-  // Asset allocation: one row per kind of asset you hold; tap a row to see its accounts
+  // Asset allocation, grouped: Retirement (PPF, EPF, NPS), Market (equity, mutual funds) and Safe (gold, deposits, other).
+  // The main assets always show; the rest only when you hold one. EPF is worked out on the Provident fund page, which it opens.
+  const GROUPS = ['Retirement', 'Market', 'Safe']
   const ASSETS = [
-    { type: 'Stock', label: 'Equity (direct stocks)', sub: 'Direct exchange', always: true },
-    { type: 'MutualFund', label: 'Mutual funds', sub: 'SIPs and funds', always: true },
-    { type: 'Gold', label: 'Gold', sub: 'Sovereign / digital gold', always: true },
-    { type: 'PPF', label: 'PPF', sub: 'Tax-free, government backed', always: true },
-    { type: 'NPS', label: 'NPS', sub: 'Retirement, tax-shielded' },
-    { type: 'FD', label: 'Fixed deposits', sub: 'Fixed returns' },
-    { type: 'Other', label: 'Other', sub: 'Everything else' },
+    { type: 'PPF', group: 'Retirement', label: 'PPF', sub: 'Tax-free, government backed', always: true },
+    { type: 'EPF', group: 'Retirement', label: 'Provident fund (EPF)', sub: 'From payslips and passbook · opens the PF page', always: true, link: 'pf' },
+    { type: 'NPS', group: 'Retirement', label: 'NPS', sub: 'Retirement, tax-shielded' },
+    { type: 'Stock', group: 'Market', label: 'Equity (direct stocks)', sub: 'Direct exchange', always: true },
+    { type: 'MutualFund', group: 'Market', label: 'Mutual funds', sub: 'SIPs and funds', always: true },
+    { type: 'Gold', group: 'Safe', label: 'Gold', sub: 'Sovereign / digital gold', always: true },
+    { type: 'FD', group: 'Safe', label: 'Fixed deposits', sub: 'Fixed returns' },
+    { type: 'Other', group: 'Safe', label: 'Other', sub: 'Everything else' },
   ]
   const allocData = ASSETS.map(a => {
+    if (a.type === 'EPF') return { ...a, count: pfData ? 1 : 0, value: pfData?.epfBalance || 0 }
     const list = (investments || []).filter(i => i.type === a.type)
     return { ...a, count: list.length, value: list.reduce((s, i) => s + (i.currentValue || 0), 0) }
-  }).filter(a => a.always || a.count > 0) // the four main assets always show; the rest only when you hold one
+  }).filter(a => a.always || a.count > 0)
   const totalAlloc = allocData.reduce((s, a) => s + a.value, 0)
 
   const openInv = (investments || []).find(i => i.id === openId)
@@ -155,23 +161,36 @@ export default function Wealth() {
               {allocData.map(a => <div key={a.type} style={{ width: `${totalAlloc > 0 ? a.value / totalAlloc * 100 : 0}%`, background: TYPE_COLORS[a.type], height: '100%' }} />)}
             </div>
           )}
-          {allocData.map((a, i) => {
-            const pct = totalAlloc > 0 ? Math.round(a.value / totalAlloc * 100) : 0
+          {GROUPS.map(g => {
+            const rows = allocData.filter(a => a.group === g)
+            if (!rows.length) return null
+            const sub = rows.reduce((s, a) => s + a.value, 0)
             return (
-              <div key={a.type}>
-                <div onClick={() => setAssetType(a.type)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', cursor: 'pointer' }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: TYPE_COLORS[a.type], flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{TYPE_ICONS[a.type]} {a.label}</div>
-                    <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{a.count} {a.count === 1 ? 'account' : 'accounts'} · {a.sub}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="mono-sm">{formatINR(a.value)}</div>
-                    <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{pct}%</div>
-                  </div>
-                  <ChevronRight size={16} color="var(--txt3)" />
+              <div key={g} style={{ marginTop: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '6px 0 2px' }}>
+                  <span className="label-caps" style={{ fontSize: 10 }}>{g}</span>
+                  <span style={{ fontSize: 10.5, color: 'var(--txt2)' }}>{formatINR(sub)} · {totalAlloc > 0 ? Math.round(sub / totalAlloc * 100) : 0}%</span>
                 </div>
-                {i < allocData.length - 1 && <Divider />}
+                {rows.map((a, i) => {
+                  const pct = totalAlloc > 0 ? Math.round(a.value / totalAlloc * 100) : 0
+                  return (
+                    <div key={a.type}>
+                      <div onClick={() => (a.link ? setActiveTab(a.link) : setAssetType(a.type))} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', cursor: 'pointer' }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: TYPE_COLORS[a.type], flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 500 }}>{TYPE_ICONS[a.type]} {a.label}</div>
+                          <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{a.link ? a.sub : `${a.count} ${a.count === 1 ? 'account' : 'accounts'} · ${a.sub}`}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div className="mono-sm">{formatINR(a.value)}</div>
+                          <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{pct}%</div>
+                        </div>
+                        <ChevronRight size={16} color="var(--txt3)" />
+                      </div>
+                      {i < rows.length - 1 && <Divider />}
+                    </div>
+                  )
+                })}
               </div>
             )
           })}

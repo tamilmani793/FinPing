@@ -1,18 +1,18 @@
-import { Home, ArrowLeftRight, Wallet, Landmark, PieChart } from 'lucide-react'
+import { Home, ArrowLeftRight, Wallet, Receipt, TrendingUp } from 'lucide-react'
 import { useStore } from '../store'
 
 const TABS = [
   { id: 'home', label: 'Home', Icon: Home },
   { id: 'history', label: 'History', Icon: ArrowLeftRight },
   { id: 'cards', label: 'Accounts', Icon: Wallet },
-  { id: 'debt', label: 'Debt', Icon: Landmark },
-  { id: 'charts', label: 'Charts', Icon: PieChart },
+  { id: 'bills', label: 'Bills', Icon: Receipt },
+  { id: 'wealth', label: 'Wealth', Icon: TrendingUp },
 ]
 
 export default function BottomNav() {
   const { activeTab, setActiveTab } = useStore()
-  // Wealth is opened from Home; keep Home highlighted for it.
-  const current = activeTab === 'wealth' ? 'home' : activeTab
+  // The PF page belongs with Wealth; Debt, Charts and the Money hub are opened from Home or Profile and light no tab.
+  const current = activeTab === 'pf' ? 'wealth' : activeTab
   return (
     <nav style={{
       position: 'absolute', left: 14, right: 14,

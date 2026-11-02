@@ -12,7 +12,7 @@ import { formatINR } from './UI'
 import { parseEbTable } from '../lib/ebImport'
 import { providerListKey } from '../lib/billProviders'
 import { getList, setList, useOptionNames } from '../lib/options'
-import { KINDS, CYCLES, kindOf, cycleLabel, advance, usageRows, gasStats, collectBills, ymd } from '../lib/bills'
+import { KINDS, CYCLES, kindOf, cycleLabel, advance, usageRows, gasStats, collectBills, BILL_GROUPS, groupOfKind, ymd } from '../lib/bills'
 
 // All bills in one place: credit card statements, insurance premiums, and the electricity, mobile, broadband, gas and other bills you add.
 const STATE = {
@@ -369,7 +369,7 @@ function BillDetail({ bill, entries, onClose, startOpen }) {
 }
 
 export default function BillsPage() {
-  const { goBackTab, setActiveTab, setDebtSegment, openCard, showNotification } = useStore()
+  const { goBackTab, setActiveTab, openCard, showNotification } = useStore()
   const data = useLiveQuery(async () => ({
     bills: await db.bills.toArray(), entries: await db.bill_entries.toArray(),
     cards: await db.creditCards.toArray(), policies: await db.policies.toArray(),
@@ -382,14 +382,14 @@ export default function BillsPage() {
   useBackHandler(adding || openId != null || cardId != null, () => { setAdding(false); setOpenId(null); setPayNow(false); setCardId(null) })
 
   const items = data ? collectBills(data) : []
-  const kinds = [...new Set(items.map(i => i.kind))]
-  const shown = items.filter(i => filter === 'all' || i.kind === filter)
+  const groupsHere = BILL_GROUPS.filter(g => items.some(i => groupOfKind(i.kind) === g.id))
+  const shown = items.filter(i => filter === 'all' || groupOfKind(i.kind) === filter)
   const overdue = items.filter(i => i.state === 'overdue')
   const soon = items.filter(i => ['overdue', 'soon', 'later'].includes(i.state) && i.due && differenceInCalendarDays(new Date(i.due), new Date()) <= 30)
   const total = list => list.reduce((s, i) => s + (i.amount || 0), 0)
   const open = data?.bills.find(b => b.id === openId)
 
-  const tap = i => i.source === 'card' ? setCardId(i.card.id) : i.source === 'policy' ? (setDebtSegment('insurance'), setActiveTab('debt')) : (setPayNow(false), setOpenId(i.bill.id))
+  const tap = i => i.source === 'card' ? setCardId(i.card.id) : i.source === 'policy' ? setActiveTab('insurance') : (setPayNow(false), setOpenId(i.bill.id))
   const groups = [['overdue', 'Overdue'], ['soon', 'Due this week'], ['later', 'Coming up'], ['none', 'No date set'], ['paid', 'Paid']]
 
   return (
@@ -407,10 +407,10 @@ export default function BillsPage() {
               <Stat label={`Overdue (${overdue.length})`} value={formatINR(total(overdue))} color={overdue.length ? 'var(--red)' : undefined} />
               <Stat label="Due in 30 days" value={formatINR(total(soon))} />
             </div>
-            {kinds.length > 1 && (
+            {groupsHere.length > 1 && (
               <div className="chip-scroll" style={{ padding: '0 0 10px' }}>
                 <div className={`chip${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>All</div>
-                {kinds.map(k => <div key={k} className={`chip${filter === k ? ' active' : ''}`} onClick={() => setFilter(k)}>{kindOf(k).icon} {kindOf(k).label}</div>)}
+                {groupsHere.map(g => <div key={g.id} className={`chip${filter === g.id ? ' active' : ''}`} onClick={() => setFilter(g.id)}>{g.icon} {g.label}</div>)}
               </div>
             )}
             {shown.length === 0 && (

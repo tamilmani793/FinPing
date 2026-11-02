@@ -159,3 +159,13 @@ export function cardStatements(card, txns, count = 12, now = new Date()) {
 }
 
 export { ymd }
+
+// Bills are filtered by group: Cards, Insurance, Utilities (electricity, gas, water), Telecom (mobile, broadband, DTH / OTT) and Other.
+export const BILL_GROUPS = [
+  { id: 'cards', label: 'Cards', icon: '💳', kinds: ['card'] },
+  { id: 'insurance', label: 'Insurance', icon: '🛡', kinds: ['insurance'] },
+  { id: 'utilities', label: 'Utilities', icon: '⚡', kinds: ['electricity', 'gas', 'water'] },
+  { id: 'telecom', label: 'Telecom', icon: '📱', kinds: ['mobile', 'broadband', 'dth'] },
+  { id: 'other', label: 'Other', icon: '🧾', kinds: ['rent', 'other'] },
+]
+export const groupOfKind = kind => (BILL_GROUPS.find(g => g.kinds.includes(kind)) || BILL_GROUPS[BILL_GROUPS.length - 1]).id

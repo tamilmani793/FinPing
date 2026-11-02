@@ -60,9 +60,9 @@ function Item({ icon, title, sub, amount, amountSub, onClick }) {
 }
 
 export default function EmiSheet({ onClose }) {
-  const { setActiveTab, setDebtSegment } = useStore()
+  const { setActiveTab } = useStore()
   const { loans, policies, loanTotal, policyTotal, total } = useMonthlyEmi()
-  const go = seg => { setDebtSegment(seg); setActiveTab('debt'); onClose() }
+  const go = seg => { setActiveTab(seg === 'insurance' ? 'insurance' : 'debt'); onClose() }
 
   return (
     <div className="overlay" onClick={onClose}>

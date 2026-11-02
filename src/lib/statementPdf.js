@@ -17,7 +17,7 @@ export class PasswordNeeded extends Error {
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9/ ]/g, ' ').replace(/\s+/g, ' ').trim()
 const MONEY = /^[+-]?\s*(?:[C₹]|Rs\.?|INR)?\s*[(]?-?[\d,]+\.\d{1,2}[)]?\s*(dr|cr)?$/i
-const JUNK = /^(page \d+|page no|statement of account|account statement for|account statement from|opening balance|closing balance|generated|registered office|this is a computer|end of statement|\*+|continued)/i
+const JUNK = /^(for statement period|transactions for |transactions highlighted|important messages|c credit|d debit|page \d+|page no|statement of account|account statement for|account statement from|opening balance|closing balance|generated|registered office|this is a computer|end of statement|\*+|continued)/i
 
 // text items of one page -> lines of cells, each cell {text, x0, x1}
 function pageLines(items) {
@@ -104,6 +104,20 @@ export function linesToTable(lines) {
 
 // the lines of one page -> table rows, placing every cell under its heading
 function assignRows(body, headCells, cols, numericCols, width) {
+  // A one-letter C / D (Cr / Dr) printed right after an amount says which way the money went (SBI Card: "1,200.00  C"). It is folded
+  // into the amount, so "1,200.00 Cr" reads as a credit instead of the letter landing in the description and every line being a debit.
+  // A tax line under a dated charge ("IGST DB @ 18.00%   179.82  D") has no date of its own: it takes the charge's.
+  let lastDate = null
+  body = body.map(cells => {
+    let out = cells
+    const money = cells.find(c => MONEY.test(c.text))
+    const mark = money && cells.find(c => c !== money && /^(C|D|CR|DR)$/i.test(c.text.trim()) && c.x0 >= money.x1 - 2)
+    if (mark) { out = cells.filter(c => c !== mark).map(c => (c === money ? { ...c, text: `${c.text} ${/^c/i.test(mark.text.trim()) ? 'Cr' : 'Dr'}` } : c)); out.y = cells.y }
+    const dated = out.find(c => DATE_AT_START.test(c.text))
+    if (dated) lastDate = dated
+    else if (lastDate && out.some(c => MONEY.test(c.text)) && /^(igst|cgst|sgst|gst|cess)\b/i.test(out[0].text)) { out = [{ ...lastDate }, ...out]; out.y = cells.y }
+    return out
+  })
   // Headings are often centred over their column (a wide "Narration" column whose text starts far left of its
   // heading), so where the text columns really start is read from the rows themselves: the left edges that
   // many cells share. With one such edge per text heading they are matched left to right.
@@ -304,6 +318,22 @@ export function findCardSummary(lines) {
       else if (programs.length) break
     }
     if (programs.length) out.rewardPrograms = programs
+  }
+  // SBI Card layout: "*Total Amount Due" with the amount on the line below, "Credit Limit ... Statement Date" and "Available Credit Limit ... Payment Due Date"
+  // each followed by a line of figures ending in the date, the minimum due beside the CKYC number, and a row of five account-summary figures
+  // (previous balance, payments and credits, purchases, fees and interest, total outstanding). These override what the generic reading above guessed.
+  const ti = text.findIndex(t => /^\*\s*total amount due/i.test(t))
+  if (ti >= 0) {
+    const money = t => (String(t).match(/\d[\d,]*\.\d\d/g) || []).map(num)
+    for (let k = ti + 1; k <= ti + 6 && k < text.length; k++) { const m = money(text[k]); if (/^[\d,]*\d\.\d\d$/.test(text[k].replace(/[\s|]/g, '')) && m.length === 1) { out.totalDue = m[0]; break } }
+    const mi = text.findIndex(t => /^\*\*\s*minimum amount due/i.test(t))
+    if (mi >= 0) for (let k = mi + 1; k <= mi + 8 && k < text.length; k++) { const m = money(text[k]); if (m.length && /ckyc|stmt|place of supply/i.test(text[k]) && /\d,?\d*\.\d\d\s*$/.test(text[k].trim())) { out.minDue = m[m.length - 1]; break } }
+    const ci = text.findIndex(t => /^credit limit/i.test(t) && /statement date/i.test(t))
+    if (ci >= 0 && text[ci + 1]) { const m = money(text[ci + 1]); if (m.length) out.creditLimit = m[0]; const d = dateOf(text[ci + 1]); if (d) out.statementDate = d }
+    const ai = text.findIndex(t => /^available credit limit/i.test(t) && /payment due date/i.test(t))
+    if (ai >= 0 && text[ai + 1]) { const m = money(text[ai + 1]); if (m.length) out.availableCredit = m[0]; const d = dateOf(text[ai + 1]); if (d) out.dueDate = d }
+    const row = text.find(t => /^\s*\d[\d,]*\.\d\d(\s*\|\s*\d[\d,]*\.\d\d){4}\s*$/.test(t))
+    if (row) out.purchases = money(row)[2]
   }
   return out.totalDue != null && out.statementDate ? out : null
 }

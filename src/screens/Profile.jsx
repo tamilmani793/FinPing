@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Check, Pencil, X, SlidersHorizontal, Info, Briefcase, Link2, Eraser, Lightbulb, PiggyBank, Receipt } from 'lucide-react'
+import { ChevronRight, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Check, Pencil, X, SlidersHorizontal, Info, Link2, Eraser, Wallet } from 'lucide-react'
 import { format } from 'date-fns'
 import { TopBar, BtnPrimary, Avatar } from '../components/UI'
 import { useStore } from '../store'
@@ -11,7 +11,6 @@ import { removeDuplicateTransactions, describeCleanup } from '../lib/dedupeClean
 import { importDebts } from '../lib/debtBackup'
 import { askConfirm } from '../lib/confirm'
 import LinkTransactionsSheet from '../components/LinkTransactionsSheet'
-import AdvisorySheet from '../components/AdvisorySheet'
 
 function Row({ Icon, title, sub, onClick, right }) {
   return (
@@ -43,7 +42,6 @@ export default function Profile() {
   const [name, setName] = useState(savedName)
   const [editingName, setEditingName] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [advisory, setAdvisory] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [last, setLast] = useState(lastBackupAt())
   const photoInput = useRef(null)
@@ -197,15 +195,10 @@ export default function Profile() {
           </div>
         </Group>
 
-        {/* the other areas of the app */}
+        {/* the money areas live in the Money hub (salary, bills, loans, wealth, insights); Profile keeps the settings */}
         <Group title="Money">
           <div className="card rows" style={{ paddingTop: 4, paddingBottom: 4 }}>
-            <Row Icon={Briefcase} title="Salary" sub="Employers, payslips, tax and PF" onClick={() => setActiveTab('salary')} />
-            <Row Icon={PiggyBank} title="Provident fund" sub="PF and pension split, yearly interest and passbook" onClick={() => setActiveTab('pf')} />
-            <Row Icon={Receipt} title="Bills" sub="Cards, insurance, electricity, mobile, broadband and gas in one place" onClick={() => setActiveTab('bills')} />
-            <Row Icon={Lightbulb} title="Advisory" sub="Find hidden fees, interest and wallet-load or fuel charges" onClick={() => setAdvisory(true)} />
-            <Row Icon={Landmark} title="Debt &amp; loans" sub="EMIs, loans and repayments" onClick={() => setActiveTab('debt')} />
-            <Row Icon={TrendingUp} title="Wealth" sub="Investments, SIPs and net worth" onClick={() => setActiveTab('wealth')} />
+            <Row Icon={Wallet} title="Money" sub="Salary, provident fund, bills, debt, wealth, charts and advisory" onClick={() => setActiveTab('money')} />
           </div>
         </Group>
 
@@ -218,7 +211,6 @@ export default function Profile() {
         </Group>
       </div>
       {linkOpen && <LinkTransactionsSheet onClose={() => setLinkOpen(false)} />}
-      {advisory && <AdvisorySheet onClose={() => setAdvisory(false)} />}
     </div>
   )
 }
