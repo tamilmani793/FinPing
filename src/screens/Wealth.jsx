@@ -21,8 +21,9 @@ export default function Wealth() {
   const [openId, setOpenId] = useState(null)
   const [assetType, setAssetType] = useState(null)
   const [editing, setEditing] = useState(false) // details are read-only until you tap Edit
+  const [edEntry, setEdEntry] = useState(null) // the entry being changed
   const [depOpen, setDepOpen] = useState(false) // the quick Add deposit form, without going into Edit
-  useEffect(() => { setDepOpen(false) }, [openId])
+  useEffect(() => { setDepOpen(false); setEdEntry(null) }, [openId])
   const [dep, setDep] = useState({ amount: '', date: format(new Date(), 'yyyy-MM-dd') })
   const [curVal, setCurVal] = useState('')
   useBackHandler(openId != null || assetType != null, () => { setOpenId(null); setAssetType(null) })
@@ -67,6 +68,16 @@ export default function Wealth() {
     const entries = (openInv.entries || []).filter((_, i) => i !== idx)
     const gone = openInv.entries[idx].amount
     await db.investments.update(openInv.id, { entries, investedAmount: entries.reduce((a, e) => a + e.amount, 0), currentValue: Math.max(0, (openInv.currentValue || 0) - gone) })
+  }
+  // change a logged entry's date or amount; invested follows the entries and the current value moves by the same difference
+  const saveEntry = async () => {
+    const amount = parseFloat(edEntry.amount)
+    if (!(amount > 0)) { showNotification('Enter the amount', 'error'); return }
+    const old = openInv.entries[edEntry.idx]
+    const entries = openInv.entries.map((e, i) => (i === edEntry.idx ? { ...e, amount, date: new Date(edEntry.date) } : e))
+    await db.investments.update(openInv.id, { entries, investedAmount: entries.reduce((a, e) => a + e.amount, 0), currentValue: Math.max(0, (openInv.currentValue || 0) + amount - old.amount) })
+    setEdEntry(null)
+    showNotification('Entry updated', 'success')
   }
   const saveCurrent = async () => {
     const v = parseFloat(curVal)
@@ -329,13 +340,27 @@ export default function Wealth() {
               {(openInv.entries || []).length > 0 && (
                 <>
                   <LabelCaps style={{ margin: '16px 0 4px' }}>Entries</LabelCaps>
-                  {openInv.entries.map((e, i) => (
+                  {openInv.entries.map((e, i) => ({ e, i })).sort((a, b) => new Date(b.e.date) - new Date(a.e.date) || b.i - a.i).map(({ e, i }) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--border)', fontSize: 12 }}>
                       <span style={{ flex: 1, color: 'var(--txt2)' }}>{formatDate(e.date)}{e.opening ? ' · opening' : ''}</span>
                       <b style={{ marginRight: 12 }}>{formatINR(e.amount, 2)}</b>
+                      {editing && <button className="btn-secondary" style={{ height: 28, padding: '0 10px', fontSize: 11, marginRight: 6 }} onClick={() => setEdEntry({ idx: i, date: format(new Date(e.date), 'yyyy-MM-dd'), amount: String(e.amount) })}>Edit</button>}
                       {editing && <button className="btn-ghost" style={{ height: 28, padding: '0 10px', fontSize: 11 }} onClick={() => removeEntry(i)}>Remove</button>}
                     </div>
                   ))}
+                  {edEntry && (
+                    <div className="card" style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Edit this entry</div>
+                      <div className="form-grid">
+                        <Field label="Amount"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" value={edEntry.amount} onChange={e => setEdEntry({ ...edEntry, amount: e.target.value })} /></Field>
+                        <Field label="Date"><TextField type="date" value={edEntry.date} onChange={e => setEdEntry({ ...edEntry, date: e.target.value })} /></Field>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button className="btn-ghost" style={{ height: 44 }} onClick={() => setEdEntry(null)}>Cancel</button>
+                        <button className="btn-primary" style={{ flex: 1, height: 44 }} onClick={saveEntry}>Save</button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {editing && <button className="btn-ghost" style={{ width: '100%', height: 44, marginTop: 14 }} onClick={deleteInv}>Delete this investment</button>}
