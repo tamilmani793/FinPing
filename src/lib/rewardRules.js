@@ -181,3 +181,6 @@ export function describeRules(rules) {
 // a reward for display:"✨ +₹25" for cashback, "🪙 +15 Pts" for points
 // the percentage / rate follows when the tag carries it: "✨ +₹62 · 5%"; a spend held back by a cap says so
 export const rewardPill = r => (r && r.amount > 0 ? (r.type === 'points' ? `🪙 +${Math.round(r.amount).toLocaleString('en-IN')} Pts` : `✨ +₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' (cap)' : '') + (r.channel ? (r.channel === 'online' ? ' · Online' : ' · In shop') : '') : null)
+
+// the short form for transaction lists: "+₹10 · 1%" (no icon, no Online / In shop; the full pill is on the transaction's own page)
+export const rewardPillShort = r => (r && r.amount > 0 ? (r.type === 'points' ? `+${Math.round(r.amount).toLocaleString('en-IN')} pts` : `+₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' · cap' : '') : null)

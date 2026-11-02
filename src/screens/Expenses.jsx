@@ -11,7 +11,7 @@ import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { cardTitle } from '../lib/cardCatalog'
 import { txnName } from '../lib/txnName'
-import { rewardPill } from '../lib/rewardRules'
+import { rewardPill, rewardPillShort } from '../lib/rewardRules'
 import { moveToCategory } from '../lib/bulkCategory'
 import { filterTxns, defaultFilter, periodLabel } from '../lib/dateRange'
 import PeriodFilter from '../components/PeriodFilter'
@@ -218,7 +218,7 @@ export default function Expenses() {
                       isCredit={t.type === 'credit'}
                       tags={t.tags}
                       onClick={() => (selecting ? togglePick(t.id) : setEditTxn(t))}
-                      badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : (rewardPill(t.expectedReward) ? <Badge variant="mint" style={{ fontSize: 9 }}>{rewardPill(t.expectedReward)}</Badge> : (t.expectedReward && t.expectedReward.rule && ['excluded', 'minSpend'].includes(t.expectedReward.rule.kind) ? <Badge variant="grey" style={{ fontSize: 9 }}>No reward</Badge> : null))}
+                      badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : (rewardPillShort(t.expectedReward) ? <Badge variant="mint" style={{ fontSize: 9 }}>{rewardPillShort(t.expectedReward)}</Badge> : (t.expectedReward && t.expectedReward.rule && ['excluded', 'minSpend'].includes(t.expectedReward.rule.kind) ? <Badge variant="grey" style={{ fontSize: 9 }}>No reward</Badge> : null))}
                     />
                     </div>
                     </div>
