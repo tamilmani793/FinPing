@@ -71,3 +71,15 @@ db.version(10).stores({
   card_reward_rules: '++id, cardId',
   reward_statements: '++id, cardId, cycleKey',
 })
+
+// v11: advisory - the money-leak lessons you chose to keep (kept until you delete them)
+db.version(11).stores({
+  advisory_notes: '++id, key, savedAt',
+})
+
+// v12: provident fund - the contribution split (percentages), the interest rate of each financial year, and figures read from EPF passbooks
+db.version(12).stores({
+  pf_settings: '++id',
+  pf_rates: 'fy',
+  pf_statements: '++id, kind, month, fy',
+})

@@ -81,7 +81,10 @@ function extractCardLast4(text) {
 // "Avl Limit Rs.48,701.00" -> 48701
 export function extractAvailableLimit(text) {
   const m = text.match(/(?:avl|avail(?:able)?)\.?\s*(?:credit\s*)?(?:limit|lmt|bal(?:ance)?)\s*(?:is|of)?\s*[:\-]?\s*(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i)
-  return m ? parseFloat(m[1].replace(/,/g, '')) : null
+  if (m) return parseFloat(m[1].replace(/,/g, ''))
+  // debit-card / account SMS: "... Bal Rs.41406.61" (the account balance), never on credit-card SMS
+  const b = /\blimit\b|credit card/i.test(text) ? null : text.match(/\bbal(?:ance)?\s*(?:is|of)?\s*[:\-]?\s*(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)/i)
+  return b ? parseFloat(b[1].replace(/,/g, '')) : null
 }
 
 function extractAccountLast4(text) {
@@ -170,7 +173,7 @@ export function detectCardKind(text) {
   if (debit && !credit) return 'debit'
   if (debit && credit) return 'unknown'
   // Only a "card" word, with a spend verb and no account wording: can't tell which kind.
-  if (/\bcard\b/.test(t) && /spent|purchase|used|transaction of|txn|paid/.test(t) && !/a\/c|\bac\b|account/.test(t)) return 'unknown'
+  if (/\bcard\b/.test(t) && /spent|purchase|used|transaction of|txn|paid|withdrawn|withdrawal/.test(t) && !/a\/c|\bac\b|account/.test(t)) return 'unknown'
   return null
 }
 

@@ -15,6 +15,7 @@ import { typeLabel, networkLabel, excludedFor, cardTitle } from '../lib/cardCata
 import CardEditSheet from '../components/CardEditSheet'
 import TxnDetailSheet from '../components/TxnDetailSheet'
 import { entityIdFor } from '../lib/relink'
+import { recalcAccountBalance } from '../lib/accountBalance'
 import { txnName } from '../lib/txnName'
 import { Segmented, TextField, Picker } from '../components/Fields'
 import Sortable from '../components/Sortable'
@@ -438,7 +439,11 @@ function Detail({ card, cards, byCard, onBack }) {
               {card.cardType === 'account' && (
                 <>
                   <div className="label-caps">Balance (as last reported by the bank)</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 10 }}>{card.accountBalance != null ? formatINR(card.accountBalance) : '—'}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800 }}>{card.accountBalance != null ? formatINR(card.accountBalance) : '—'}</div>
+                  <button className="btn-ghost" style={{ height: 34, fontSize: 12, margin: '6px 0 10px' }} onClick={async () => {
+                    const r = await recalcAccountBalance(card, txns)
+                    showNotification(r ? `Balance ${formatINR(r.balance)}: the bank's last reported balance, then ${r.applied} later transaction${r.applied === 1 ? '' : 's'}` : 'No bank balance found in the SMS to build from. Edit the account and enter its balance once.', r ? 'success' : 'error')
+                  }}>Recalculate from transactions</button>
                 </>
               )}
               <div className="label-caps">Spent this month</div>

@@ -49,7 +49,7 @@ export default function TxnEditSheet({ txn, onClose }) {
         category: f.category, paymentMode: f.paymentMode, channel: f.channel === 'auto' ? null : f.channel, bank: card?.bank || '', accountLast4: card?.cardLast4 || null, cardId: card ? card.id : null,
         rawSMS: null, parsedBy: 'manual', tags: [], notes: f.notes, isExcluded: f.isExcluded, createdAt: new Date(),
       })
-      if (card && !['account', 'unknown'].includes(card.cardType)) await applyTxnToCard(card, f.type, amount)
+      if (card && card.cardType !== 'unknown') await applyTxnToCard(card, f.type, amount)
       showNotification('Transaction added', 'success')
       onClose()
       return

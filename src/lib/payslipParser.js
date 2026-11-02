@@ -16,7 +16,7 @@ const monthKey = (name, year) => { const m = MON[String(name).slice(0, 3).toLowe
 const normName = s => String(s || '').toUpperCase().replace(/\s+/g, ' ').trim()
 
 // the page's text as lines of cells {s, x}; lines are items that share a baseline, cells run along x
-function toLines(items, tol = 2.5) {
+export function toLines(items, tol = 2.5) {
   const cells = items.filter(i => i.str.trim()).map(i => ({ s: i.str.trim(), x: i.transform[4], y: i.transform[5] })).sort((a, b) => b.y - a.y || a.x - b.x)
   const lines = []
   for (const c of cells) { const l = lines.find(l => Math.abs(l.y - c.y) <= tol); if (l) l.cells.push(c); else lines.push({ y: c.y, cells: [c] }) }
@@ -28,7 +28,7 @@ function toLines(items, tol = 2.5) {
   return lines
 }
 
-async function openPdf(arrayBuffer, password, pdfjs) {
+export async function openPdf(arrayBuffer, password, pdfjs) {
   if (!pdfjs) {
     pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
     pdfjs.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default

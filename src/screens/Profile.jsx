@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Check, Pencil, X, SlidersHorizontal, Info, Briefcase, Link2, Eraser } from 'lucide-react'
+import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Check, Pencil, X, SlidersHorizontal, Info, Briefcase, Link2, Eraser, Lightbulb, PiggyBank } from 'lucide-react'
 import { format } from 'date-fns'
 import { TopBar, BtnPrimary, Avatar } from '../components/UI'
 import { useStore } from '../store'
@@ -7,10 +7,11 @@ import { isNative } from '../lib/nativeSms'
 import { useProfile, setUserName, setProfilePhoto, resizePhoto } from '../lib/profile'
 import { ThemeStrip } from '../components/Appearance'
 import { exportBackup, inspectBackup, restoreBackup, lastBackupAt } from '../lib/backup'
-import { relinkTransactions } from '../lib/relink'
 import { removeDuplicateTransactions, describeCleanup } from '../lib/dedupeCleanup'
 import { importDebts } from '../lib/debtBackup'
 import { askConfirm } from '../lib/confirm'
+import LinkTransactionsSheet from '../components/LinkTransactionsSheet'
+import AdvisorySheet from '../components/AdvisorySheet'
 
 function Row({ Icon, title, sub, onClick, right }) {
   return (
@@ -42,6 +43,8 @@ export default function Profile() {
   const [name, setName] = useState(savedName)
   const [editingName, setEditingName] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [advisory, setAdvisory] = useState(false)
+  const [linkOpen, setLinkOpen] = useState(false)
   const [last, setLast] = useState(lastBackupAt())
   const photoInput = useRef(null)
   const restoreInput = useRef(null)
@@ -101,22 +104,6 @@ export default function Profile() {
   const list = (rows, fmt, max = 8) => rows.slice(0, max).map(fmt).join('\n') + (rows.length > max ? `
 …and ${rows.length - max} more` : '')
 
-  const doRelink = async () => {
-    try {
-      const plan = await relinkTransactions({ dryRun: true })
-      if (!plan.count) { showNotification('Nothing to link: all transactions are already tied to a card or account', 'success'); return }
-      const made = [...new Set(plan.items.filter(i => i.newCard).map(i => i.target))]
-      const msg = `${plan.count} transaction${plan.count === 1 ? '' : 's'} will be tied to a card or account:
-
-` + list(plan.items, i => `${line(i)} → ${i.target}${i.newCard ? ' (new)' : ''}`) +
-        (made.length ? `
-
-New card or account to be created: ${made.join(', ')}.` : '') + '\n\nBalances are not changed.'
-      if (!(await askConfirm({ title: 'Link these transactions?', message: msg, confirmLabel: 'Link', danger: false }))) return
-      const n = await relinkTransactions()
-      showNotification(`${n} transaction${n === 1 ? '' : 's'} linked`, 'success')
-    } catch (e) { showNotification('Could not link: ' + e.message, 'error') }
-  }
   const doCleanup = async () => {
     try {
       const p = await describeCleanup()
@@ -205,7 +192,7 @@ New card or account to be created: ${made.join(', ')}.` : '') + '\n\nBalances ar
         {/* fixing up transactions */}
         <Group title="Tidy up transactions">
           <div className="card rows" style={{ paddingTop: 4, paddingBottom: 4 }}>
-            <Row Icon={Link2} title="Link unlinked transactions" sub="Tie SMS transactions to their card or account" onClick={doRelink} />
+            <Row Icon={Link2} title="Link unlinked transactions" sub="Tie SMS transactions to their card or account" onClick={() => setLinkOpen(true)} />
             <Row Icon={Eraser} title="Clean up duplicates" sub="Remove non-payments and merge repeated SMS" onClick={doCleanup} />
           </div>
         </Group>
@@ -214,6 +201,8 @@ New card or account to be created: ${made.join(', ')}.` : '') + '\n\nBalances ar
         <Group title="Money">
           <div className="card rows" style={{ paddingTop: 4, paddingBottom: 4 }}>
             <Row Icon={Briefcase} title="Salary" sub="Employers, payslips, tax and PF" onClick={() => setActiveTab('salary')} />
+            <Row Icon={PiggyBank} title="Provident fund" sub="PF and pension split, yearly interest and passbook" onClick={() => setActiveTab('pf')} />
+            <Row Icon={Lightbulb} title="Advisory" sub="Find hidden fees, interest and wallet-load or fuel charges" onClick={() => setAdvisory(true)} />
             <Row Icon={Landmark} title="Debt &amp; loans" sub="EMIs, loans and repayments" onClick={() => setActiveTab('debt')} />
             <Row Icon={TrendingUp} title="Wealth" sub="Investments, SIPs and net worth" onClick={() => setActiveTab('wealth')} />
           </div>
@@ -227,6 +216,8 @@ New card or account to be created: ${made.join(', ')}.` : '') + '\n\nBalances ar
           </div>
         </Group>
       </div>
+      {linkOpen && <LinkTransactionsSheet onClose={() => setLinkOpen(false)} />}
+      {advisory && <AdvisorySheet onClose={() => setAdvisory(false)} />}
     </div>
   )
 }

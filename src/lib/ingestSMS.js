@@ -71,6 +71,16 @@ async function soleCardOfBank(bank) {
   return cards.length === 1 ? cards[0] : null
 }
 
+// A debit card with no linked account uses the bank's only account, if there is just one (and remembers it).
+async function accountOfDebitCard(card) {
+  if (card.linkedAccountId != null) return card.linkedAccountId
+  const first = String(card.bank || '').toLowerCase().split(' ')[0]
+  const accts = (await db.creditCards.toArray()).filter(c => c.cardType === 'account' && String(c.bank || '').toLowerCase().split(' ')[0] === first)
+  if (accts.length !== 1) return null
+  await db.creditCards.update(card.id, { linkedAccountId: accts[0].id })
+  return accts[0].id
+}
+
 // A debit-card spend (or refund) moves the linked bank account's balance. If the SMS reports the
 // account balance itself ("Avl Bal"), that is the truth; otherwise the amount is taken off the
 // last known balance. An account with no balance entered yet is left alone.
@@ -89,7 +99,8 @@ export async function applyTxnToCard(card, type, amount) {
     if (card.accountBalance == null) return
     await db.creditCards.update(card.id, { accountBalance: Math.round((card.accountBalance + (type === 'debit' ? -amount : amount)) * 100) / 100 })
   } else if (card.cardType === 'debit') {
-    if (card.linkedAccountId != null) await applyToLinkedAccount(card.linkedAccountId, type, amount, null)
+    const acctId = await accountOfDebitCard(card)
+    if (acctId != null) await applyToLinkedAccount(acctId, type, amount, null)
   } else if (isCredit(card)) {
     await adjustCard(card, type === 'debit' ? amount : -amount)
   }
@@ -145,10 +156,12 @@ export async function ingestSMS(rawText, meta = {}) {
       newTxn.id = await db.transactions.add(newTxn)
       await pairTransfer(newTxn) // your own money moving between two of your accounts is not income or spending
       // A bank account keeps the balance the bank reports ("Avl Bal").
-      if (card && card.cardType === 'account' && parsed.availableLimit != null) await db.creditCards.update(card.id, { accountBalance: parsed.availableLimit })
+      // With no "Avl Bal" in the SMS, the amount is taken off (or added to) the last known balance, like a card spend.
+      if (card && card.cardType === 'account' && !isCashback) await applyToLinkedAccount(card.id, type, parsed.amount || 0, parsed.availableLimit)
       // A debit card spends from the bank account it is linked to.
-      if (card && card.cardType === 'debit' && card.linkedAccountId != null && !isCashback) {
-        await applyToLinkedAccount(card.linkedAccountId, type, parsed.amount || 0, parsed.availableLimit)
+      if (card && card.cardType === 'debit' && !isCashback) {
+        const acctId = await accountOfDebitCard(card)
+        if (acctId != null) await applyToLinkedAccount(acctId, type, parsed.amount || 0, parsed.availableLimit)
       }
       // Only credit cards carry a balance / limit. Debit and not-yet-typed cards just collect their spends.
       if (card && isCredit(card) && !isCashback) {
