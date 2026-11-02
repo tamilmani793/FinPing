@@ -21,10 +21,11 @@ const Line = ({ k, v, bold, color }) => (
 )
 
 // a percentage you can change; it is saved when you leave the box. `max` keeps it sensible.
-function PctField({ label, value, onSave, hint, max = 100, disabled }) {
+function PctField({ label, value, onSave, hint, max = 100, disabled, readOnly }) {
   const [v, setV] = useState(String(value))
   const [seen, setSeen] = useState(value)
   if (seen !== value) { setSeen(value); setV(String(value)) }
+  if (readOnly) return <div><div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{label}</div><div style={{ fontSize: 16, fontWeight: 800 }}>{value}%</div>{hint && <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 3 }}>{hint}</div>}</div>
   const commit = () => { const x = Number(v); if (v === '' || !(x >= 0) || x > max) { setV(String(value)); return } if (x !== value) onSave(x) }
   return (
     <div>
@@ -104,6 +105,7 @@ export default function PfPage() {
   const inputs = useLiveQuery(async () => loadPfInputs(), [], null)
   useLiveQuery(() => db.pf_statements.count()) // refresh when passbook figures change
   const [open, setOpen] = useState(null)
+  const [editing, setEditing] = useState(false) // percentages and rates are read-only until you tap Edit
   const [upload, setUpload] = useState(false)
   const pf = inputs ? buildPf(inputs) : null
   const saved = inputs?.statements.length || 0
@@ -123,6 +125,7 @@ export default function PfPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 18px 10px' }}>
         <div onClick={goBackTab} style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={20} /></div>
         <div style={{ flex: 1 }}><div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>Provident fund</div><div style={{ fontSize: 12, color: 'var(--txt2)' }}>PF and pension, worked out from your payslips</div></div>
+        <button className={editing ? 'btn-primary' : 'btn-secondary'} style={{ height: 34, padding: '0 16px', fontSize: 12 }} onClick={() => setEditing(!editing)}>{editing ? 'Done' : 'Edit'}</button>
         <span onClick={() => setUpload(true)} style={{ color: 'var(--gold-dim)', cursor: 'pointer' }} aria-label="Add PF statement" title="Add PF statement"><Paperclip size={20} /></span>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 18px 24px' }}>
@@ -161,9 +164,9 @@ export default function PfPage() {
               <div style={{ fontSize: 14, fontWeight: 700 }}>{job.employer}</div>
               <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 10 }}>{job.joinDate ? monthLabel(job.joinDate.slice(0, 7)) : '—'} → {job.endDate ? monthLabel(job.endDate.slice(0, 7)) : 'present'}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <PctField label="You contribute (%)" value={s.employeePct} onSave={v => setPct(job, { employeePct: v })} hint="of PF wages" />
-                <PctField label="Employer contributes (%)" value={s.employerPct} onSave={v => setPct(job, { employerPct: v })} hint="of PF wages" />
-                <PctField label="Of that, to pension (%)" value={s.pensionPct} onSave={v => setPct(job, { pensionPct: v })} hint={s.pensionPct === 0 ? 'no pension from this employer' : 'usually 8.33'} />
+                <PctField readOnly={!editing} label="You contribute (%)" value={s.employeePct} onSave={v => setPct(job, { employeePct: v })} hint="of PF wages" />
+                <PctField readOnly={!editing} label="Employer contributes (%)" value={s.employerPct} onSave={v => setPct(job, { employerPct: v })} hint="of PF wages" />
+                <PctField readOnly={!editing} label="Of that, to pension (%)" value={s.pensionPct} onSave={v => setPct(job, { pensionPct: v })} hint={s.pensionPct === 0 ? 'no pension from this employer' : 'usually 8.33'} />
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Rest goes into PF (%)</div>
                   <div style={{ height: 48, borderRadius: 14, background: 'var(--bg2)', display: 'flex', alignItems: 'center', padding: '0 14px', fontWeight: 700 }}>{erPf}%</div>
@@ -172,7 +175,7 @@ export default function PfPage() {
               </div>
               {s.pensionPct > 0 && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, fontSize: 12.5 }}>
-                  <input type="checkbox" checked={s.pensionCap} onChange={e => saveSettings(job.id, { pensionCap: e.target.checked }, s)} style={{ width: 18, height: 18, accentColor: 'var(--gold)' }} />
+                  <input type="checkbox" disabled={!editing} checked={s.pensionCap} onChange={e => saveSettings(job.id, { pensionCap: e.target.checked }, s)} style={{ width: 18, height: 18, accentColor: 'var(--gold)' }} />
                   <span>Pension is worked out on wages up to {formatINR(WAGE_CEILING)} only (the EPFO ceiling, at most ₹1,250 a month)</span>
                 </label>
               )}
@@ -199,9 +202,9 @@ export default function PfPage() {
                   {isOpen && (
                     <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
                       <div style={{ maxWidth: 200, marginBottom: 8 }}>
-                        <PctField label="Interest rate for the year (%)" value={sec.rate} max={20} onSave={v => saveRate(sec.fy, v)} hint={sec.customRate ? 'your rate' : 'EPFO declared rate (default)'} />
+                        <PctField readOnly={!editing} label="Interest rate for the year (%)" value={sec.rate} max={20} onSave={v => saveRate(sec.fy, v)} hint={sec.customRate ? 'your rate' : 'EPFO declared rate (default)'} />
                       </div>
-                      {sec.customRate && <button className="btn-ghost" style={{ height: 34, fontSize: 12, marginBottom: 8 }} onClick={() => saveRate(sec.fy, '')}>Use the default rate</button>}
+                      {sec.customRate && editing && <button className="btn-ghost" style={{ height: 34, fontSize: 12, marginBottom: 8 }} onClick={() => saveRate(sec.fy, '')}>Use the default rate</button>}
                       <Line k="Your PF contributions" v={formatINR(sec.ee, 2)} />
                       <Line k="Employer's PF part" v={formatINR(sec.er, 2)} />
                       <Line k="Employer's pension part" v={formatINR(sec.eps, 2)} />
@@ -223,7 +226,7 @@ export default function PfPage() {
           </>
         )}
 
-        {saved > 0 && (
+        {saved > 0 && editing && (
           <button className="btn-ghost" style={{ width: '100%', height: 42, marginTop: 4, color: 'var(--red-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }} onClick={clear}><Trash2 size={15} /> Remove {saved} passbook figure{saved === 1 ? '' : 's'}</button>
         )}
       </div>

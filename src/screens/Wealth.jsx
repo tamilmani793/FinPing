@@ -9,7 +9,7 @@ import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { askConfirm } from '../lib/confirm'
 import { format } from 'date-fns'
-import { ppfYear, ppfHistory, ppfRateFor } from '../lib/ppf'
+import { ppfYear, ppfHistory, ppfRateFor, ppfCurrent } from '../lib/ppf'
 
 const TYPE_ICONS = { MutualFund: '📈', Stock: '📊', PPF: '🏛', NPS: '🏦', Gold: '🪙', FD: '🔐', Other: '💰' }
 const TYPE_COLORS = { MutualFund: 'var(--mint)', Stock: 'var(--indigo)', PPF: 'var(--amber)', NPS: '#8B5CF6', Gold: '#D97706', FD: '#06B6D4', Other: 'var(--txt3)' }
@@ -30,7 +30,9 @@ export default function Wealth() {
 
   const [form, setForm] = useState({ name: '', type: 'MutualFund', investedAmount: '', currentValue: '', notes: '', last4: '' })
 
-  const investments = useLiveQuery(() => db.investments.toArray())
+  // a PPF account's current value is worked out (deposits plus the interest credited so far), not typed in
+  const rawInvestments = useLiveQuery(() => db.investments.toArray())
+  const investments = rawInvestments && rawInvestments.map(i => (i.type === 'PPF' ? { ...i, currentValue: ppfCurrent(i) } : i))
 
   const totalInvested = (investments || []).reduce((s, i) => s + (i.investedAmount || 0), 0)
   const totalCurrent = (investments || []).reduce((s, i) => s + (i.currentValue || 0), 0)
@@ -188,7 +190,7 @@ export default function Wealth() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, margin: '12px 0' }}>
                   <div className="card-sm" style={{ padding: 10 }}><LabelCaps style={{ fontSize: 9 }}>Invested</LabelCaps><div className="mono-sm">{formatINR(inv)}</div></div>
                   <div className="card-sm" style={{ padding: 10 }}><LabelCaps style={{ fontSize: 9 }}>Current</LabelCaps><div className="mono-sm" style={{ color: 'var(--mint)' }}>{formatINR(cur)}</div></div>
-                  <div className="card-sm" style={{ padding: 10 }}><LabelCaps style={{ fontSize: 9 }}>Gain</LabelCaps><div className="mono-sm" style={{ color: cur >= inv ? 'var(--mint)' : 'var(--red)' }}>{cur >= inv ? '+' : '−'}{formatINR(Math.abs(cur - inv))}</div></div>
+                  <div className="card-sm" style={{ padding: 10 }}><LabelCaps style={{ fontSize: 9 }}>Gain</LabelCaps><div className="mono-sm" style={{ color: cur >= inv ? 'var(--mint)' : 'var(--red)' }}>{cur >= inv ? '+' : '−'}{formatINR(Math.abs(cur - inv))}{inv > 0 ? <span style={{ display: 'block', fontSize: 10 }}>{((cur - inv) / inv * 100).toFixed(1)}%</span> : null}</div></div>
                 </div>
                 {list.length === 0 && (
                   <div style={{ padding: '14px 0', fontSize: 12.5, color: 'var(--txt2)' }}>
@@ -208,7 +210,7 @@ export default function Wealth() {
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <div className="mono-sm" style={{ color: 'var(--mint)' }}>{formatINR(i.currentValue)}</div>
-                          <div style={{ fontSize: 11, color: gain >= 0 ? 'var(--mint-dim)' : 'var(--red)' }}>{gain >= 0 ? '+' : '−'}{formatINR(Math.abs(gain))}</div>
+                          <div style={{ fontSize: 11, color: gain >= 0 ? 'var(--mint-dim)' : 'var(--red)' }}>{gain >= 0 ? '+' : '−'}{formatINR(Math.abs(gain))}{i.investedAmount > 0 ? ` · ${(gain / i.investedAmount * 100).toFixed(1)}%` : ''}</div>
                         </div>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 3 }}>Invested {formatINR(i.investedAmount)}{i.units ? ` · ${i.units} units` : ''}{i.nav ? ` · NAV ${i.nav}` : ''}</div>
@@ -275,7 +277,7 @@ export default function Wealth() {
                 <div className="card-sm" style={{ padding: 10 }}><LabelCaps style={{ fontSize: 9 }}>Invested</LabelCaps><div className="mono-sm">{formatINR(openInv.investedAmount || 0, 2)}</div></div>
                 <div className="card-sm" style={{ padding: 10 }}><LabelCaps style={{ fontSize: 9 }}>Current</LabelCaps><div className="mono-sm" style={{ color: 'var(--mint)' }}>{formatINR(openInv.currentValue || 0, 2)}</div></div>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--txt2)', marginBottom: 12 }}>Gain {formatINR((openInv.currentValue || 0) - (openInv.investedAmount || 0), 2)}</div>
+              <div style={{ fontSize: 12, color: 'var(--txt2)', marginBottom: 12 }}>{openInv.type === 'PPF' ? 'Interest earned' : 'Gain'} <b style={{ color: (openInv.currentValue || 0) >= (openInv.investedAmount || 0) ? 'var(--mint-dim)' : 'var(--red)' }}>{formatINR((openInv.currentValue || 0) - (openInv.investedAmount || 0), 2)}</b>{openInv.investedAmount > 0 ? ` · ${(((openInv.currentValue || 0) - openInv.investedAmount) / openInv.investedAmount * 100).toFixed(1)}% of invested` : ''}{openInv.type === 'PPF' ? ' · current = deposits + interest credited up to 31 March' : ''}</div>
               {openInv.type === 'PPF' && (() => {
                 const rows = ppfHistory(openInv)
                 const rate = rows[rows.length - 1].rate
@@ -305,7 +307,7 @@ export default function Wealth() {
                         <span style={{ textAlign: 'right' }}>{formatINR(r.deposited)}</span>
                         {!editing ? <span style={{ textAlign: 'right' }}>{r.rate}</span> : <input className="input" type="number" inputMode="decimal" step="0.1" defaultValue={r.rate} key={openInv.id + r.fy + ':' + r.rate} style={{ height: 30, padding: '0 6px', textAlign: 'right', fontSize: 12 }}
                           onBlur={e => { const v = parseFloat(e.target.value); if (v > 0 && v !== r.rate) db.investments.update(openInv.id, { ppfRates: { ...(openInv.ppfRates || {}), [r.fy]: v } }) }} />}
-                        {!editing ? <span style={{ textAlign: 'right', color: r.actual ? 'var(--txt)' : 'var(--txt2)' }}>{formatINR(r.interest)}</span> : <input className="input" type="number" inputMode="decimal" defaultValue={r.interest} key={openInv.id + r.fy + ':' + r.interest + r.actual} style={{ height: 30, padding: '0 6px', textAlign: 'right', fontSize: 12, color: r.actual ? 'var(--txt)' : 'var(--txt2)' }}
+                        {!editing ? <span style={{ textAlign: 'right', color: r.actual ? 'var(--txt)' : 'var(--txt2)' }}>{formatINR(r.interest)}{r.pct != null && <span style={{ display: 'block', fontSize: 10, color: 'var(--txt2)' }}>{r.pct.toFixed(2)}% of balance</span>}</span> : <input className="input" type="number" inputMode="decimal" defaultValue={r.interest} key={openInv.id + r.fy + ':' + r.interest + r.actual} style={{ height: 30, padding: '0 6px', textAlign: 'right', fontSize: 12, color: r.actual ? 'var(--txt)' : 'var(--txt2)' }}
                           onBlur={e => { const v = parseFloat(e.target.value); if (e.target.value !== '' && v >= 0 && v !== r.interest) db.investments.update(openInv.id, { ppfInterest: { ...(openInv.ppfInterest || {}), [r.fy]: v } }) }} />}
                       </div>
                     ))}
@@ -326,7 +328,7 @@ export default function Wealth() {
                 {depOpen && !editing && <button className="btn-ghost" style={{ height: 52, padding: '0 18px' }} onClick={() => setDepOpen(false)}>Cancel</button>}
                 <BtnPrimary onClick={addDeposit} style={{ flex: 1 }}>Add deposit</BtnPrimary>
               </div>
-              {editing && (
+              {editing && openInv.type !== 'PPF' && (
                 <>
                   <LabelCaps style={{ margin: '16px 0 4px' }}>Update current value (balance from the passbook / app)</LabelCaps>
                   <div style={{ display: 'flex', gap: 8 }}>

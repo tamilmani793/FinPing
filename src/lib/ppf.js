@@ -36,8 +36,10 @@ export const ppfRateFor = (inv, fy) => inv.ppfRates?.[fy] ?? inv.ppfRate ?? PPF_
 
 // Year by year: deposits, rate, interest (the passbook figure if you entered it, else worked out) and closing balance.
 // The opening amount is taken as the balance at the start of the earliest year with entries.
+// the logged deposits; an account created with just an invested amount counts that amount as its opening balance
+export const ppfEntries = inv => inv.entries || (inv.investedAmount ? [{ date: inv.startDate || new Date(), amount: inv.investedAmount, opening: true }] : [])
 export function ppfHistory(inv, now = new Date()) {
-  const entries = inv.entries || []
+  const entries = ppfEntries(inv)
   const real = entries.filter(e => !e.opening)
   const opening = entries.filter(e => e.opening).reduce((s, e) => s + e.amount, 0)
   const nowY = fyStartYear(now)
@@ -50,8 +52,15 @@ export function ppfHistory(inv, now = new Date()) {
     const actual = inv.ppfInterest?.[fy]
     const current = y === nowY
     const interest = actual ?? (current ? r.soFar : r.projected)
-    rows.push({ fy, rate, deposited: r.deposited, over: r.over, interest, actual: actual != null, current, computed: current ? r.soFar : r.projected, closing: carry + r.deposited + (current && actual == null ? 0 : interest) })
+    rows.push({ fy, rate, pct: carry + r.deposited > 0 ? (interest / (carry + r.deposited)) * 100 : null, deposited: r.deposited, over: r.over, interest, actual: actual != null, current, computed: current ? r.soFar : r.projected, closing: carry + r.deposited + (current && actual == null ? 0 : interest) })
     carry = rows[rows.length - 1].closing
   }
   return rows
+}
+
+// What a PPF account is worth now: everything deposited plus the interest credited on 31 March of each year that has ended.
+// This year's interest is not part of it until the bank credits it (enter the passbook figure in the year table once it is).
+export function ppfCurrent(inv, now = new Date()) {
+  const rows = ppfHistory(inv, now)
+  return rows.length ? rows[rows.length - 1].closing : 0
 }

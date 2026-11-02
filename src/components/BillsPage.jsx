@@ -9,6 +9,7 @@ import { askConfirm } from '../lib/confirm'
 import { Field, TextField, Picker } from './Fields'
 import CardBills from './CardBills'
 import { formatINR } from './UI'
+import { parseEbTable } from '../lib/ebImport'
 import { KINDS, CYCLES, kindOf, cycleLabel, advance, usageRows, gasStats, collectBills, ymd } from '../lib/bills'
 
 // All bills in one place: credit card statements, insurance premiums, and the electricity, mobile, broadband, gas and other bills you add.
@@ -90,10 +91,62 @@ function Stat({ label, value, color }) {
   return <div className="card-sm" style={{ padding: 10 }}><div className="label-caps" style={{ fontSize: 9 }}>{label}</div><div className="mono-sm" style={{ color }}>{value}</div></div>
 }
 
+// paste the consumption table from the electricity board's site; each row becomes a logged bill
+const EB_SAMPLE = [
+  '11/10/2026\t12/10/2026\tNORMAL\t8740\t\t2\t\t500\t1570\t0\t0\t0\t0\t0\t1570\t0\t0\t1570\t 31/10/2026\t1570\tPGIBP2912259179\t 30/10/2026',
+  '10/08/2026\t11/08/2026\tNORMAL\t8240\t\t1\t\t489\t1500.7\t0\t0\t0\t0\t0\t1501\t0\t0\t1501\t 31/08/2026\t1501\tPGIBP2891085970\t 15/08/2026',
+  '08/06/2026\t08/06/2026\tNORMAL\t7751\t\t1\t\t498\t1674.9\t0\t0\t0\t0\t0\t1675\t0\t0\t1675\t 29/06/2026\t1675\tPGIBP3873469841\t 15/06/2026',
+  '13/12/2023\t13/12/2023\tPMC\tPrevious Assessment Amount Billed\t342\t0\t0\t342\t 02/01/2024\t342\tPGIBP1112069687\t 24/12/2023',
+  '07/10/2023\t07/10/2023\tNORMAL\t3503\t\t\t\t226\t342\t0\t0\t0\t0\t0\t342\t20.86\t0\t321.14\t 27/10/2023\t321\tPGIBP223357760\t 10/10/2023',
+].join('\n')
+
+function EbImport({ bill, existing, onClose }) {
+  const { showNotification } = useStore()
+  const [text, setText] = useState('')
+  const parsed = text.trim() ? parseEbTable(text) : null
+  const seen = new Set(existing.map(e => `${ymd(e.date)}|${e.reading ?? ''}`))
+  const fresh = parsed ? parsed.rows.filter(r => !seen.has(`${ymd(r.date)}|${r.reading ?? ''}`)) : []
+  const run = async () => {
+    await db.bill_entries.bulkAdd(fresh.map(r => ({
+      billId: bill.id, date: r.date, amount: r.amount, units: r.units, reading: r.reading, dueDate: r.dueDate,
+      paid: r.paid, paidOn: r.paid ? r.paidOn || r.date : null, receipt: r.receipt || null, note: r.note || null, source: 'import',
+    })))
+    showNotification(`${fresh.length} bill${fresh.length === 1 ? '' : 's'} imported`, 'success')
+    onClose()
+  }
+  return (
+    <Sheet onClose={onClose}>
+      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Import bills</div>
+      <div style={{ fontSize: 12, color: 'var(--txt2)', marginBottom: 10 }}>Copy the "Consumption Charges and Collection Details" table from the electricity board's site and paste it here. Date becomes the reading date, KWH the meter reading, Consumption the units, Amount To Be Paid the amount, and Collection Date the paid date.</div>
+      <textarea className="input" style={{ height: 130, fontSize: 11.5, fontFamily: 'monospace' }} placeholder="Paste the table here" value={text} onChange={e => setText(e.target.value)} />
+      <button className="btn-ghost" style={{ height: 32, fontSize: 12, marginTop: 6 }} onClick={() => setText(EB_SAMPLE)}>Fill with sample rows</button>
+      {parsed && parsed.rows.length === 0 && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 8 }}>No rows found. Copy the whole table, including the dates, and paste it again.</div>}
+      {parsed && parsed.rows.length > 0 && (
+        <div className="card" style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{fresh.length} to import{parsed.rows.length - fresh.length > 0 ? ` · ${parsed.rows.length - fresh.length} already logged` : ''}</div>
+          {fresh.slice(0, 6).map((r, i) => (
+            <div key={i} style={{ padding: '5px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 11.5 }}>
+              <b>{format(r.date, 'd MMM yyyy')}</b> · {r.reading != null ? `reading ${r.reading} · ` : ''}{r.units != null ? `${r.units} units · ` : ''}<b>{formatINR(r.amount)}</b>
+              <div style={{ color: 'var(--txt2)' }}>due {r.dueDate ? format(r.dueDate, 'd MMM yyyy') : '—'} · {r.paid ? `paid ${r.paidOn ? format(r.paidOn, 'd MMM yyyy') : ''}` : 'unpaid'}{r.note ? ` · ${r.note}` : ''}</div>
+            </div>
+          ))}
+          {fresh.length > 6 && <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 4 }}>and {fresh.length - 6} more</div>}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button className="btn-ghost" style={{ height: 46 }} onClick={onClose}>Cancel</button>
+        <button className="btn-primary" style={{ flex: 1, height: 46 }} disabled={!fresh.length} onClick={run}>Import {fresh.length || ''}</button>
+      </div>
+    </Sheet>
+  )
+}
+
 // one bill: read-only details, the log of bills / cylinders, and (after Edit) changes
 function BillDetail({ bill, entries, onClose, startOpen }) {
   const { showNotification } = useStore()
   const [editBill, setEditBill] = useState(false) // the bill's own details form
+  const [importOpen, setImportOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [editing, setEditing] = useState(false) // logging and changing entries only after Edit
   const [ed, setEd] = useState(null) // the logged entry being changed
   const [form, setForm] = useState(!!startOpen) // opened from a row's Paid button: the payment form is ready
@@ -173,28 +226,31 @@ function BillDetail({ bill, entries, onClose, startOpen }) {
                   <Stat label="Highest bill" value={`${use.highest.units} units`} />
                 </div>
               )}
-              {mine.map((e, i) => {
+              {(showAll ? mine : mine.slice(0, 12)).map((e, i) => {
                 const r = use.rows.find(x => x.id === e.id)
                 return (
-                  <div key={e.id} style={{ padding: '7px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 12 }}>
-                    {/* one line with the details: date of reading, meter reading, units consumed, amount */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 10, rowGap: 2 }}>
-                      <b>{format(new Date(e.date), 'd MMM yyyy')}</b>
-                      {e.reading != null && <span style={{ color: 'var(--txt2)' }}>Reading <b style={{ color: 'var(--txt)' }}>{e.reading}</b></span>}
-                      <span>{e.units ? <><b>{e.units}</b> units</> : <span style={{ color: 'var(--txt2)' }}>no units</span>}{r?.change != null && <span style={{ marginLeft: 4, fontSize: 10.5, color: r.change > 0 ? 'var(--red)' : 'var(--mint-dim)' }}>{r.change > 0 ? '+' : ''}{Math.round(r.change)}%</span>}</span>
-                      <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                        <b style={{ fontSize: 15 }}>{formatINR(e.amount)}</b>
-                        {r?.rate ? <span style={{ display: 'block', fontSize: 10, color: 'var(--txt2)' }}>₹{r.rate.toFixed(2)}/unit</span> : null}
-                      </span>
+                  <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1.25fr 0.9fr 1.1fr', gap: 8, alignItems: 'center', padding: '9px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 12 }}>
+                    {/* column 1: month and year (bold), then the meter reading, then the paid status */}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800 }}>{format(new Date(e.date), 'MMM yyyy')}</div>
+                      <div style={{ color: 'var(--txt2)', marginTop: 2 }}>{e.reading != null ? <>Reading <b style={{ color: 'var(--txt)' }}>{e.reading}</b></> : 'No reading'}</div>
+                      <div style={{ marginTop: 2, fontSize: 11, fontWeight: 700, color: e.paid === false ? 'var(--red)' : 'var(--mint-dim)' }}>{e.paid === false ? 'Unpaid' : `Paid${e.paidOn ? ' ' + format(new Date(e.paidOn), 'd MMM yyyy') : ''}`}</div>
                     </div>
-                    {/* next line: paid status on the left, due date as a tag on the right */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, fontSize: 11 }}>
-                      <b style={{ color: e.paid === false ? 'var(--red)' : 'var(--mint-dim)' }}>{e.paid === false ? 'Unpaid' : `Paid${e.paidOn ? ' ' + format(new Date(e.paidOn), 'd MMM yyyy') : ''}`}</b>
-                      <span style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid var(--border2)', color: e.paid === false && e.dueDate ? 'var(--red)' : 'var(--txt2)' }}>Due {e.dueDate ? format(new Date(e.dueDate), 'd MMM yyyy') : '—'}</span>
+                    {/* column 2: units consumed, in the middle */}
+                    <div style={{ textAlign: 'center' }}>
+                      {e.units ? <div style={{ whiteSpace: 'nowrap' }}><span style={{ fontSize: 17, fontWeight: 800 }}>{e.units}</span> <span style={{ fontSize: 11, color: 'var(--txt2)' }}>units</span></div> :<div style={{ fontSize: 11, color: 'var(--txt2)' }}>no units</div>}
+                      {r?.change != null && <div style={{ fontSize: 10.5, fontWeight: 600, color: r.change > 0 ? 'var(--red)' : 'var(--mint-dim)' }}>{r.change > 0 ? '+' : ''}{Math.round(r.change)}%</div>}
+                    </div>
+                    {/* column 3: amount, rupees per unit, and the due date as a tag */}
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 15, fontWeight: 800 }}>{formatINR(e.amount)}</div>
+                      {r?.rate ? <div style={{ fontSize: 10, color: 'var(--txt2)' }}>₹{r.rate.toFixed(2)}/unit</div> : null}
+                      <span style={{ display: 'inline-block', marginTop: 3, padding: '2px 8px', borderRadius: 999, border: '1px solid var(--border2)', fontSize: 10.5, color: e.paid === false && e.dueDate ? 'var(--red)' : 'var(--txt2)' }}>Due {e.dueDate ? format(new Date(e.dueDate), 'd MMM yyyy') : '—'}</span>
                     </div>
                   </div>
                 )
               })}
+              {mine.length > 12 && <button className="btn-ghost" style={{ width: '100%', height: 34, fontSize: 12, marginTop: 6 }} onClick={() => setShowAll(!showAll)}>{showAll ? 'Show fewer' : `Show all ${mine.length} bills`}</button>}
               <div style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 6 }}>Change compares units a month with the bill before it. Red means you used more.</div>
             </>
           )}
@@ -215,6 +271,7 @@ function BillDetail({ bill, entries, onClose, startOpen }) {
       )}
 
       {editing && <button className="btn-secondary" style={{ width: '100%', height: 40, marginBottom: 8 }} onClick={() => setEditBill(true)}>Edit bill details</button>}
+      {editing && elec && <button className="btn-secondary" style={{ width: '100%', height: 40, marginBottom: 8 }} onClick={() => setImportOpen(true)}>Import bills from the electricity board's table</button>}
       {editing && !form && <button className="btn-primary" style={{ width: '100%', height: 46 }} onClick={() => setForm(true)}>{gas ? 'Book / log a cylinder' : bill.nextDue ? 'Mark paid / log a bill' : 'Log a bill'}</button>}
       {form && !gas && (
         <div className="card">
@@ -300,6 +357,7 @@ function BillDetail({ bill, entries, onClose, startOpen }) {
       )}
       {editing && <button className="btn-ghost" style={{ width: '100%', height: 42, marginTop: 14, color: 'var(--red)' }} onClick={remove}>Delete this bill</button>}
       <button className="btn-ghost" style={{ width: '100%', height: 42, marginTop: 6 }} onClick={onClose}>Close</button>
+      {importOpen && <EbImport bill={bill} existing={mine} onClose={() => setImportOpen(false)} />}
     </Sheet>
   )
 }

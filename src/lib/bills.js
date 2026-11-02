@@ -44,7 +44,8 @@ export function usageRows(bill, entries) {
   const list = entries.filter(e => e.units > 0).sort(byDate)
   const rows = list.map((e, i) => {
     const perMonth = e.units / per
-    const prev = i > 0 ? list[i - 1].units / per : null
+    // compared with the bill before it only when that bill is the neighbouring one (a gap of years says nothing about a change)
+    const prev = i > 0 && differenceInCalendarDays(new Date(e.date), new Date(list[i - 1].date)) <= per * 30 * 1.7 + 15 ? list[i - 1].units / per : null
     return { ...e, perMonth, rate: e.amount > 0 ? e.amount / e.units : null, change: prev ? ((perMonth - prev) / prev) * 100 : null }
   }).reverse()
   const recent = rows.slice(0, 6)
