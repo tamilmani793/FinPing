@@ -94,3 +94,8 @@ db.version(13).stores({
 db.version(14).stores({
   sinking_items: '++id',
 })
+
+// v15: goals (emergency fund, down payment, retirement corpus...) and the assets each one draws on
+db.version(15).stores({
+  goals: '++id',
+})

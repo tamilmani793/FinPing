@@ -5,7 +5,7 @@ import { db } from '../db/schema'
 import { useOptions } from '../lib/options'
 import { SubHeader, ProgressBar, formatINR } from '../components/UI'
 import { TextField } from '../components/Fields'
-import { bestByCategory, bestByMerchant, missedRewards, feeWaiverRows } from '../lib/cardAdvisor'
+import { bestByCategory, missedRewards, feeWaiverRows } from '../lib/cardAdvisor'
 
 const NOT_SPENDS = ['Salary', 'Cashback', 'Transfer', 'Card Payment', 'Investment', 'Wallet Load', 'ATM Withdrawal']
 const name = c => `${c?.name || c?.bank || 'Card'}${c?.cardLast4 ? ` ••${c.cardLast4}` : ''}`
@@ -51,7 +51,6 @@ export default function CardAdvisor() {
   const cards = data?.cards || []
   const byId = Object.fromEntries(cards.map(c => [c.id, c]))
   const best = data ? bestByCategory(cards, data.rules, categories) : []
-  const brands = data ? bestByMerchant(cards, data.rules) : []
   const missed = data ? missedRewards(data.txns, cards, data.rules) : null
   const waivers = data ? feeWaiverRows(cards, data.txns) : []
   const rows = all ? best : best.slice(0, 10)
@@ -93,18 +92,6 @@ export default function CardAdvisor() {
               {best.length > 10 && <button className="btn-ghost" style={{ width: '100%', height: 36, fontSize: 12, marginTop: 6 }} onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${best.length}`}</button>}
             </Section>
 
-            {brands.length > 0 && (
-              <Section title="Best card for a brand" sub="Brands a card pays extra on. These work only on that brand, and only above the minimum spend shown.">
-                <div className="card rows" style={{ paddingTop: 2, paddingBottom: 2 }}>
-                  {brands.map(b => (
-                    <div key={b.merchant} style={{ padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{b.merchant}</div>
-                      <Pick e={b} />
-                    </div>
-                  ))}
-                </div>
-              </Section>
-            )}
 
             <Section title="Missed last month" sub="Spends that would have earned more on another card. Tap a row to see the transactions.">
               {(!missed || missed.rows.length === 0) && <div className="card" style={{ fontSize: 12, color: 'var(--txt2)' }}>{missed?.count ? 'Nothing worth mentioning: you used the best card for almost every spend.' : 'No card spends last month.'}</div>}

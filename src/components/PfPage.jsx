@@ -212,6 +212,13 @@ export default function PfPage() {
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{fyLabel(sec.fy)}</div>
                       <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{credited ? `Interest ${formatINR(credited.total, 2)}${credited.source === 'statement' ? ' (passbook)' : ' (worked out)'}` : sec.accrued > 0 ? `Interest so far ${formatINR(sec.accrued, 2)}, credited on year end` : sec.inBalance ? 'Interest is already in the passbook balance' : 'No interest yet'}</div>
                     </div>
+                    {/* the interest earned in this financial year, on the card itself */}
+                    {(credited || sec.accrued > 0) && (
+                      <div style={{ textAlign: 'right' }}>
+                        <div className="mono-sm" style={{ color: 'var(--mint-dim)' }}>{formatINR(credited ? credited.total : sec.accrued)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--txt2)' }}>interest · {sec.rate}%{credited ? '' : ' so far'}</div>
+                      </div>
+                    )}
                     {isOpen ? <ChevronUp size={18} color="var(--txt3)" /> : <ChevronDown size={18} color="var(--txt3)" />}
                   </div>
                   {isOpen && (

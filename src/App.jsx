@@ -24,11 +24,13 @@ import MoneyHub from './screens/MoneyHub'
 import Insurance from './screens/Insurance'
 import CardAdvisor from './screens/CardAdvisor'
 import Sinking from './screens/Sinking'
+import Goals from './screens/Goals'
+import Retirement from './screens/Retirement'
 import PfPage from './components/PfPage'
 import Debt from './screens/Debt'
 import Wealth from './screens/Wealth'
 
-const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, salary: SalaryPage, pf: PfPage, bills: BillsPage, money: MoneyHub, insurance: Insurance, cardadvisor: CardAdvisor, sinking: Sinking, debt: Debt, wealth: Wealth }
+const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, salary: SalaryPage, pf: PfPage, bills: BillsPage, money: MoneyHub, insurance: Insurance, cardadvisor: CardAdvisor, sinking: Sinking, goals: Goals, retirement: Retirement, debt: Debt, wealth: Wealth }
 const FAB_TABS = ['home', 'history']
 
 export default function App() {

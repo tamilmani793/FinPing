@@ -80,27 +80,6 @@ export function bestByCategory(cards, rulesRows, categories, sample = 1000) {
   }).filter(r => (r.online.top?.value || 0) > 0 || (r.shop.top?.value || 0) > 0)
 }
 
-// Brands that a card pays extra on, named in the card's own rules (Swiggy, Amazon, Flipkart...): the best card for each.
-export function bestByMerchant(cards, rulesRows, sample = 1000) {
-  const usable = usableCards(cards, rulesRows)
-  const seen = new Map()
-  for (const u of usable) {
-    for (const a of u.rules.accelerated || []) {
-      const label = String(a.label || '').toLowerCase()
-      for (const m of a.merchants || []) {
-        const key = String(m).toLowerCase().replace(/[^a-z0-9]/g, '')
-        // only brands the rule names in its heading (the long lists hold spellings and sub-brands too)
-        if (key.length < 3 || seen.has(key) || !label.includes(String(m).toLowerCase())) continue
-        seen.set(key, m)
-      }
-    }
-  }
-  return [...seen.values()].map(m => {
-    const { top, second } = bestOf(usable, { type: 'debit', amount: sample, category: '', merchant: m, channel: 'online' }, true)
-    return { merchant: String(m).replace(/\b\w/g, c => c.toUpperCase()), top, second }
-  }).filter(r => r.top?.kind === 'accelerated' && r.top.value > 0).sort((a, b) => b.top.value - a.top.value)
-}
-
 // Last month's card spends: what each earned, against the most any of your cards would have earned on the same spend (caps ignored, so an estimate).
 // Each row keeps its transactions so they can be listed.
 export function missedRewards(txns, cards, rulesRows, now = new Date()) {
