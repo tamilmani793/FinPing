@@ -10,6 +10,8 @@ import { Field, TextField, Picker } from './Fields'
 import CardBills from './CardBills'
 import { formatINR } from './UI'
 import { parseEbTable } from '../lib/ebImport'
+import { providerListKey } from '../lib/billProviders'
+import { getList, setList, useOptionNames } from '../lib/options'
 import { KINDS, CYCLES, kindOf, cycleLabel, advance, usageRows, gasStats, collectBills, ymd } from '../lib/bills'
 
 // All bills in one place: credit card statements, insurance premiums, and the electricity, mobile, broadband, gas and other bills you add.
@@ -49,6 +51,10 @@ function BillForm({ bill, onClose }) {
   })
   const set = patch => setF(p => ({ ...p, ...patch }))
   const gas = f.kind === 'gas'
+  const listKey = providerListKey(f.kind)
+  const providers = useOptionNames(listKey)
+  // a provider you type that is not in the list is added to it, so it is there next time
+  const pickProvider = v => { set({ provider: v }); if (v && !getList(listKey).some(x => String(x).toLowerCase() === v.toLowerCase())) setList(listKey, [...getList(listKey), v]) }
   const save = async () => {
     const name = f.name.trim() || kindOf(f.kind).label
     const rec = {
@@ -66,7 +72,7 @@ function BillForm({ bill, onClose }) {
         <Field label="Type"><Picker value={f.kind} options={KINDS.map(k => ({ value: k.id, label: k.label, icon: k.icon }))} onChange={v => set({ kind: v })} title="Bill type" /></Field>
         <Field label="Name"><TextField placeholder={f.kind === 'electricity' ? 'e.g. Home electricity' : f.kind === 'mobile' ? 'e.g. Airtel prepaid' : 'e.g. Name of the bill'} value={f.name} onChange={e => set({ name: e.target.value })} /></Field>
         <div className="form-grid">
-          <Field label="Provider"><TextField placeholder={f.kind === 'electricity' ? 'TNEB' : f.kind === 'gas' ? 'Indane / HP / Bharat' : 'Optional'} value={f.provider} onChange={e => set({ provider: e.target.value })} /></Field>
+          <Field label="Provider"><Picker value={f.provider} options={providers} onChange={pickProvider} allowCustom title={f.kind === 'electricity' ? 'Electricity board' : 'Provider'} placeholder={f.kind === 'electricity' ? 'Choose the board' : 'Choose or add'} clearLabel="Not set" /></Field>
           <Field label="Consumer / account number"><TextField placeholder="Optional, any length" value={f.accountNo} onChange={e => set({ accountNo: e.target.value })} /></Field>
         </div>
         {!gas && (
