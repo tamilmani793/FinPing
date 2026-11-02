@@ -89,3 +89,8 @@ db.version(13).stores({
   bills: '++id, kind, status',
   bill_entries: '++id, billId, date',
 })
+
+// v14: yearly costs you add yourself (vehicle service, property tax...) for the monthly set-aside list
+db.version(14).stores({
+  sinking_items: '++id',
+})

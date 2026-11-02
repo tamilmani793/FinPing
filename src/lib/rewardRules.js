@@ -47,6 +47,21 @@ export function isOnline(txn) {
   return ONLINE_BRANDS.some(b => flat.includes(b))
 }
 
+// Rules read from a card's terms name the same thing in different words than the app does ("Wallet", "Government", "Cash advance" against the app's
+// "Wallet Load", "Government & Tax", "ATM Withdrawal"), and an exclusion that does not match earns the reward it should not. Both sides are mapped to one name.
+const catKey = s => String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim()
+const CATEGORY_ALIASES = {
+  'wallet': 'Wallet Load', 'wallets': 'Wallet Load', 'wallet load': 'Wallet Load', 'wallet loads': 'Wallet Load', 'prepaid wallet': 'Wallet Load',
+  'government': 'Government & Tax', 'govt': 'Government & Tax', 'government and tax': 'Government & Tax', 'government related': 'Government & Tax', 'tax': 'Government & Tax', 'taxes': 'Government & Tax',
+  'cash advance': 'ATM Withdrawal', 'cash withdrawal': 'ATM Withdrawal', 'atm': 'ATM Withdrawal', 'quasi cash': 'ATM Withdrawal',
+  'card bill payment': 'Card Payment', 'card payment': 'Card Payment', 'fees and charges': 'Fees & Charges', 'fees and charges ': 'Fees & Charges', 'financial charges': 'Fees & Charges',
+  'utility': 'Utilities & Bills', 'utilities': 'Utilities & Bills', 'utilities and bills': 'Utilities & Bills',
+  'jewellery': 'Jewellery & Gold', 'jewelry': 'Jewellery & Gold', 'jewellery and gold': 'Jewellery & Gold',
+  'digital gaming': 'Gaming & Gambling', 'gaming': 'Gaming & Gambling', 'gaming and gambling': 'Gaming & Gambling',
+  'emi': 'EMI', 'merchant emi': 'EMI', 'emi transactions': 'EMI',
+}
+export const canonRuleCategory = s => CATEGORY_ALIASES[catKey(s)] || String(s || '')
+
 // does this transaction fall under a rule's mccs / categories / merchants?
 //   - an MCC is matched only against the MCC on the transaction itself. A spend with no MCC is never matched by code: standing in a whole category for a
 //     code made every Shopping spend look like a bookstore (MCC 5942) and lose its cashback. Categories and merchant words are matched on their own.
@@ -62,7 +77,7 @@ export function matchesRule(match, txn, mccMap = {}) {
   for (const code of match.mccs || []) {
     if (mcc && String(code) === mcc) return `MCC ${code}`
   }
-  if (category && (match.categories || []).includes(category)) return category
+  if (category && (match.categories || []).some(c => canonRuleCategory(c) === canonRuleCategory(category))) return category
   const text = `${txn.merchant || ''} ${txn.bankNarration || ''}`.toLowerCase()
   for (const w of match.merchants || []) { const k = String(w).trim().toLowerCase(); if (k && text.includes(k)) return w }
   return null

@@ -22,11 +22,13 @@ import SalaryPage from './components/SalaryPage'
 import BillsPage from './components/BillsPage'
 import MoneyHub from './screens/MoneyHub'
 import Insurance from './screens/Insurance'
+import CardAdvisor from './screens/CardAdvisor'
+import Sinking from './screens/Sinking'
 import PfPage from './components/PfPage'
 import Debt from './screens/Debt'
 import Wealth from './screens/Wealth'
 
-const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, salary: SalaryPage, pf: PfPage, bills: BillsPage, money: MoneyHub, insurance: Insurance, debt: Debt, wealth: Wealth }
+const SCREENS = { home: Home, history: Expenses, cards: Cards, charts: Charts, profile: Profile, settings: Profile, options: OptionsPage, salary: SalaryPage, pf: PfPage, bills: BillsPage, money: MoneyHub, insurance: Insurance, cardadvisor: CardAdvisor, sinking: Sinking, debt: Debt, wealth: Wealth }
 const FAB_TABS = ['home', 'history']
 
 export default function App() {
@@ -91,8 +93,8 @@ export default function App() {
           localStorage.setItem('finping_atm_v1', '1')
           if (a > 0) showNotification(`${a} ATM withdrawal${a === 1 ? '' : 's'} moved to the ATM Withdrawal category`, 'success')
         }
-        // Once after this update: expected rewards were tagged without the percentage; work them out again so every spend shows it
-        if (!localStorage.getItem('finping_rewardtag_v2')) { await tagAllCards(); localStorage.setItem('finping_rewardtag_v2', '1') }
+        // Once after this update: expected rewards are worked out again, since exclusions saved as "Wallet" / "Government" now match the app's categories (v3)
+        if (!localStorage.getItem('finping_rewardtag_v3')) { await tagAllCards(); localStorage.setItem('finping_rewardtag_v3', '1') }
         // Once after this update: clear out entries that were never payments or were saved twice.
         if (!localStorage.getItem('finping_cleanup_v2')) {
           const r = await removeDuplicateTransactions()

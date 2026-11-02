@@ -13,6 +13,7 @@ import { askConfirm } from '../lib/confirm'
 import { postDueEmis } from '../lib/emiEngine'
 import { Wallet, Calendar, IndianRupee, Percent, Hash, User, FileText, Clock, Building2 } from 'lucide-react'
 import { Field, FormHeading, Segmented, TextField, Picker } from '../components/Fields'
+import PrepaySheet from '../components/PrepaySheet'
 import { useDebtTypes, useOptionNames } from '../lib/options'
 import Sortable from '../components/Sortable'
 import { bySortOrder, saveOrder } from '../lib/sortOrder'
@@ -80,6 +81,7 @@ export default function Debt() {
   const [reorderDebts, setReorderDebts] = useState(false)
   const [tab, setTab] = useState({})            // per loan: 'ledger' | 'upcoming'
   const [showAll, setShowAll] = useState({})    // per loan: show the whole upcoming schedule
+  const [whatIf, setWhatIf] = useState(null) // the loan whose prepay what-if is open
   const [repayFor, setRepayFor] = useState(null)
   const [repayForm, setRepayForm] = useState(EMPTY_REPAY)
   const [receiveFor, setReceiveFor] = useState(null)
@@ -260,6 +262,7 @@ export default function Debt() {
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
       <SubHeader title="Debt & loans" />
+      {whatIf && <PrepaySheet debt={whatIf} onClose={() => setWhatIf(null)} />}
 
       {(
         <div style={{ padding: '10px 16px 0' }}>
@@ -580,6 +583,7 @@ export default function Debt() {
                       <button className="btn-secondary" style={{ height: 32, fontSize: 11 }} onClick={() => { setRepayFor(null); setReceiveFor(receiveFor === d.id ? null : d.id); setReceiveForm(EMPTY_RECEIPT) }}>↓ Amount received</button>
                       <button className="btn-secondary" style={{ height: 32, fontSize: 11 }} onClick={() => openEdit(d)}>✎ Edit debt</button>
                       <button className="btn-ghost" style={{ height: 32, fontSize: 11 }} onClick={() => handleMarkClosed(d.id)}>Mark as closed</button>
+                      {d.type !== 'FriendLent' && <button className="btn-secondary" style={{ height: 32, fontSize: 11, gridColumn: '1 / -1' }} onClick={() => setWhatIf(d)}>⚖ Prepay what-if: pay extra, see interest saved</button>}
                       <button className="btn-ghost" style={{ height: 32, fontSize: 11, gridColumn: '1 / -1', color: 'var(--red-dim)', borderColor: 'var(--red-border)' }} onClick={() => handleDeleteDebt(d)}>Delete debt</button>
                     </div>
                   </>

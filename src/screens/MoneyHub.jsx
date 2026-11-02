@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Briefcase, ChevronRight, Landmark, Lightbulb, PieChart, PiggyBank, Receipt, ShieldCheck, TrendingUp } from 'lucide-react'
+import { Briefcase, ChevronRight, Landmark, Lightbulb, PieChart, PiggyBank, Receipt, ShieldCheck, TrendingUp, CreditCard, CalendarClock } from 'lucide-react'
 import { useStore } from '../store'
 import AdvisorySheet from '../components/AdvisorySheet'
 import { SubHeader } from '../components/UI'
@@ -42,11 +42,13 @@ export default function MoneyHub() {
           <Row Icon={Receipt} title="Bills" sub="Cards, electricity, mobile, broadband and gas" onClick={() => setActiveTab('bills')} />
           <Row Icon={Landmark} title="Debt & loans" sub="EMIs, loans and repayments" onClick={() => setActiveTab('debt')} />
           <Row Icon={ShieldCheck} title="Insurance" sub="Policies, premiums and due dates" onClick={() => setActiveTab('insurance')} />
+          <Row Icon={CalendarClock} title="Yearly costs" sub="Set aside a little each month for premiums, fees and service" onClick={() => setActiveTab('sinking')} />
         </Group>
         <Group title="Grow">
           <Row Icon={TrendingUp} title="Wealth" sub="Retirement, market and safe assets, and net worth" onClick={() => setActiveTab('wealth')} />
         </Group>
         <Group title="Insights">
+          <Row Icon={CreditCard} title="Card advisor" sub="Best card for each spend, missed rewards and fee waivers" onClick={() => setActiveTab('cardadvisor')} />
           <Row Icon={PieChart} title="Charts" sub="Where your money went, month by month" onClick={() => setActiveTab('charts')} />
           <Row Icon={Lightbulb} title="Advisory" sub="Find hidden fees, interest and wallet-load or fuel charges" onClick={() => setAdvisory(true)} />
         </Group>

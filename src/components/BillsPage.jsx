@@ -235,7 +235,7 @@ function BillDetail({ bill, entries, onClose, startOpen }) {
               {(showAll ? mine : mine.slice(0, 12)).map((e, i) => {
                 const r = use.rows.find(x => x.id === e.id)
                 return (
-                  <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1.25fr 0.9fr 1.1fr', gap: 8, alignItems: 'center', padding: '9px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 12 }}>
+                  <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.8fr 1.3fr', gap: 8, alignItems: 'center', padding: '9px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 12 }}>
                     {/* column 1: month and year (bold), then the meter reading, then the paid status */}
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 800 }}>{format(new Date(e.date), 'MMM yyyy')}</div>
@@ -251,7 +251,7 @@ function BillDetail({ bill, entries, onClose, startOpen }) {
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 15, fontWeight: 800 }}>{formatINR(e.amount)}</div>
                       {r?.rate ? <div style={{ fontSize: 10, color: 'var(--txt2)' }}>₹{r.rate.toFixed(2)}/unit</div> : null}
-                      <span style={{ display: 'inline-block', marginTop: 3, padding: '2px 8px', borderRadius: 999, border: '1px solid var(--border2)', fontSize: 10.5, color: e.paid === false && e.dueDate ? 'var(--red)' : 'var(--txt2)' }}>Due {e.dueDate ? format(new Date(e.dueDate), 'd MMM yyyy') : '—'}</span>
+                      <span style={{ display: 'inline-block', whiteSpace: 'nowrap', marginTop: 3, padding: '2px 8px', borderRadius: 999, border: '1px solid var(--border2)', fontSize: 10.5, color: e.paid === false && e.dueDate ? 'var(--red)' : 'var(--txt2)' }}>Due {e.dueDate ? format(new Date(e.dueDate), 'd MMM yyyy') : '—'}</span>
                     </div>
                   </div>
                 )
