@@ -83,3 +83,9 @@ db.version(12).stores({
   pf_rates: 'fy',
   pf_statements: '++id, kind, month, fy',
 })
+
+// v13: bills - electricity, mobile, broadband, gas and other regular bills, and what you log against each (units, amounts, cylinder dates)
+db.version(13).stores({
+  bills: '++id, kind, status',
+  bill_entries: '++id, billId, date',
+})

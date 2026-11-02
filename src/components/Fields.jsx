@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Calendar, ChevronDown, Search, X } from 'lucide-react'
 
 // Form building blocks shared by every form, so all of them look and behave alike.
 
@@ -36,8 +36,41 @@ export function Segmented({ value, options, onChange }) {
   )
 }
 
+// Dates are typed and shown as dd-mm-yyyy; the value going in and out is still yyyy-mm-dd, like a date input's.
+const toDisp = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : '' }
+const toIso = t => {
+  const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(t)
+  if (!m) return null
+  const d = new Date(+m[3], +m[2] - 1, +m[1])
+  return d.getFullYear() === +m[3] && d.getMonth() === +m[2] - 1 && d.getDate() === +m[1] ? `${m[3]}-${m[2]}-${m[1]}` : null
+}
+function DateBox({ icon, value, onChange, min, max, placeholder, className = '', type, ...rest }) {
+  const [txt, setTxt] = useState(toDisp(value))
+  const pick = useRef(null)
+  useEffect(() => { if (!(toIso(txt) === (value || null) || (txt === '' && !value))) setTxt(toDisp(value)) }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+  const emit = v => onChange && onChange({ target: { value: v } })
+  const type_ = e => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 8)
+    const t = digits.length > 4 ? `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}` : digits.length > 2 ? `${digits.slice(0, 2)}-${digits.slice(2)}` : digits
+    setTxt(t)
+    if (!digits) emit('')
+    else { const iso = toIso(t); if (iso) emit(iso) }
+  }
+  return (
+    <div className="input-wrap">
+      {icon && <span className="input-lead">{icon}</span>}
+      <input className={`input${icon ? ' has-lead' : ''} ${className}`} type="text" inputMode="numeric" placeholder={placeholder || 'dd-mm-yyyy'} value={txt} onChange={type_}
+        onBlur={() => { if (txt && !toIso(txt)) setTxt(toDisp(value)) }} style={{ paddingRight: 44 }} {...rest} />
+      <span className="input-suffix" style={{ right: 12, cursor: 'pointer', display: 'flex' }} onClick={() => { const el = pick.current; if (el) { try { el.showPicker() } catch { el.click() } } }}><Calendar size={17} /></span>
+      <input ref={pick} type="date" tabIndex={-1} aria-hidden="true" value={value || ''} min={min} max={max} onChange={e => { if (e.target.value) { setTxt(toDisp(e.target.value)); emit(e.target.value) } }}
+        style={{ position: 'absolute', right: 12, top: '50%', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }} />
+    </div>
+  )
+}
+
 // A text / number / date box with an optional icon on the left and a short unit on the right
 export function TextField({ icon, suffix, className = '', ...rest }) {
+  if (rest.type === 'date') return <DateBox icon={icon} className={className} {...rest} />
   return (
     <div className="input-wrap">
       {icon && <span className="input-lead">{icon}</span>}

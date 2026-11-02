@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Check, Pencil, X, SlidersHorizontal, Info, Briefcase, Link2, Eraser, Lightbulb, PiggyBank } from 'lucide-react'
+import { ChevronRight, Landmark, TrendingUp, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Check, Pencil, X, SlidersHorizontal, Info, Briefcase, Link2, Eraser, Lightbulb, PiggyBank, Receipt } from 'lucide-react'
 import { format } from 'date-fns'
 import { TopBar, BtnPrimary, Avatar } from '../components/UI'
 import { useStore } from '../store'
@@ -100,7 +100,7 @@ export default function Profile() {
   }
 
   // both tidy-ups first say exactly what they would change, and only do it after you agree
-  const line = t => `• ${t.date ? format(new Date(t.date), 'd MMM yy') : ''} · ${t.merchant} · ₹${Number(t.amount || 0).toLocaleString('en-IN')}`
+  const line = t => `• ${t.date ? format(new Date(t.date), 'd MMM yyyy') : ''} · ${t.merchant} · ₹${Number(t.amount || 0).toLocaleString('en-IN')}`
   const list = (rows, fmt, max = 8) => rows.slice(0, max).map(fmt).join('\n') + (rows.length > max ? `
 …and ${rows.length - max} more` : '')
 
@@ -202,6 +202,7 @@ export default function Profile() {
           <div className="card rows" style={{ paddingTop: 4, paddingBottom: 4 }}>
             <Row Icon={Briefcase} title="Salary" sub="Employers, payslips, tax and PF" onClick={() => setActiveTab('salary')} />
             <Row Icon={PiggyBank} title="Provident fund" sub="PF and pension split, yearly interest and passbook" onClick={() => setActiveTab('pf')} />
+            <Row Icon={Receipt} title="Bills" sub="Cards, insurance, electricity, mobile, broadband and gas in one place" onClick={() => setActiveTab('bills')} />
             <Row Icon={Lightbulb} title="Advisory" sub="Find hidden fees, interest and wallet-load or fuel charges" onClick={() => setAdvisory(true)} />
             <Row Icon={Landmark} title="Debt &amp; loans" sub="EMIs, loans and repayments" onClick={() => setActiveTab('debt')} />
             <Row Icon={TrendingUp} title="Wealth" sub="Investments, SIPs and net worth" onClick={() => setActiveTab('wealth')} />

@@ -316,7 +316,7 @@ function PaymentDetails({ card, s }) {
         <div style={{ background: 'var(--bg2)', borderRadius: 12, padding: 10, margin: '6px 0 8px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
             <input className="input" type="number" inputMode="decimal" placeholder="Amount paid (₹)" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-            <input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+            <TextField type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
           </div>
           <button className="btn-primary" style={{ width: '100%', height: 38, fontSize: 13 }} onClick={save}>Save payment</button>
         </div>
