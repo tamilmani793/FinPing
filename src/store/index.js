@@ -5,8 +5,11 @@ export const useStore = create((set, get) => ({
   activeTab: 'home',
   // the tabs you came from, so the back button returns to them
   tabStack: [],
-  setActiveTab: (tab) => set(s => (tab === s.activeTab ? {} : { activeTab: tab, tabStack: [...s.tabStack, s.activeTab].slice(-20) })),
-  goBackTab: () => set(s => (s.tabStack.length ? { activeTab: s.tabStack[s.tabStack.length - 1], tabStack: s.tabStack.slice(0, -1) } : {})),
+  // viaTab: you got here by tapping a bottom-bar tab (no back arrow), not by following a link or row from another page (back arrow)
+  viaTab: true,
+  setActiveTab: (tab) => set(s => (tab === s.activeTab ? {} : { activeTab: tab, viaTab: false, tabStack: [...s.tabStack, s.activeTab].slice(-20) })),
+  selectTab: (tab) => set({ activeTab: tab, viaTab: true, tabStack: [] }),
+  goBackTab: () => set(s => (s.tabStack.length ? { activeTab: s.tabStack[s.tabStack.length - 1], tabStack: s.tabStack.slice(0, -1), viaTab: s.tabStack.length <= 1 } : {})),
   // "Leave the app?" question shown by the back button on Home
   // a question waiting for Delete / Cancel (see lib/confirm.js)
   confirmReq: null,

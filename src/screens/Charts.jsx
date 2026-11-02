@@ -4,7 +4,7 @@ import { startOfMonth, endOfDay, format, addDays, differenceInCalendarDays } fro
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { TrendingUp, BarChart3, PieChart as PieIcon } from 'lucide-react'
 import { db } from '../db/schema'
-import { TopBar, formatINR } from '../components/UI'
+import { SubHeader, formatINR } from '../components/UI'
 import { flowOf, spendOf, isCreditCard } from '../lib/flow'
 import PeriodFilter from '../components/PeriodFilter'
 import { rangeFor, defaultFilter } from '../lib/dateRange'
@@ -73,7 +73,7 @@ export default function Charts() {
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 100, background: 'linear-gradient(180deg, #FDEBEC 0%, var(--bg0) 280px)' }}>
-      <TopBar title="Analytics" />
+      <SubHeader title="Analytics" />
 
       <div style={{ padding: '0 16px' }}>
         {/* Chart type */}

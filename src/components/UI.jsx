@@ -4,19 +4,31 @@ import { useProfile, initialsOf } from '../lib/profile'
 import { useStore } from '../store'
 import { SyncPill } from './SmsSync'
 
+// The header of every page you open from Profile or the Money hub (Salary, Provident fund, Debt, Insurance, Charts, Customise...):
+// a back arrow that returns to the page you came from, then the title. The main tabs use TopBar instead.
+export function SubHeader({ title, sub, right }) {
+  const { tabStack, goBackTab, setActiveTab } = useStore()
+  const back = () => (tabStack.length ? goBackTab() : setActiveTab('home'))
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 18px 10px', flexShrink: 0, position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg0)' }}>
+      <div onClick={back} role="button" aria-label="Back" style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ChevronLeft size={20} /></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>{title}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>{sub}</div>}
+      </div>
+      {right}
+    </div>
+  )
+}
+
 export function TopBar({ title, sub, right }) {
-  const { activeTab, setActiveTab, smsSync } = useStore()
-  const isSub = activeTab === 'wealth' || activeTab === 'profile'
+  const { smsSync, viaTab, tabStack, goBackTab } = useStore()
+  // reached from another page (a row in Profile or Money, a chip on Home) rather than by tapping the bottom bar: same back arrow as the sub-pages
+  const showBack = !viaTab && tabStack.length > 0
   return (
     <div style={{ padding: '14px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: 'var(--bg0)', position: 'sticky', top: 0, zIndex: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {isSub ? (
-          <div onClick={() => setActiveTab('home')} style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <ChevronLeft size={18} />
-          </div>
-        ) : (
-          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="FinPing" style={{ width: 30, height: 30, borderRadius: 9 }} />
-        )}
+        {showBack          ? <div onClick={goBackTab} role="button" aria-label="Back" style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ChevronLeft size={20} /></div>          : <img src={`${import.meta.env.BASE_URL}logo.png`} alt="FinPing" style={{ width: 30, height: 30, borderRadius: 9 }} />}
         <div>
           <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{title || sub || 'FinPing'}</div>
         </div>

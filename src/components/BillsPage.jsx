@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
-import { ChevronLeft, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { askConfirm } from '../lib/confirm'
 import { Field, TextField, Picker } from './Fields'
 import CardBills from './CardBills'
-import { formatINR } from './UI'
+import { TopBar, formatINR } from './UI'
 import { parseEbTable } from '../lib/ebImport'
 import { providerListKey } from '../lib/billProviders'
 import { getList, setList, useOptionNames } from '../lib/options'
@@ -369,7 +369,7 @@ function BillDetail({ bill, entries, onClose, startOpen }) {
 }
 
 export default function BillsPage() {
-  const { goBackTab, setActiveTab, openCard, showNotification } = useStore()
+  const { setActiveTab, openCard, showNotification } = useStore()
   const data = useLiveQuery(async () => ({
     bills: await db.bills.toArray(), entries: await db.bill_entries.toArray(),
     cards: await db.creditCards.toArray(), policies: await db.policies.toArray(),
@@ -394,11 +394,7 @@ export default function BillsPage() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 18px 10px' }}>
-        <div onClick={goBackTab} style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={20} /></div>
-        <div style={{ flex: 1 }}><div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>Bills</div><div style={{ fontSize: 12, color: 'var(--txt2)' }}>Cards, insurance, electricity, mobile, broadband, gas</div></div>
-        <span onClick={() => setAdding(true)} style={{ color: 'var(--gold-dim)', cursor: 'pointer' }} aria-label="Add bill" title="Add bill"><Plus size={22} /></span>
-      </div>
+      <TopBar title="Bills" right={<span onClick={() => setAdding(true)} style={{ color: 'var(--gold-dim)', cursor: 'pointer' }} aria-label="Add bill" title="Add bill"><Plus size={22} /></span>} />
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 18px 130px' }}>
         {!data && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>Loading…</div>}
         {data && (

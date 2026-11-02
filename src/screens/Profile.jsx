@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { ChevronRight, ShieldCheck, Smartphone, Camera, Trash2, Download, Upload, Check, Pencil, X, SlidersHorizontal, Info, Link2, Eraser, Wallet } from 'lucide-react'
 import { format } from 'date-fns'
-import { TopBar, BtnPrimary, Avatar } from '../components/UI'
+import { SubHeader, BtnPrimary, Avatar } from '../components/UI'
 import { useStore } from '../store'
 import { isNative } from '../lib/nativeSms'
 import { useProfile, setUserName, setProfilePhoto, resizePhoto } from '../lib/profile'
@@ -130,7 +130,7 @@ export default function Profile() {
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 100 }}>
-      <TopBar title="Profile" right={<span />} />
+      <SubHeader title="Profile" />
       <div style={{ padding: '0 16px' }}>
 
         {/* you: picture and name side by side */}

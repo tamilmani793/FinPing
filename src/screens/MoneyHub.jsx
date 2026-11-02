@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Briefcase, ChevronLeft, ChevronRight, Landmark, Lightbulb, PieChart, PiggyBank, Receipt, ShieldCheck, TrendingUp } from 'lucide-react'
+import { Briefcase, ChevronRight, Landmark, Lightbulb, PieChart, PiggyBank, Receipt, ShieldCheck, TrendingUp } from 'lucide-react'
 import { useStore } from '../store'
 import AdvisorySheet from '../components/AdvisorySheet'
+import { SubHeader } from '../components/UI'
 
 // Everything about money in one place, in four groups: what comes in, what goes out, what grows, and what to learn from it.
 function Row({ Icon, title, sub, onClick }) {
@@ -27,14 +28,11 @@ function Group({ title, children }) {
 }
 
 export default function MoneyHub() {
-  const { goBackTab, setActiveTab } = useStore()
+  const { setActiveTab } = useStore()
   const [advisory, setAdvisory] = useState(false)
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 18px 10px' }}>
-        <div onClick={goBackTab} style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={20} /></div>
-        <div style={{ flex: 1 }}><div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>Money</div><div style={{ fontSize: 12, color: 'var(--txt2)' }}>Income, bills, loans, savings and insights</div></div>
-      </div>
+      <SubHeader title="Money" sub="Income, bills, loans, savings and insights" />
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 18px 130px' }}>
         <Group title="Earn">
           <Row Icon={Briefcase} title="Salary" sub="Employers, payslips, tax and Form 16" onClick={() => setActiveTab('salary')} />

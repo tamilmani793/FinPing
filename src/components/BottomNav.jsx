@@ -10,7 +10,7 @@ const TABS = [
 ]
 
 export default function BottomNav() {
-  const { activeTab, setActiveTab } = useStore()
+  const { activeTab, selectTab } = useStore()
   // The PF page belongs with Wealth; Debt, Charts and the Money hub are opened from Home or Profile and light no tab.
   const current = activeTab === 'pf' ? 'wealth' : activeTab
   return (
@@ -25,7 +25,7 @@ export default function BottomNav() {
       {TABS.map(({ id, label, Icon }) => {
         const active = current === id
         return (
-          <div key={id} onClick={() => setActiveTab(id)}
+          <div key={id} onClick={() => selectTab(id)}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
               cursor: 'pointer', height: 48, flex: 1, minWidth: 0, margin: '0 1px', padding: '0 2px', borderRadius: 24,

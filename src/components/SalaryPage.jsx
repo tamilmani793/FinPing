@@ -7,7 +7,7 @@ import { db } from '../db/schema'
 import { useStore } from '../store'
 import { askConfirm } from '../lib/confirm'
 import { parsePayslipPdf } from '../lib/payslipParser'
-import { BtnPrimary, formatINR } from './UI'
+import { BtnPrimary, SubHeader, formatINR } from './UI'
 import { Field, TextField, Picker } from './Fields'
 import { monthLabel, componentsOf, detailOf, titleHistory, saveEmployer, deleteJob, deleteRecord, importMonths, parseDoj, profileSummary, filterPayslips, payTotals, payChartData, currentFyYear, fyStartYear, fyLabel } from '../lib/salary'
 
@@ -243,10 +243,7 @@ export default function SalaryPage() {
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 110 }}>
-      <div style={{ padding: '14px 18px 12px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg0)' }}>
-        <div onClick={() => setActiveTab('profile')} style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={20} /></div>
-        <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em', flex: 1 }}>Salary</div>
-      </div>
+      <SubHeader title="Salary" />
 
       <div style={{ padding: '0 18px' }}>
         {/* 1. the current employee and the last month's salary */}

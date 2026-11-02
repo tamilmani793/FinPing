@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Search, ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Lock, RotateCcw, X, Check } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
+import { SubHeader } from './UI'
 import { useBackHandler } from '../lib/backNav'
 import { askConfirm } from '../lib/confirm'
 import Sortable, { ReorderToggle } from './Sortable'
@@ -213,7 +214,6 @@ const MCC = '__mcc' // not a dropdown list: the MCC dictionary is maintained fro
 
 // Profile -> Customise: the dropdown lists, plus the rules and codes (MCC categories, card reward rules). Tapping one opens its own page.
 export default function OptionsPage() {
-  const { setActiveTab } = useStore()
   const [open, setOpen] = useState(null)
   const [pickCard, setPickCard] = useState(false)
   const [rulesCard, setRulesCard] = useState(null)
@@ -224,7 +224,7 @@ export default function OptionsPage() {
   if (open) return <ListPage listKey={open} onClose={() => setOpen(null)} />
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 110 }}>
-      <PageHeader title="Customise" onBack={() => setActiveTab('profile')} />
+      <SubHeader title="Customise" />
       <div style={{ padding: '0 18px' }}>
         <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '0 2px 12px' }}>Choose a list to add, rename or remove its choices, or open the rules and codes below. Everything stays on this phone and is included in your backup.</div>
         <div className="label-caps" style={{ margin: '4px 4px 8px' }}>Lists</div>

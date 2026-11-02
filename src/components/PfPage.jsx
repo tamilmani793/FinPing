@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ChevronLeft, ChevronDown, ChevronUp, Paperclip, Percent, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Paperclip, Percent, Trash2 } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { askConfirm } from '../lib/confirm'
 import { buildPf, loadPfInputs, saveSettings, saveRate, parsePassbookPdf, savePassbook, clearPassbooks, parsePastedContributions, WAGE_CEILING } from '../lib/pf'
 import { fyLabel, monthLabel } from '../lib/salary'
-import { BtnPrimary, formatINR } from './UI'
+import { BtnPrimary, SubHeader, formatINR } from './UI'
 import { TextField } from './Fields'
 
 // Profile -> Provident fund. Amounts are worked out from your payslips (and an EPF passbook when you add one): you can only change the percentages.
@@ -101,7 +101,7 @@ function UploadSheet({ onClose }) {
 }
 
 export default function PfPage() {
-  const { goBackTab, showNotification } = useStore()
+  const { showNotification } = useStore()
   const inputs = useLiveQuery(async () => loadPfInputs(), [], null)
   useLiveQuery(() => db.pf_statements.count()) // refresh when passbook figures change
   const [open, setOpen] = useState(null)
@@ -122,12 +122,10 @@ export default function PfPage() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 18px 10px' }}>
-        <div onClick={goBackTab} style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--bg1)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={20} /></div>
-        <div style={{ flex: 1 }}><div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>Provident fund</div><div style={{ fontSize: 12, color: 'var(--txt2)' }}>PF and pension, worked out from your payslips</div></div>
+      <SubHeader title="Provident fund" sub="PF and pension, worked out from your payslips" right={<>
         <button className={editing ? 'btn-primary' : 'btn-secondary'} style={{ height: 34, padding: '0 16px', fontSize: 12 }} onClick={() => setEditing(!editing)}>{editing ? 'Done' : 'Edit'}</button>
         <span onClick={() => setUpload(true)} style={{ color: 'var(--gold-dim)', cursor: 'pointer' }} aria-label="Add PF statement" title="Add PF statement"><Paperclip size={20} /></span>
-      </div>
+      </>} />
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 18px 24px' }}>
         {!inputs && <div style={{ fontSize: 12, color: 'var(--txt2)' }}>Working it out…</div>}
 

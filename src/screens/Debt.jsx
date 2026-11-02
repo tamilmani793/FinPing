@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { addMonths, format } from 'date-fns'
 import { db } from '../db/schema'
-import { TopBar, Card, SectionHdr, Badge, ProgressBar, Divider, LabelCaps, MonoLg, BtnPrimary, formatINR } from '../components/UI'
+import { SubHeader, Card, SectionHdr, Badge, ProgressBar, Divider, LabelCaps, MonoLg, BtnPrimary, formatINR } from '../components/UI'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { addManualRepayment, recordReceipt, undoRepayment } from '../lib/debtBackup'
@@ -259,7 +259,7 @@ export default function Debt() {
 
   return (
     <div className="screen active" style={{ overflowY: 'auto', paddingBottom: 150 }}>
-      <TopBar title="Debt" />
+      <SubHeader title="Debt & loans" />
 
       {(
         <div style={{ padding: '10px 16px 0' }}>
