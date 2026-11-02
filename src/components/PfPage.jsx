@@ -47,7 +47,15 @@ function UploadSheet({ onClose }) {
   const readPasted = () => { try { setRes(parsePastedContributions(pasted)) } catch (e) { showNotification(e.message, 'error') } }
   const read = async (f = file, password = pw) => {
     setBusy(true)
-    try { setRes(await parsePassbookPdf(await f.arrayBuffer(), password)); setFile(f); setNeedPw(false) }
+    try {
+      // a passbook is read and applied straight away: its months replace the payslip figures, its balance becomes the starting point
+      const p = await parsePassbookPdf(await f.arrayBuffer(), password)
+      await savePassbook(p)
+      const n = p.contributions.length
+      showNotification(`PF updated from the passbook: ${n} month${n === 1 ? '' : 's'}${p.balance ? ' and the balance' : ''}${p.check && !p.check.ok ? '. Its rows do not add up to the closing balance it prints, so check the figures' : ''}`, p.check && !p.check.ok ? undefined : 'success')
+      onClose()
+      return
+    }
     catch (e) { if (e.needPassword) { setFile(f); setNeedPw(true); setPw(''); showNotification(e.message, e.wrong ? 'error' : undefined) } else showNotification(e.message || 'Could not read that file', 'error') }
     setBusy(false)
   }
@@ -137,8 +145,17 @@ export default function PfPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Stat k="Your share" v={formatINR(pf.eeBalance, 2)} />
               <Stat k="Employer share" v={formatINR(pf.erBalance, 2)} />
-              <Stat k="Interest credited" v={formatINR(pf.interestEarned, 2)} color="var(--gold-dim)" />
+              <Stat k="Interest earned" v={formatINR(pf.split.interest, 2)} color="var(--gold-dim)" sub="all years so far" />
               <Stat k="Interest so far this year" v={formatINR(pf.accrued, 2)} sub={pf.accruedFy != null ? `credited 31 Mar ${pf.accruedFy + 1}` : ''} />
+            </div>
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+              <div className="label-caps" style={{ marginBottom: 2 }}>How the PF balance adds up</div>
+              <Line k="You put in" v={formatINR(pf.split.eeContrib, 2)} />
+              <Line k="Employer put in (PF part)" v={formatINR(pf.split.erContrib, 2)} />
+              <Line k="Interest earned" v={formatINR(pf.split.interest, 2)} bold color="var(--gold-dim)" />
+              <Line k="  on your share / employer share" v={`${formatINR(pf.split.interestEe, 2)} / ${formatINR(pf.split.interestEr, 2)}`} />
+              <Line k="PF balance" v={formatINR(pf.epfBalance, 2)} bold />
+              {pf.split.since && <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>Contributions are counted from {monthLabel(pf.split.since)} (your first payslip or passbook month). Anything earlier shows up under interest, since the balance includes it.</div>}
             </div>
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
               <div className="label-caps">Pension fund (EPS)</div>
@@ -193,7 +210,7 @@ export default function PfPage() {
                   <div onClick={() => setOpen(isOpen ? null : sec.fy)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{fyLabel(sec.fy)}</div>
-                      <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{credited ? `Interest ${formatINR(credited.total, 2)}${credited.source === 'statement' ? ' (passbook)' : ' (worked out)'}` : sec.accrued > 0 ? `Interest so far ${formatINR(sec.accrued, 2)}, credited on year end` : 'No interest yet'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{credited ? `Interest ${formatINR(credited.total, 2)}${credited.source === 'statement' ? ' (passbook)' : ' (worked out)'}` : sec.accrued > 0 ? `Interest so far ${formatINR(sec.accrued, 2)}, credited on year end` : sec.inBalance ? 'Interest is already in the passbook balance' : 'No interest yet'}</div>
                     </div>
                     {isOpen ? <ChevronUp size={18} color="var(--txt3)" /> : <ChevronDown size={18} color="var(--txt3)" />}
                   </div>

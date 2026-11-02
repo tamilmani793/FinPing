@@ -71,7 +71,7 @@ export function buildPf({ records = [], statements = [], base = DEFAULT_SETTINGS
 
   // the balance, month by month from the passbook balance (or from the first contribution)
   const asOfMonth = balance ? balance.asOf.slice(0, 7) : null
-  const first = asOfMonth ? nextMonth(asOfMonth) : months[0]?.month
+  const first = balance ? (balance.from || nextMonth(asOfMonth)) : months[0]?.month // the first month NOT in the balance
   const last = months.length ? months[months.length - 1].month : first
   let eeBal = balance ? num(balance.ee) : 0
   let erBal = balance ? num(balance.er) : 0
@@ -91,16 +91,22 @@ export function buildPf({ records = [], statements = [], base = DEFAULT_SETTINGS
       const fy = fyStartYear(cur), sec = section(fy)
       if (!openingSet.has(fy)) { openingSet.add(fy); sec.openingEpf = r2(eeBal + erBal) }
       const rate = sec.rate
+      // a passbook balance already holds the interest credited up to its date: that year's interest is not worked out or added again
+      const inBalance = !!balance && `${fy + 1}-03-31` <= balance.asOf
       // interest is worked out on the balance before this month's contribution
-      sec.accruedEe += eeBal * rate / 1200
-      sec.accruedEr += erBal * rate / 1200
+      if (!inBalance) { sec.accruedEe += eeBal * rate / 1200; sec.accruedEr += erBal * rate / 1200 }
       const c = byMonth.get(cur)
       if (c) { eeBal += c.ee; erBal += c.er; pension += c.eps }
       if (cur.endsWith('-03')) { // year end: the interest is credited
         const actual = stInterest.get(fy)
-        const addEe = actual ? num(actual.ee) : sec.accruedEe, addEr = actual ? num(actual.er) : sec.accruedEr
-        sec.credited = { ee: r2(addEe), er: r2(addEr), total: r2(addEe + addEr), source: actual ? 'statement' : 'estimate' }
-        eeBal += addEe; erBal += addEr
+        if (inBalance) {
+          if (actual) sec.credited = { ee: r2(num(actual.ee)), er: r2(num(actual.er)), total: r2(num(actual.ee) + num(actual.er)), source: 'statement' }
+          else sec.inBalance = true
+        } else {
+          const addEe = actual ? num(actual.ee) : sec.accruedEe, addEr = actual ? num(actual.er) : sec.accruedEr
+          sec.credited = { ee: r2(addEe), er: r2(addEr), total: r2(addEe + addEr), source: actual ? 'statement' : 'estimate' }
+          eeBal += addEe; erBal += addEr
+        }
       }
       sec.closingEpf = r2(eeBal + erBal); sec.pensionClosing = r2(pension)
     }
@@ -111,11 +117,15 @@ export function buildPf({ records = [], statements = [], base = DEFAULT_SETTINGS
   }))
   const interestEarned = r2(list.reduce((t, x) => t + (x.credited ? x.credited.total : 0), 0))
   const accruing = list.find(x => !x.credited && x.accrued > 0)
+  // where the balance came from: what you and the employer put in (every month known here) and the rest, which is interest
+  const sumEe = r2(months.reduce((t, m) => t + m.ee, 0)), sumEr = r2(months.reduce((t, m) => t + m.er, 0))
+  const split = { eeContrib: sumEe, erContrib: sumEr, interest: r2(eeBal + erBal - sumEe - sumEr), interestEe: r2(eeBal - sumEe), interestEr: r2(erBal - sumEr), since: months[0]?.month || null }
   return {
     empty: false, settings: s, months, sections: list, balanceFrom: balance,
     eeBalance: r2(eeBal), erBalance: r2(erBal), epfBalance: r2(eeBal + erBal), pensionBalance: r2(pension),
     interestEarned, accrued: accruing ? accruing.accrued : 0, accruedFy: accruing?.fy ?? null,
     totalEe: r2(months.reduce((t, m) => t + m.ee, 0)), totalEr: r2(months.reduce((t, m) => t + m.er, 0)), totalEps: r2(months.reduce((t, m) => t + m.eps, 0)),
+    split,
     estimated: !balance, // no passbook balance: counted from the first payslip, so earlier years are not included
   }
 }
@@ -143,13 +153,87 @@ export function parsePastedContributions(text) {
 }
 
 // ── EPF passbook ──
-// Rows are found by their wording, not their position:
-//   "Cont. For Due-Month 102023 ... wages EPF, wages EPS, employee share, employer share, pension share"
-//   "Int. Updated upto 31/03/2024 ... employee interest, employer interest"
-//   "Closing Balance as on 31/03/2024 ... employee balance, employer balance, pension balance"
+// Rows are found by their wording, not their position. The EPFO member passbook prints, for a financial year:
+//   "OB Int. Updated upto 01/04/2026   2,63,551  1,18,101  70,134"   the opening balance: employee, employer, pension
+//   "Mar-2026 01-04-2026  CR  34,125  15,000  4,095  2,845  1,250"   wage month, date credited, wages (EPF, EPS), employee, employer (PF part), pension
+//   "Int. Updated upto 31/03/2026  ..."                              interest credited for a year (employee, employer)
+//   "Closing Balance as on 31/03/2027  2,88,121  1,35,171  77,634"   employee, employer, pension balance
+// Older passbooks print the contribution as "Cont. For Due-Month 102023 ..." (the month it was credited, one after the wage month).
+// Months are kept by WAGE month, the same month a payslip is for.
 const NUMS = /\d[\d,]*(?:\.\d+)?/g
 const nums = s => (String(s).match(NUMS) || []).map(x => Number(x.replace(/,/g, '')))
 const dateOf = (d, m, y) => `${y}-${pad(m)}-${pad(d)}`
+const prevMonth = m => { const [y, mo] = m.split('-').map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${pad(mo - 1)}` }
+const dayBefore = iso => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
+const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 }
+
+// the text lines of a passbook -> what to save. Separate from the PDF reading so it can be checked on its own.
+export function parsePassbookLines(lines, now = new Date()) {
+  const todayIso = dateOf(now.getDate(), now.getMonth() + 1, now.getFullYear())
+  const contrib = new Map(), interest = new Map(), balances = []
+  let opening = null, printed = null, totals = null, member = ''
+  for (const line of lines) {
+    let m = line.match(/Member\s*ID\s*\/\s*Name\s*([A-Z0-9]{10,})/i)
+    if (m) { member = m[1]; continue }
+    // the opening balance of the year: it is the balance just before the first contribution listed below it
+    m = line.match(/^\s*OB\b.*?Updated\s*upto\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})(.*)$/i)
+    if (m) { const n = nums(m[4]); if (n.length >= 2) opening = { date: dateOf(m[1], m[2], m[3]), ee: n[0], er: n[1], eps: n[2] ?? 0 }; continue }
+    // a month's contribution, as the passbook prints it today
+    m = line.match(/^\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[-\s](\d{4})\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})\s*(CR|DR)?\s*(.*)$/i)
+    if (m) {
+      const n = nums(m[7])
+      if (!/^dr$/i.test(m[6] || '') && n.length >= 5) {
+        const [wageEpf, wageEps, ee, er, eps] = n.slice(-5)
+        const key = `${m[2]}-${pad(MON[m[1].toLowerCase()])}`
+        const o = contrib.get(key) || { kind: 'contribution', month: key, wageEpf: 0, wageEps: 0, ee: 0, er: 0, eps: 0, credited: dateOf(m[3], m[4], m[5]) }
+        o.wageEpf = Math.max(o.wageEpf, wageEpf); o.wageEps = Math.max(o.wageEps, wageEps); o.ee += ee; o.er += er; o.eps += eps
+        contrib.set(key, o)
+      }
+      continue
+    }
+    // the older layout: the month it was credited (one after the wage month)
+    m = line.match(/Cont(?:\.|ribution)?\s*for\s*Due[-\s]*Month\s*(\d{2})[-/\s]?(\d{4})(.*)$/i)
+    if (m) {
+      const n = nums(m[3])
+      if (n.length >= 5) {
+        const [wageEpf, wageEps, ee, er, eps] = n.slice(-5)
+        const key = prevMonth(`${m[2]}-${m[1]}`)
+        const o = contrib.get(key) || { kind: 'contribution', month: key, wageEpf: 0, wageEps: 0, ee: 0, er: 0, eps: 0 }
+        o.wageEpf = Math.max(o.wageEpf, wageEpf); o.wageEps = Math.max(o.wageEps, wageEps); o.ee += ee; o.er += er; o.eps += eps
+        contrib.set(key, o)
+      }
+      continue
+    }
+    m = line.match(/Total\s*Contributions\s*for\s*the\s*year(.*)$/i)
+    if (m) { const n = nums(m[1].replace(/\[[^\]]*\]/g, '')); if (n.length >= 3) totals = { ee: n[0], er: n[1], eps: n[2] }; continue }
+    m = line.match(/Int(?:\.|erest)?\s*Updated\s*upto\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})(.*)$/i)
+    if (m) {
+      const n = nums(m[4])
+      const iso = dateOf(m[1], m[2], m[3])
+      // interest not credited yet shows as zeros against the coming 31 March: not a figure
+      if (n.length >= 2 && !(n[0] + n[1] === 0 && iso > todayIso)) { const fy = Number(m[3]) - (Number(m[2]) < 4 ? 1 : 0); interest.set(fy, { kind: 'interest', fy, ee: n[0], er: n[1], total: r2(n[0] + n[1]) }) }
+      continue
+    }
+    m = line.match(/Closing\s*Balance\s*as\s*on\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})(.*)$/i)
+    if (m) {
+      const n = nums(m[4]); const asOf = dateOf(m[1], m[2], m[3])
+      if (n.length >= 2) { const b = { kind: 'balance', asOf, from: asOf.slice(0, 7), ee: n[0], er: n[1], eps: n[2] ?? 0 }; if (asOf <= todayIso) balances.push(b); else printed = b }
+    }
+  }
+  const contributions = [...contrib.values()].sort((a, b) => cmp(a.month, b.month))
+  // the opening balance is the anchor: everything from the first listed month onward is added to it
+  let balance = balances.sort((a, b) => cmp(b.asOf, a.asOf))[0] || null
+  if (opening) balance = { kind: 'balance', asOf: dayBefore(opening.date), from: contributions[0]?.month || opening.date.slice(0, 7), ee: opening.ee, er: opening.er, eps: opening.eps, opening: true }
+  // the passbook's own closing figure against opening + the listed months (this year's interest is not credited yet): proof the rows were read completely
+  let check = null
+  if (opening && printed) {
+    const sum = k => r2(contributions.reduce((t, c) => t + c[k], 0))
+    const expected = { ee: r2(opening.ee + sum('ee')), er: r2(opening.er + sum('er')), eps: r2(opening.eps + sum('eps')) }
+    const interestAdded = interest.get(Number(printed.asOf.slice(0, 4)) - 1)
+    check = { printed: { ee: printed.ee, er: printed.er, eps: printed.eps }, expected, ok: !interestAdded && Math.abs(expected.ee - printed.ee) < 1 && Math.abs(expected.er - printed.er) < 1 && Math.abs(expected.eps - printed.eps) < 1, totalsOk: totals ? Math.abs(sum('ee') - totals.ee) < 1 && Math.abs(sum('er') - totals.er) < 1 : null }
+  }
+  return { contributions, interest: [...interest.values()].sort((a, b) => a.fy - b.fy), balance, check, member }
+}
 
 export async function parsePassbookPdf(arrayBuffer, password) {
   const { doc, task } = await openPdf(arrayBuffer, password)
@@ -157,30 +241,7 @@ export async function parsePassbookPdf(arrayBuffer, password) {
   for (let p = 1; p <= doc.numPages; p++) { const tc = await (await doc.getPage(p)).getTextContent(); for (const l of toLines(tc.items)) lines.push(l.cells.map(c => c.s).join(' ')) }
   await task.destroy()
   if (!lines.length) throw new Error('This PDF has no readable text (it may be a scanned image).')
-  const contrib = new Map(), interest = new Map(), balances = []
-  for (const line of lines) {
-    let m = line.match(/Cont(?:\.|ribution)?\s*for\s*Due[-\s]*Month\s*(\d{2})[-/\s]?(\d{4})(.*)$/i)
-    if (m) {
-      const n = nums(m[3])
-      if (n.length >= 5) {
-        const [wageEpf, wageEps, ee, er, eps] = n.slice(-5)
-        const key = `${m[2]}-${m[1]}`
-        const o = contrib.get(key) || { kind: 'contribution', month: key, wageEpf: 0, wageEps: 0, ee: 0, er: 0, eps: 0 }
-        o.wageEpf = Math.max(o.wageEpf, wageEpf); o.wageEps = Math.max(o.wageEps, wageEps); o.ee += ee; o.er += er; o.eps += eps
-        contrib.set(key, o)
-      }
-      continue
-    }
-    m = line.match(/Int(?:\.|erest)?\s*Updated\s*upto\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})(.*)$/i)
-    if (m) {
-      const n = nums(m[4])
-      if (n.length >= 2) { const fy = Number(m[3]) - (Number(m[2]) < 4 ? 1 : 0); interest.set(fy, { kind: 'interest', fy, ee: n[0], er: n[1], total: r2(n[0] + n[1]) }) }
-      continue
-    }
-    m = line.match(/Closing\s*Balance\s*as\s*on\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})(.*)$/i)
-    if (m) { const n = nums(m[4]); if (n.length >= 2) balances.push({ kind: 'balance', asOf: dateOf(m[1], m[2], m[3]), ee: n[0], er: n[1], eps: n[2] ?? 0 }) }
-  }
-  const out = { contributions: [...contrib.values()].sort((a, b) => cmp(a.month, b.month)), interest: [...interest.values()].sort((a, b) => a.fy - b.fy), balance: balances.sort((a, b) => cmp(b.asOf, a.asOf))[0] || null }
+  const out = parsePassbookLines(lines)
   if (!out.contributions.length && !out.interest.length && !out.balance) throw new Error('No EPF passbook rows were found in this PDF. Use the member passbook downloaded from the EPFO member portal.')
   return out
 }
