@@ -5,7 +5,7 @@ import { removeDuplicateTransactions } from './lib/dedupeCleanup'
 import { recategoriseWalletLoads, recategoriseAtm, recategoriseGuesses } from './lib/recategorise'
 import { migrateSimpleCategories } from './lib/categoryMigrate'
 import { tagAllCards } from './lib/rewardTagging'
-import { autoApplyPresets, syncChannelRules, syncSettlementRules } from './lib/rulesPack'
+import { autoApplyPresets, syncChannelRules, syncSettlementRules, syncSwiggyHistory } from './lib/rulesPack'
 import { postDueEmis } from './lib/emiEngine'
 import { useStore } from './store'
 import { initBackNav, exitApp } from './lib/backNav'
@@ -82,6 +82,11 @@ export default function App() {
         if (!localStorage.getItem('finping_settlement_v2')) {
           if (await syncSettlementRules() > 0) tagAllCards().catch(() => {})
           localStorage.setItem('finping_settlement_v2', '1')
+        }
+        // Once: the Swiggy card's 10% needed ₹100 before 21 Apr 2026 (₹249 after); older spends use the older limit
+        if (!localStorage.getItem('finping_swiggy_hist_v3')) {
+          if (await syncSwiggyHistory() > 0) tagAllCards().catch(() => {})
+          localStorage.setItem('finping_swiggy_hist_v3', '1')
         }
         // Once after this update: categories guessed from loose words in the SMS are guessed again with the corrected rules
         if (!localStorage.getItem('finping_catguess_v1')) {

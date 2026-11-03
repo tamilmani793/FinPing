@@ -35,7 +35,7 @@ const rateOf = r => (num(r?.per) > 0 ? num(r.value) / num(r.per) : 0)
 // phone never sees, so it is worked out from what we have: your choice on the transaction wins, then the way it was paid (UPI, net banking,
 // wallet), a web address or "online/ecom" in the text, and well-known online-only brands. Anything else counts as in a shop.
 const ONLINE_TEXT = /\becom\b|e-?com\b|\bonline\b|www\.|\.com\b|\.in\b|\.co\b|razorpay|payu|billdesk|ccavenue|cashfree|\bpaytm\b|phonepe|gpay|google ?pay/i
-const ONLINE_BRANDS = ['amazon', 'flipkart', 'myntra', 'ajio', 'nykaa', 'meesho', 'swiggy', 'zomato', 'zepto', 'blinkit', 'bigbasket', 'instamart', 'makemytrip', 'goibibo', 'cleartrip', 'irctc',
+const ONLINE_BRANDS = ['amazon', 'flipkart', 'myntra', 'ajio', 'nykaa', 'meesho', 'swiggy', 'bundl', 'zomato', 'zepto', 'blinkit', 'bigbasket', 'instamart', 'makemytrip', 'goibibo', 'cleartrip', 'irctc',
   'yatra', 'bookmyshow', 'netflix', 'spotify', 'hotstar', 'primevideo', 'google', 'apple', 'microsoft', 'uber', 'rapido', 'pharmeasy', 'tata1mg', 'lenskart', 'tatacliq', 'airbnb', 'agoda', 'booking.com']
 export function isOnline(txn) {
   if (txn?.channel === 'online') return true
@@ -79,7 +79,15 @@ export function matchesRule(match, txn, mccMap = {}) {
   }
   if (category && (match.categories || []).some(c => canonRuleCategory(c) === canonRuleCategory(category))) return category
   const text = `${txn.merchant || ''} ${txn.bankNarration || ''}`.toLowerCase()
-  for (const w of match.merchants || []) { const k = String(w).trim().toLowerCase(); if (k && text.includes(k)) return w }
+  // the same shop is spelt differently on every statement ("WWW SWIGGY COM", "SWIGGYINSTAMART", "Cult.fit" / "CULTFIT"): after the plain match, compare
+  // with spaces and punctuation left out (only for names of 5+ letters, so a short word cannot match across two words)
+  const squashed = text.replace(/[^a-z0-9]/g, '')
+  for (const w of match.merchants || []) {
+    const k = String(w).trim().toLowerCase()
+    if (!k) continue
+    const sq = k.replace(/[^a-z0-9]/g, '')
+    if (text.includes(k) || (sq.length >= 5 && squashed.includes(sq))) return w
+  }
   return null
 }
 
@@ -91,7 +99,7 @@ export function matchesRule(match, txn, mccMap = {}) {
  * @param {Record<string,{category:string}>} [mccMap] MCC code -> { category }
  * @returns {ExpectedReward}
  */
-export function calculateExpectedReward(transaction, cardRules, currentCycleTotal = EMPTY_TOTALS(), mccMap = {}) {
+function calcReward(transaction, cardRules, currentCycleTotal = EMPTY_TOTALS(), mccMap = {}) {
   const none = (kind, reason, type = cardRules?.rewardType || 'cashback') => ({ amount: 0, type, rule: { id: kind, label: reason, kind }, multiplier: 0, capped: false, reason })
   if (!cardRules || cardRules.enabled === false) return none('none', 'No reward rules for this card')
   const type = cardRules.rewardType === 'points' ? 'points' : 'cashback'
@@ -112,13 +120,16 @@ export function calculateExpectedReward(transaction, cardRules, currentCycleTota
 
   // the best accelerated rule that applies (highest rate wins); its own minimum spend and its own cycle cap are honoured.
   // A rule can leave out merchants / MCCs that would otherwise match it (HSBC Live+: Amazon, Flipkart and Myntra stay at the base rate).
-  let best = null
+  let best = null, tooSmall = null
   for (const rule of cardRules.accelerated || []) {
     if (matchesRule(rule, transaction, mccMap) == null) continue
     if (matchesRule({ mccs: rule.excludeMccs, merchants: rule.excludeMerchants }, transaction, mccMap) != null) continue
-    if (amount < num(rule.minSpend)) continue
+    // below its minimum a spend normally drops to the base rate; some rules (Swiggy HDFC) pay nothing at all on an order that small
+    if (amount < num(rule.minSpend)) { if (rule.nothingBelowMin && !tooSmall) tooSmall = rule; continue }
     if (!best || rateOf(rule.rate) > rateOf(best.rate)) best = rule
   }
+
+  if (!best && tooSmall) return none('minSpend', `${tooSmall.label}: below ₹${tooSmall.minSpend} earns nothing`, type)
 
   // the base rate, held to its own cap when the card has one (HDFC Millennia 1% category, SBI offline 1%)
   const baseResult = (label = 'Base rate') => {
@@ -150,6 +161,20 @@ export function calculateExpectedReward(transaction, cardRules, currentCycleTota
   }
   const channel = (cardRules.accelerated || []).some(a => a.channel) ? (isOnline(transaction) ? 'online' : 'offline') : undefined
   return { ...result, type, ...(channel ? { channel } : {}) }
+}
+
+// What you set on a transaction beats the automatic reading: "Reward as" a merchant (Bundl Technologies is Swiggy) and "Earns cashback" yes / no
+// (the same shop name sometimes sells jewellery). The percentage, minimum spend and caps still come from the card's rules.
+export function calculateExpectedReward(transaction, cardRules, currentCycleTotal = EMPTY_TOTALS(), mccMap = {}) {
+  const elig = transaction?.rewardEligible, as = String(transaction?.rewardAs || '').trim()
+  if (elig !== 'yes' && elig !== 'no' && !as) return calcReward(transaction, cardRules, currentCycleTotal, mccMap)
+  if (elig === 'no' && cardRules) {
+    const type = cardRules.rewardType === 'points' ? 'points' : 'cashback'
+    return { amount: 0, type, rule: { id: 'manual', label: 'Set by you: no cashback', kind: 'manual' }, multiplier: 0, capped: false, reason: 'Set by you: no cashback on this spend', manual: true }
+  }
+  const t = as ? { ...transaction, merchant: as, bankNarration: '' } : transaction
+  const rules = elig === 'yes' && cardRules ? { ...cardRules, exclusions: { mccs: [], categories: [], merchants: [] } } : cardRules
+  return { ...calcReward(t, rules, currentCycleTotal, mccMap), manual: true }
 }
 
 // ---- the rules in plain words (shown at the top of the Reward rules sheet) ----
@@ -198,5 +223,5 @@ export function describeRules(rules) {
 export const rewardPill = r => (r && r.amount > 0 ? (r.type === 'points' ? `🪙 +${Math.round(r.amount).toLocaleString('en-IN')} Pts` : `✨ +₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' (cap)' : '') + (r.channel ? (r.channel === 'online' ? ' · Online' : ' · In shop') : '') : null)
 
 // the short form for transaction lists: "+₹10 · 1%" (no icon, no Online / In shop; the full pill is on the transaction's own page)
-export const rewardPillShort = r => (r && r.amount > 0 ? (r.type === 'points' ? `+${Math.round(r.amount).toLocaleString('en-IN')} pts` : `+₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' · cap' : '') : null)
+export const rewardPillShort = r => (r && r.amount > 0 ? (r.type === 'points' ? `+${Math.round(r.amount).toLocaleString('en-IN')} pts` : `+₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' · cap' : '') + (r.manual ? ' ✎' : '') : null)
 

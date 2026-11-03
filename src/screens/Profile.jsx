@@ -11,6 +11,7 @@ import { removeDuplicateTransactions, describeCleanup } from '../lib/dedupeClean
 import { importDebts } from '../lib/debtBackup'
 import { askConfirm } from '../lib/confirm'
 import LinkTransactionsSheet from '../components/LinkTransactionsSheet'
+import MerchantRulesSheet from '../components/MerchantRulesSheet'
 
 function Row({ Icon, title, sub, onClick, right }) {
   return (
@@ -43,6 +44,7 @@ export default function Profile() {
   const [editingName, setEditingName] = useState(false)
   const [busy, setBusy] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
+  const [merchOpen, setMerchOpen] = useState(false)
   const [last, setLast] = useState(lastBackupAt())
   const photoInput = useRef(null)
   const restoreInput = useRef(null)
@@ -184,6 +186,7 @@ export default function Profile() {
           <div style={{ marginBottom: 10 }}><ThemeStrip /></div>
           <div className="card rows" style={{ paddingTop: 4, paddingBottom: 4 }}>
             <Row Icon={SlidersHorizontal} title="All customise options" sub="Dropdown lists, categories and each card's reward rules" onClick={() => setActiveTab('options')} />
+            <Row Icon={Link2} title="Merchant categories" sub="Which shops always go in which category" onClick={() => setMerchOpen(true)} />
           </div>
         </Group>
 
@@ -211,6 +214,7 @@ export default function Profile() {
         </Group>
       </div>
       {linkOpen && <LinkTransactionsSheet onClose={() => setLinkOpen(false)} />}
+      {merchOpen && <MerchantRulesSheet onClose={() => setMerchOpen(false)} />}
     </div>
   )
 }

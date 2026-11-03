@@ -4,7 +4,7 @@ import { Share } from '@capacitor/share'
 import presets from '../data/cardRewardPresets.json'
 import { db } from '../db/schema'
 import { cardTitle } from './cardCatalog'
-import { getRules, saveRules } from './rewardTagging'
+import { getRules, saveRules, tagCardRewards } from './rewardTagging'
 import { DEFAULT_RULES } from './rewardRules'
 
 // Reward rules travel as a "rules pack": { format: 'finping-reward-rules', revision, cards: [{ key, name, effectiveFrom, publishedOn, source, rules }] }.
@@ -102,7 +102,9 @@ export async function applyEntry(cardId, entry) {
   const rules = rulesFromEntry(cardId, entry)
   const old = await getRules(cardId)
   if (old) rules.history = old.history || []
-  return saveRules(rules, { asNewVersion: !!old })
+  const saved = await saveRules(rules, { asNewVersion: !!old })
+  if (entry.key === 'hdfc-swiggy' && await syncSwiggyHistory() > 0) await tagCardRewards(cardId)
+  return saved
 }
 
 export async function exportPack(cardId, title = '') {
@@ -204,6 +206,25 @@ export async function syncChannelRules() {
     // the period the bank adds spends up over (SBI Cashback: the calendar month)
     const capPeriod = entry.rules?.capPeriod && row.capPeriod !== entry.rules.capPeriod && row.presetKey === 'sbi-cashback' ? entry.rules.capPeriod : null
     if (changed || capPeriod) { await db.card_reward_rules.update(row.id, { accelerated, ...(capPeriod ? { capPeriod } : {}) }); n++ }
+  }
+  return n
+}
+
+// The Swiggy card's 10% needed a spend of ₹100 until 20 Apr 2026 and ₹249 from 21 Apr 2026. Rules saved with the newer limit get the older version as history,
+// so spends before the change are worked out with ₹100. Done once per card; a version you added yourself for that period is left alone.
+export async function syncSwiggyHistory() {
+  let n = 0
+  for (const row of await db.card_reward_rules.toArray()) {
+    if (!(row.presetKey === 'hdfc-swiggy' || (row.accelerated || []).some(a => a.id === 'swiggy-10')) || !row.effectiveFrom || row.effectiveFrom > '2026-04-21') continue
+    // the current version: a Swiggy order under the minimum earns nothing (not the 1% base rate)
+    const WORDS = ['swiggy', 'bundl', 'instamart']
+    const lacks = a => a.id === 'swiggy-10' && (!a.nothingBelowMin || WORDS.some(w => !(a.merchants || []).map(m => String(m).toLowerCase()).includes(w)))
+    if ((row.accelerated || []).some(lacks)) { await db.card_reward_rules.update(row.id, { accelerated: row.accelerated.map(a => (a.id === 'swiggy-10' ? { ...a, nothingBelowMin: true, merchants: [...new Set([...(a.merchants || []), ...WORDS])] } : a)) }); n++ }
+    if ((row.history || []).some(h => h.effectiveFrom && h.effectiveFrom < row.effectiveFrom)) continue
+    const old = { ...row, effectiveFrom: '2000-01-01', accelerated: (row.accelerated || []).map(a => (a.id === 'swiggy-10' ? { ...a, minSpend: 100, nothingBelowMin: false } : a)) }
+    const keep = ['enabled', 'rewardType', 'base', 'minSpend', 'capPerCycle', 'rounding', 'capPeriod', 'baseCap', 'spendBlock', 'accelerated', 'exclusions', 'effectiveFrom', 'publishedOn', 'source']
+    const snap = Object.fromEntries(keep.filter(k => old[k] !== undefined).map(k => [k, old[k]]))
+    await db.card_reward_rules.update(row.id, { history: [...(row.history || []), snap] }); n++
   }
   return n
 }

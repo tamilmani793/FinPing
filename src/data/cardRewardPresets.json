@@ -149,13 +149,14 @@
               "per": 100
             },
             "minSpend": 249,
+            "nothingBelowMin": true,
             "capPerCycle": 1500,
             "merchants": [
               "swiggy",
               "bundl",
               "instamart"
             ],
-            "notes": "Minimum Rs 249 per transaction from 21 Apr 2026. Swiggy Money wallet, Swiggy Liquor and Swiggy Minis do not count. Matched on the merchant and terminal IDs.",
+            "notes": "Minimum Rs 249 per transaction from 21 Apr 2026 (Rs 100 before that). A Swiggy order under Rs 249 earns 0%, not the 1% base rate. Swiggy Money wallet, Swiggy Liquor and Swiggy Minis do not count. Matched on the merchant and terminal IDs.",
             "mccs": [],
             "categories": []
           },

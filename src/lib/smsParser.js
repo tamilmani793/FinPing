@@ -3,7 +3,7 @@ import { ruleFor } from './merchantRules'
 // Handles Indian bank SMS patterns from 15+ banks
 
 const MERCHANT_CATEGORY_MAP = {
-  swiggy: 'Food & Dining', zomato: 'Food & Dining', dominos: 'Food & Dining',
+  swiggy: 'Food & Dining', bundl: 'Food & Dining', zomato: 'Food & Dining', dominos: 'Food & Dining',
   blinkit: 'Grocery', bigbasket: 'Grocery', zepto: 'Grocery', dmart: 'Grocery',
   reliance: 'Grocery', jiomart: 'Grocery', dunzo: 'Grocery',
   uber: 'Transport', ola: 'Transport', rapido: 'Transport', yulu: 'Transport',

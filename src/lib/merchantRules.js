@@ -20,3 +20,16 @@ export function saveRule(merchant, category) {
   if (!k || typeof localStorage === 'undefined') return
   localStorage.setItem(RULES_KEY, JSON.stringify({ ...read(), [k]: category }))
 }
+
+// the remembered rules as a list, for the screen that shows them: [{ key, category }]
+export const listRules = () => Object.entries(read()).map(([key, category]) => ({ key, category })).sort((a, b) => a.key.localeCompare(b.key))
+
+export function deleteRule(key) {
+  const all = read(); delete all[key]
+  if (typeof localStorage !== 'undefined') localStorage.setItem(RULES_KEY, JSON.stringify(all))
+}
+
+// set a rule by its key as listed (the key stays exactly as shown)
+export function setRuleByKey(key, category) {
+  if (typeof localStorage !== 'undefined' && key) localStorage.setItem(RULES_KEY, JSON.stringify({ ...read(), [key]: category }))
+}

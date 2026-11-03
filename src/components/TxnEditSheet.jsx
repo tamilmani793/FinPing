@@ -10,7 +10,7 @@ import { askConfirm } from '../lib/confirm'
 import { merchantKey, saveRule } from '../lib/merchantRules'
 import { seedMcc } from '../lib/mcc'
 import { SHOW_MCC } from '../lib/features'
-import { tagCardRewards, tagAllCards } from '../lib/rewardTagging'
+import { tagCardRewards, tagAllCards, getRules } from '../lib/rewardTagging'
 import { txnName } from '../lib/txnName'
 import { isOnline, rewardPill } from '../lib/rewardRules'
 import { useOptions } from '../lib/options'
@@ -31,7 +31,11 @@ export default function TxnEditSheet({ txn, onClose }) {
     merchant: txn.merchant || '', amount: String(txn.amount ?? ''), date: format(new Date(txn.date), 'yyyy-MM-dd'),
     type: txn.type || 'debit', category: txn.category || 'General', paymentMode: txn.paymentMode || 'Other',
     cardId: txn.cardId ?? '', mcc: txn.mcc != null ? String(txn.mcc) : '', notes: txn.notes || '', isExcluded: !!txn.isExcluded, channel: txn.channel || 'auto',
+    rewardAs: txn.rewardAs || '', rewardEligible: txn.rewardEligible || 'auto',
   })
+  // the merchants this card's rules know by name (Swiggy, Amazon...): what "Reward as" can be set to
+  const ruleRow = useLiveQuery(() => (f.cardId === '' ? null : getRules(Number(f.cardId))), [f.cardId])
+  const ruleMerchants = [...new Map(((ruleRow?.accelerated) || []).flatMap(a => a.merchants || []).map(m => [String(m).toLowerCase().replace(/[^a-z0-9]/g, ''), String(m)])).values()].sort((a, b) => a.localeCompare(b))
   const set = k => e => setF({ ...f, [k]: e.target.value })
   // a category that is no longer in the list (old data) stays selectable
   const categories = categoryList.some(c => c.name === f.category) ? categoryList : [{ name: f.category, icon: '💳' }, ...categoryList]
@@ -48,6 +52,7 @@ export default function TxnEditSheet({ txn, onClose }) {
         date: new Date(y, m - 1, d, new Date().getHours(), new Date().getMinutes()), amount, type: f.type, merchant: f.merchant.trim() || 'Unknown',
         category: f.category, paymentMode: f.paymentMode, channel: f.channel === 'auto' ? null : f.channel, bank: card?.bank || '', accountLast4: card?.cardLast4 || null, cardId: card ? card.id : null,
         rawSMS: null, parsedBy: 'manual', tags: [], notes: f.notes, isExcluded: f.isExcluded, createdAt: new Date(),
+        rewardAs: f.rewardAs || null, rewardEligible: f.rewardEligible === 'auto' ? null : f.rewardEligible,
       })
       if (card && card.cardType !== 'unknown') await applyTxnToCard(card, f.type, amount)
       showNotification('Transaction added', 'success')
@@ -61,14 +66,29 @@ export default function TxnEditSheet({ txn, onClose }) {
     if (String(f.cardId) !== String(txn.cardId ?? '')) changed.push('cardId')
     if (String(f.mcc || '') !== String(txn.mcc ?? '')) changed.push('mcc')
     if (f.channel !== (txn.channel || 'auto')) changed.push('channel')
+    const rewardChanged = f.rewardAs !== (txn.rewardAs || '') || f.rewardEligible !== (txn.rewardEligible || 'auto')
+    if (rewardChanged) changed.push('rewardAs')
     const editedFields = [...new Set([...(txn.editedFields || []), ...changed])]
     await db.transactions.update(txn.id, {
       merchant: f.merchant.trim() || 'Unknown', amount, type: f.type, category: f.category, paymentMode: f.paymentMode,
       date: new Date(y, m - 1, d, old.getHours(), old.getMinutes()),
       cardId: f.cardId === '' ? null : Number(f.cardId), mcc: f.mcc === '' ? null : Number(f.mcc), notes: f.notes, isExcluded: f.isExcluded, channel: f.channel === 'auto' ? null : f.channel,
+      rewardAs: f.rewardAs || null, rewardEligible: f.rewardEligible === 'auto' ? null : f.rewardEligible,
       parsedBy: txn.parsedBy === 'auto' ? 'auto-edited' : txn.parsedBy,
       userEdited: true, editedFields, // your changes win over the bank statement and over any SMS
     })
+    // reward settings changed: offer the same to this merchant's other spends on the card
+    if (rewardChanged && (f.rewardAs || f.rewardEligible !== 'auto' || txn.rewardAs || txn.rewardEligible)) {
+      const name = txnName({ ...txn, merchant: f.merchant })
+      const key = merchantKey(name)
+      const same = key ? (await db.transactions.toArray()).filter(t => t.id !== txn.id && t.type === 'debit' && merchantKey(txnName(t)) === key && ((t.rewardAs || '') !== f.rewardAs || (t.rewardEligible || 'auto') !== f.rewardEligible)) : []
+      const what = [f.rewardAs ? `reward as ${f.rewardAs}` : null, f.rewardEligible === 'no' ? 'no cashback' : f.rewardEligible === 'yes' ? 'cashback on' : null].filter(Boolean).join(', ') || 'automatic reward'
+      if (same.length && await askConfirm({ title: `Use the same for all ${name}?`, message: `${same.length} other spend${same.length === 1 ? '' : 's'} from this merchant: ${what}. Change them too?`, confirmLabel: 'Change all', cancelLabel: 'Only this one', danger: false })) {
+        for (const t of same) await db.transactions.update(t.id, { rewardAs: f.rewardAs || null, rewardEligible: f.rewardEligible === 'auto' ? null : f.rewardEligible, userEdited: true, editedFields: [...new Set([...(t.editedFields || []), 'rewardAs'])] })
+        showNotification(`${same.length + 1} spends updated`, 'success')
+      }
+      tagAllCards().catch(() => {})
+    }
     // the category changed: offer to fix the same merchant's other transactions (and remember it for new ones)
     if (changed.includes('category')) {
       const name = txnName({ ...txn, merchant: f.merchant })
@@ -128,6 +148,28 @@ export default function TxnEditSheet({ txn, onClose }) {
             <Field label="Online or in a shop?" hint={`Some cards pay more online. Automatic counts this as ${isOnline({ ...txn, merchant: f.merchant, paymentMode: f.paymentMode, channel: null }) ? 'online' : 'in a shop'}; set it yourself if the bank counted it the other way.`}>
               <Segmented value={f.channel} options={[{ value: 'auto', label: 'Automatic' }, { value: 'online', label: 'Online' }, { value: 'offline', label: 'In shop' }]} onChange={v => setF({ ...f, channel: v })} />
             </Field>
+          )}
+          {f.type === 'debit' && f.cardId !== '' && (
+            <>
+              <Field label="Reward as" hint="For a shop that goes by another name on the statement (Bundl Technologies is Swiggy). The card's rules for that merchant then apply.">
+                <Picker value={f.rewardAs} options={ruleMerchants.map(m => ({ value: m, label: m.replace(/\b\w/g, c => c.toUpperCase()) }))} onChange={v => setF({ ...f, rewardAs: v })} title="Reward as" placeholder="Automatic" clearLabel="Automatic" />
+              </Field>
+              {(() => {
+                // ticked = earns. It starts as what the card's rules say; changing it away from that is saved as your choice, putting it back is automatic again
+                const e0 = txn.rewardEligible || 'auto'
+                const autoChecked = e0 === 'auto' ? (txn.expectedReward ? txn.expectedReward.amount > 0 : true) : true
+                const checked = f.rewardEligible === 'yes' ? true : f.rewardEligible === 'no' ? false : autoChecked
+                return (
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5 }}>
+                      <input type="checkbox" checked={checked} onChange={e => setF({ ...f, rewardEligible: e.target.checked === autoChecked ? 'auto' : (e.target.checked ? 'yes' : 'no') })} style={{ width: 18, height: 18, accentColor: 'var(--gold)' }} />
+                      Earns cashback
+                    </label>
+                    <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 4 }}>{f.rewardEligible === 'auto' ? 'Follows the card\'s rules and the category.' : checked ? 'You set this spend to earn, whatever the rules say.' : 'You set this spend to earn nothing (for example jewellery under the same shop name).'}</div>
+                  </div>
+                )
+              })()}
+            </>
           )}
           {SHOW_MCC && (
           <Field label="MCC (optional)" hint="Lets card reward rules treat this spend the way the bank does">
