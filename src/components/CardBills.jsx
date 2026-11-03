@@ -18,6 +18,12 @@ export default function CardBills({ card, onClose, onOpenCard }) {
   const txns = useLiveQuery(() => db.transactions.where('cardId').equals(card.id).toArray(), [card.id], null)
   const [openKey, setOpenKey] = useState(null)
   const rows = txns ? cardStatements(card, txns) : []
+  // what the bank's own statement says about rewards, read when the statement was imported: points by programme (5% select merchants, 1% on the rest...)
+  const saved = useLiveQuery(() => db.reward_statements.where('cardId').equals(card.id).toArray(), [card.id], [])
+  const byKey = new Map(saved.map(s => [s.cycleKey, s]))
+  const stmtOf = r => byKey.get(r.key) || null
+  const progLabel = p => { const m = /(\d+(?:\.\d+)?)\s*%/.exec(p.name); return m ? `${m[1]}%` : 'Bonus' }
+  const progName = p => String(p.name).replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
   const dates = cycleDates(card)
   const owing = !isStatementPaid(card, dates)
   return (
@@ -40,6 +46,13 @@ export default function CardBills({ card, onClose, onOpenCard }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>{r.open ? 'This cycle (not billed yet)' : `Statement ${d(r.statementDate)}`}</div>
                 <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 1 }}>{d(r.from)} to {d(r.to)} · {r.count} spend{r.count === 1 ? '' : 's'}</div>
+                {(stmtOf(r)?.programs?.length > 0 || r.credited !== 0) && (
+                  <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {/* the same kind of tag for every card: the statement's split by programme (HDFC), and what the bank deposited (SBI and others) */}
+                    {(stmtOf(r)?.programs || []).map((p, k) => <span key={k} className="badge badge-mint" style={{ fontSize: 9.5 }}>{progLabel(p)} · {p.points} pts</span>)}
+                    {r.credited !== 0 && <span className="badge badge-mint" style={{ fontSize: 9.5 }}>Cashback {formatINR(r.credited, 2)} deposited by bank</span>}
+                  </div>
+                )}
                 {(r.usePct != null || r.change != null) && (
                   <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 1 }}>
                     {r.usePct != null && <span>{r.usePct < 10 ? r.usePct.toFixed(1) : Math.round(r.usePct)}% of limit used</span>}
@@ -50,7 +63,6 @@ export default function CardBills({ card, onClose, onOpenCard }) {
               <div style={{ textAlign: 'right' }}>
                 <div className="mono-sm">{formatINR(r.spends)}</div>
                 {r.earned > 0 && <div style={{ fontSize: 11, color: 'var(--mint-dim)' }}>{reward(r.earned, r.rewardType)} earned</div>}
-                {r.credited !== 0 && <div style={{ fontSize: 11, color: 'var(--mint-dim)', fontWeight: 600 }}>{formatINR(r.credited, 2)} credited by bank</div>}
               </div>
             </div>
             {openKey === r.key && (
@@ -62,6 +74,8 @@ export default function CardBills({ card, onClose, onOpenCard }) {
                 {r.usePct != null && <Stat label="Limit used" value={`${r.usePct < 10 ? r.usePct.toFixed(1) : Math.round(r.usePct)}% of ${formatINR(card.creditLimit)}`} />}
                 {r.changeAmount != null && <Stat label="Change from last statement" value={`${r.changeAmount > 0 ? '+' : r.changeAmount < 0 ? '−' : ''}${formatINR(Math.abs(r.changeAmount))}${r.change != null ? ` (${r.change > 0 ? '+' : ''}${Math.round(r.change)}%)` : ''}`} color={r.changeAmount > 0 ? 'var(--red)' : 'var(--mint-dim)'} />}
                 {r.refunds > 0 &&<Stat label="Refunds" value={formatINR(r.refunds)} />}
+                {stmtOf(r)?.programs?.map((p, k) => <Stat key={'p' + k} label={progName(p)} value={`${p.points} pts`} color="var(--mint-dim)" />)}
+                {stmtOf(r)?.earned != null && <Stat label="Points on the statement" value={`+${stmtOf(r).earned}${stmtOf(r).closing != null ? ` · balance ${Number(stmtOf(r).closing).toLocaleString('en-IN')}` : ''}`} />}
                 <Stat label="Cashback credited in this cycle" value={r.credited ? formatINR(r.credited, 2) : 'None'} />
               </div>
             )}

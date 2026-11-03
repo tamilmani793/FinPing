@@ -22,6 +22,7 @@ import Sortable from '../components/Sortable'
 import TxnEditSheet from '../components/TxnEditSheet'
 import { syncCardAmounts } from '../lib/cardSync'
 import { tagCardRewards } from '../lib/rewardTagging'
+import { rewardPillShort } from '../lib/rewardRules'
 import { filterTxns, defaultFilter } from '../lib/dateRange'
 import { autoApplyPresets } from '../lib/rulesPack'
 import { cashbackSummary } from '../lib/cashback'
@@ -256,7 +257,7 @@ function TxnList({ card, list, emptyText, cards = [] }) {
             amount={t.amount}
             isCredit={t.type === 'credit'}
             onClick={() => (selecting ? togglePick(t.id) : setEdit(t))}
-            badge={credit && t.type !== 'debit' && t.category !== 'Cashback' ? <span className="badge badge-indigo" style={{ fontSize: 9 }}>{t.kind === 'card_payment' || t.category === 'Card Payment' ? 'Bill payment' : 'Refund'}</span> : null}
+            badge={credit && t.type !== 'debit' && t.category !== 'Cashback' ? <span className="badge badge-indigo" style={{ fontSize: 9 }}>{t.kind === 'card_payment' || t.category === 'Card Payment' ? 'Bill payment' : 'Refund'}</span> : (rewardPillShort(t.expectedReward) ? <span className="badge badge-mint" style={{ fontSize: 9 }}>{rewardPillShort(t.expectedReward)}</span> : null)}
           />
           </div>
           </div>

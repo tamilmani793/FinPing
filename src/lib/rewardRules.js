@@ -199,3 +199,4 @@ export const rewardPill = r => (r && r.amount > 0 ? (r.type === 'points' ? `🪙
 
 // the short form for transaction lists: "+₹10 · 1%" (no icon, no Online / In shop; the full pill is on the transaction's own page)
 export const rewardPillShort = r => (r && r.amount > 0 ? (r.type === 'points' ? `+${Math.round(r.amount).toLocaleString('en-IN')} pts` : `+₹${r.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`) + (r.rate ? ` · ${r.rate}` : '') + (r.capped ? ' · cap' : '') : null)
+

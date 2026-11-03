@@ -11,6 +11,7 @@ import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { cardTitle } from '../lib/cardCatalog'
 import { txnName } from '../lib/txnName'
+import { rewardPillShort } from '../lib/rewardRules'
 import { moveToCategory } from '../lib/bulkCategory'
 import { filterTxns, defaultFilter, periodLabel } from '../lib/dateRange'
 import PeriodFilter from '../components/PeriodFilter'
@@ -217,7 +218,7 @@ export default function Expenses() {
                       isCredit={t.type === 'credit'}
                       tags={t.tags}
                       onClick={() => (selecting ? togglePick(t.id) : setEditTxn(t))}
-                      badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : null}
+                      badge={t.isExcluded ? <Badge variant="red" style={{ fontSize: 9 }}>⛔ Excl.</Badge> : (rewardPillShort(t.expectedReward) ? <Badge variant="mint" style={{ fontSize: 9 }}>{rewardPillShort(t.expectedReward)}</Badge> : null)}
                     />
                     </div>
                     </div>
