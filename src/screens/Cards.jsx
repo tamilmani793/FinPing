@@ -9,7 +9,7 @@ import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { askConfirm } from '../lib/confirm'
 import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary } from '../lib/cards'
-import { cardStats, rewardStatus, isCardPayment, feeWaiverSpend } from '../lib/cardStats'
+import { cardStats, isCardPayment, feeWaiverSpend } from '../lib/cardStats'
 import { ordinal } from '../lib/cycle'
 import { typeLabel, networkLabel, excludedFor, cardTitle } from '../lib/cardCatalog'
 import CardEditSheet from '../components/CardEditSheet'
@@ -22,7 +22,6 @@ import Sortable from '../components/Sortable'
 import TxnEditSheet from '../components/TxnEditSheet'
 import { syncCardAmounts } from '../lib/cardSync'
 import { tagCardRewards } from '../lib/rewardTagging'
-import { rewardPill, rewardPillShort } from '../lib/rewardRules'
 import { filterTxns, defaultFilter } from '../lib/dateRange'
 import { autoApplyPresets } from '../lib/rulesPack'
 import { cashbackSummary } from '../lib/cashback'
@@ -245,7 +244,6 @@ function TxnList({ card, list, emptyText, cards = [] }) {
         </div>
       )}
       {sorted.map(t => {
-        const r = rewardStatus(card, t)
         const via = t.cardId !== card.id ? cards.find(c => c.id === t.cardId) : null // e.g. a debit card on this account
         return (
           <div key={t.id} style={selecting ? { display: 'flex', alignItems: 'center', gap: 8 } : undefined}>
@@ -258,11 +256,7 @@ function TxnList({ card, list, emptyText, cards = [] }) {
             amount={t.amount}
             isCredit={t.type === 'credit'}
             onClick={() => (selecting ? togglePick(t.id) : setEdit(t))}
-            badge={<>{!credit ? null : t.type === 'debit'
-              ? (r.eligible
-                ? (rewardPill(t.expectedReward) ? null : <span className="badge badge-mint" style={{ fontSize: 9 }}>✅ Rewards</span>)
-                : <span className="badge badge-red" style={{ fontSize: 9 }}>⛔ {r.reason}</span>)
-              : <span className="badge badge-indigo" style={{ fontSize: 9 }}>{t.kind === 'card_payment' || t.category === 'Card Payment' ? 'Bill payment' : t.category === 'Cashback' ? 'Cashback' : 'Refund'}</span>}{rewardPillShort(t.expectedReward) && <span className="badge badge-mint" style={{ fontSize: 9, marginLeft: rewardPill(t.expectedReward) && r.eligible ? 0 : 4 }}>{rewardPillShort(t.expectedReward)}</span>}</>}
+            badge={credit && t.type !== 'debit' && t.category !== 'Cashback' ? <span className="badge badge-indigo" style={{ fontSize: 9 }}>{t.kind === 'card_payment' || t.category === 'Card Payment' ? 'Bill payment' : 'Refund'}</span> : null}
           />
           </div>
           </div>
