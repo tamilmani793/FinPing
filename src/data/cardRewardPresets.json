@@ -629,7 +629,7 @@
               "flipkart",
               "myntra"
             ],
-            "notes": "Amazon, Flipkart and Myntra stay at 1.5%. Cashback is by MCC only. The Bank's classification is final. The MCC table in the PDF is laid out in columns that extract out of order, so verify the shopping codes against the PDF before relying on them. Cap Rs 1,200 per month. Amazon, Flipkart and Myntra purchases earn 1.5% and are not eligible for the 10%. Cashback depends on the merchant category the bank assigns to the transaction.",
+            "notes": "No minimum spend: even a Rs 5 spend earns the 10%. Amazon, Flipkart and Myntra stay at 1.5%. Cashback is by MCC only. The Bank's classification is final. The MCC table in the PDF is laid out in columns that extract out of order, so verify the shopping codes against the PDF before relying on them. Cap Rs 1,200 per month. Amazon, Flipkart and Myntra purchases earn 1.5% and are not eligible for the 10%. Cashback depends on the merchant category the bank assigns to the transaction.",
             "categories": [],
             "merchants": []
           }

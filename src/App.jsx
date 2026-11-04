@@ -78,15 +78,15 @@ export default function App() {
           if (await syncChannelRules() > 0) tagAllCards().catch(() => {})
           localStorage.setItem('finping_channel_v2', '1')
         }
-        // Once: SBI Cashback per statement cycle, HSBC Live+ credit lag; the reward tags follow
-        if (!localStorage.getItem('finping_settlement_v2')) {
+        // Once: SBI Cashback per statement cycle, HSBC Live+ credit lag and no minimum spend; the reward tags follow
+        if (!localStorage.getItem('finping_settlement_v3')) {
           if (await syncSettlementRules() > 0) tagAllCards().catch(() => {})
-          localStorage.setItem('finping_settlement_v2', '1')
+          localStorage.setItem('finping_settlement_v3', '1')
         }
         // Once: the Swiggy card's 10% needed ₹100 before 21 Apr 2026 (₹249 after); older spends use the older limit
-        if (!localStorage.getItem('finping_swiggy_hist_v3')) {
+        if (!localStorage.getItem('finping_swiggy_hist_v6')) {
           if (await syncSwiggyHistory() > 0) tagAllCards().catch(() => {})
-          localStorage.setItem('finping_swiggy_hist_v3', '1')
+          localStorage.setItem('finping_swiggy_hist_v6', '1')
         }
         // Once after this update: categories guessed from loose words in the SMS are guessed again with the corrected rules
         if (!localStorage.getItem('finping_catguess_v1')) {

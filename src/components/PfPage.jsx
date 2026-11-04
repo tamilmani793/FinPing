@@ -142,21 +142,29 @@ export default function PfPage() {
             <div className="label-caps">PF balance (EPF)</div>
             <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--mint-dim)' }}>{formatINR(pf.epfBalance, 2)}</div>
             <div style={{ fontSize: 11, color: 'var(--txt2)', marginBottom: 8 }}>{pf.estimated ? `Counted from ${monthLabel(pf.months[0].month)}. Add your EPF passbook for the exact balance including earlier years.` : `From your passbook balance of ${pf.balanceFrom.asOf}, plus the months since`}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Stat k="Your share" v={formatINR(pf.eeBalance, 2)} />
-              <Stat k="Employer share" v={formatINR(pf.erBalance, 2)} />
-              <Stat k="Interest earned" v={formatINR(pf.split.interest, 2)} color="var(--gold-dim)" sub="all years so far" />
-              <Stat k="Interest so far this year" v={formatINR(pf.accrued, 2)} sub={pf.accruedFy != null ? `credited 31 Mar ${pf.accruedFy + 1}` : ''} />
-            </div>
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-              <div className="label-caps" style={{ marginBottom: 2 }}>How the PF balance adds up</div>
-              <Line k="You put in" v={formatINR(pf.split.eeContrib, 2)} />
-              <Line k="Employer put in (PF part)" v={formatINR(pf.split.erContrib, 2)} />
-              <Line k="Interest earned" v={formatINR(pf.split.interest, 2)} bold color="var(--gold-dim)" />
-              <Line k="  on your share / employer share" v={`${formatINR(pf.split.interestEe, 2)} / ${formatINR(pf.split.interestEr, 2)}`} />
-              <Line k="PF balance" v={formatINR(pf.epfBalance, 2)} bold />
-              {pf.split.since && <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>Contributions are counted from {monthLabel(pf.split.since)} (your first payslip or passbook month). Anything earlier shows up under interest, since the balance includes it.</div>}
-            </div>
+            {(() => {
+              // one line a year: what you paid, what the employer paid (PF part) and the interest for that year (credited, or built up so far)
+              const cols = '1.2fr 1fr 1fr 1fr'
+              const cell = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+              const rows = pf.sections.filter(x => x.ee > 0 || x.er > 0 || x.credited || x.accrued > 0)
+              const intOf = x => (x.credited ? x.credited.total : x.accrued)
+              const tot = rows.reduce((t, x) => ({ ee: t.ee + x.ee, er: t.er + x.er, i: t.i + intOf(x) }), { ee: 0, er: 0, i: 0 })
+              const line = (k, a, b, c, o = {}) => (
+                <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 6, padding: '5px 0', fontSize: 12, fontWeight: o.bold ? 700 : 400, borderTop: o.top ? '1px solid var(--border)' : 'none' }}>
+                  <span>{k}</span><span style={cell}>{formatINR(a, 0)}</span><span style={cell}>{formatINR(b, 0)}</span><span style={{ ...cell, color: 'var(--gold-dim)' }}>{formatINR(c, 0)}</span>
+                </div>
+              )
+              return (
+                <div style={{ marginTop: 6, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 6, fontSize: 10.5, color: 'var(--txt3)' }}>
+                    <span>Year</span><span style={cell}>You paid</span><span style={cell}>Employer paid</span><span style={cell}>Interest</span>
+                  </div>
+                  {rows.map(x => line(`${fyLabel(x.fy).replace('FY ', '')}${x.credited ? '' : '*'}`, x.ee, x.er, intOf(x)))}
+                  {line('Total', tot.ee, tot.er, tot.i, { bold: true, top: true })}
+                  <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>Employer paid is the PF part (the pension part is listed in each year below). * year still running: interest so far{pf.summary?.cur ? `, about ${formatINR(pf.summary.cur.expectedInterest, 0)} by 31 Mar ${pf.summary.fy + 1}` : ''}. Interest before the passbook years is worked out, not from EPFO.</div>
+                </div>
+              )
+            })()}
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
               <div className="label-caps">Pension fund (EPS)</div>
               <div style={{ fontSize: 20, fontWeight: 800 }}>{formatINR(pf.pensionBalance, 2)}</div>
@@ -204,10 +212,10 @@ export default function PfPage() {
             <div className="label-caps" style={{ color: 'var(--gold-dim)', margin: '4px 0 6px' }}>Year by year · interest credited</div>
             {pf.sections.map(sec => {
               const credited = sec.credited
-              const isOpen = open === sec.fy
+              const isOpen = open === sec.fy || (open == null && sec.fy === pf.summary?.fy)
               return (
                 <div key={sec.fy} className="card" style={{ marginBottom: 10 }}>
-                  <div onClick={() => setOpen(isOpen ? null : sec.fy)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <div onClick={() => setOpen(isOpen ? -1 : sec.fy)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{fyLabel(sec.fy)}</div>
                       <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{credited ? `Interest ${formatINR(credited.total, 2)}${credited.source === 'statement' ? ' (passbook)' : ' (worked out)'}` : sec.accrued > 0 ? `Interest so far ${formatINR(sec.accrued, 2)}, credited on year end` : sec.inBalance ? 'Interest is already in the passbook balance' : 'No interest yet'}</div>
@@ -227,19 +235,22 @@ export default function PfPage() {
                         <PctField readOnly={!editing} label="Interest rate for the year (%)" value={sec.rate} max={20} onSave={v => saveRate(sec.fy, v)} hint={sec.customRate ? 'your rate' : 'EPFO declared rate (default)'} />
                       </div>
                       {sec.customRate && editing && <button className="btn-ghost" style={{ height: 34, fontSize: 12, marginBottom: 8 }} onClick={() => saveRate(sec.fy, '')}>Use the default rate</button>}
-                      <Line k="Your PF contributions" v={formatINR(sec.ee, 2)} />
-                      <Line k="Employer's PF part" v={formatINR(sec.er, 2)} />
-                      <Line k="Employer's pension part" v={formatINR(sec.eps, 2)} />
-                      {credited && <Line k="Interest credited" v={formatINR(credited.total, 2)} bold color="var(--gold-dim)" />}
-                      {credited && <Line k="  on your share / employer share" v={`${formatINR(credited.ee, 2)} / ${formatINR(credited.er, 2)}`} />}
+                      {credited && <Line k="Interest on your share / employer share" v={`${formatINR(credited.ee, 2)} / ${formatINR(credited.er, 2)}`} />}
                       {(sec.openingEpf > 0 || sec.closingEpf > 0) && <Line k="PF balance at the end" v={formatINR(sec.closingEpf, 2)} bold />}
-                      <div className="label-caps" style={{ margin: '10px 0 2px' }}>Months</div>
-                      {sec.months.slice().reverse().map(m => (
-                        <div key={m.month} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', fontSize: 12, borderTop: '1px solid var(--border)' }}>
-                          <span>{monthLabel(m.month)}{m.source === 'statement' && <span style={{ color: 'var(--mint-dim)' }}> · passbook</span>}</span>
-                          <span style={{ color: 'var(--txt2)' }}>You {formatINR(m.ee)} · Employer {formatINR(m.er)} · Pension {formatINR(m.eps)}</span>
+                      <div className="label-caps" style={{ margin: '10px 0 2px' }}>Month by month</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr 1fr', gap: 6, fontSize: 10.5, color: 'var(--txt3)', padding: '3px 0' }}>
+                        <span>Month</span><span style={{ textAlign: 'right' }}>You paid</span><span style={{ textAlign: 'right' }}>Employer</span><span style={{ textAlign: 'right' }}>Pension</span>
+                      </div>
+                      {sec.months.map(m => (
+                        <div key={m.month} style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr 1fr', gap: 6, padding: '4px 0', fontSize: 12, borderTop: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums' }}>
+                          <span>{monthLabel(m.month)}{m.source === 'statement' && <span style={{ color: 'var(--mint-dim)' }}> ·pb</span>}</span>
+                          <span style={{ textAlign: 'right' }}>{formatINR(m.ee, 0)}</span><span style={{ textAlign: 'right' }}>{formatINR(m.er, 0)}</span><span style={{ textAlign: 'right', color: 'var(--txt2)' }}>{formatINR(m.eps, 0)}</span>
                         </div>
                       ))}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr 1fr', gap: 6, padding: '5px 0', fontSize: 12, fontWeight: 700, borderTop: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums' }}>
+                        <span>Year total</span><span style={{ textAlign: 'right' }}>{formatINR(sec.ee, 0)}</span><span style={{ textAlign: 'right' }}>{formatINR(sec.er, 0)}</span><span style={{ textAlign: 'right' }}>{formatINR(sec.eps, 0)}</span>
+                      </div>
+                      <Line k={credited ? 'Interest for the year' : 'Interest so far'} v={formatINR(credited ? credited.total : sec.accrued, 2)} bold color="var(--gold-dim)" />
                     </div>
                   )}
                 </div>

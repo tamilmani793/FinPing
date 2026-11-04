@@ -54,7 +54,9 @@ export function buildPf({ records = [], statements = [], base = DEFAULT_SETTINGS
   const s = { ...DEFAULT_SETTINGS, ...base }
   const stContrib = new Map(statements.filter(x => x.kind === 'contribution').map(x => [x.month, x]))
   const stInterest = new Map(statements.filter(x => x.kind === 'interest').map(x => [x.fy, x]))
-  const balance = statements.filter(x => x.kind === 'balance').sort((a, b) => cmp(b.asOf, a.asOf))[0] || null
+  // a balance dated in the future (the passbook prints its running balance against the coming 31 March) is not an anchor: it would hide this year's interest
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const balance = statements.filter(x => x.kind === 'balance' && !(x.asOf > todayIso)).sort((a, b) => cmp(b.asOf, a.asOf))[0] || null
 
   // contributions by month: the passbook where it has the month, else the payslip (several payslips in a month add up)
   const by = new Map()
@@ -65,7 +67,19 @@ export function buildPf({ records = [], statements = [], base = DEFAULT_SETTINGS
     m.ee += x.ee; m.er += x.er; m.eps += x.eps; m.wage += x.wage
     by.set(r.month, m)
   }
-  for (const [month, st] of stContrib) by.set(month, { month, ee: num(st.ee), er: num(st.er), eps: num(st.eps), wage: num(st.wageEpf), source: 'statement' })
+  for (const [month, st] of stContrib) {
+    let ee = num(st.ee), er = num(st.er), transfer = null
+    // a passbook line far above one month's share is the old employer's PF account moved in (it holds the earlier contributions and their interest, which the
+    // payslips already count): only the usual month's share is a contribution, the rest is carried in as balance
+    const p = by.get(month)
+    const expected = p ? p.ee : num(st.wageEpf) > 0 ? num(st.wageEpf) * s.employeePct / 100 : 0
+    if (expected > 0 && ee > expected * 3 && ee > 20000) {
+      const erReg = r2(er * expected / ee)
+      transfer = { ee: r2(ee - expected), er: r2(er - erReg) }
+      ee = r2(expected); er = erReg
+    }
+    by.set(month, { month, ee, er, eps: num(st.eps), wage: num(st.wageEpf), source: 'statement', transfer })
+  }
   const months = [...by.values()].sort((a, b) => cmp(a.month, b.month)).map(m => ({ ...m, ee: r2(m.ee), er: r2(m.er), eps: r2(m.eps), wage: r2(m.wage), fy: fyStartYear(m.month) }))
   if (!months.length && !balance) return { empty: true, settings: s, sections: [], months: [] }
 
@@ -108,7 +122,33 @@ export function buildPf({ records = [], statements = [], base = DEFAULT_SETTINGS
           eeBal += addEe; erBal += addEr
         }
       }
-      sec.closingEpf = r2(eeBal + erBal); sec.pensionClosing = r2(pension)
+      sec.closingEpf = r2(eeBal + erBal); sec.closingEe = r2(eeBal); sec.closingEr = r2(erBal); sec.pensionClosing = r2(pension)
+    }
+  }
+  // interest the passbook shows for a year the month-by-month run never reached (the year ends before the balance it starts from)
+  for (const [fy, actual] of stInterest) {
+    const total = num(actual.ee) + num(actual.er)
+    if (!(total > 0)) continue
+    const sec = section(fy)
+    if (!sec.credited) sec.credited = { ee: r2(num(actual.ee)), er: r2(num(actual.er)), total: r2(total), source: 'statement' }
+  }
+  // the years before the passbook balance: its opening figure already holds their interest, so work each year out again from the first contribution
+  // (a passbook year keeps its real figure) to show what was earned in it. These are estimates and do not feed the balance.
+  if (balance && months.length && months[0].month <= asOfMonth) {
+    let e = 0, r = 0, acc = { ee: 0, er: 0 }
+    for (let cur = months[0].month, guard = 0; cur <= asOfMonth && guard < 600; guard++, cur = nextMonth(cur)) {
+      const fy = fyStartYear(cur), rate = rateFor(fy, rates)
+      if (cur.endsWith('-04') || cur === months[0].month) acc = { ee: 0, er: 0 }
+      acc.ee += e * rate / 1200; acc.er += r * rate / 1200
+      const c = byMonth.get(cur)
+      if (c) { e += c.ee; r += c.er }
+      if (cur.endsWith('-03')) {
+        const actual = stInterest.get(fy)
+        const addEe = actual ? num(actual.ee) : acc.ee, addEr = actual ? num(actual.er) : acc.er
+        e += addEe; r += addEr
+        const sec = section(fy)
+        if (!actual && !sec.credited && addEe + addEr > 0) sec.credited = { ee: r2(addEe), er: r2(addEr), total: r2(addEe + addEr), source: 'estimate' }
+      }
     }
   }
   const list = [...sections.values()].sort((a, b) => b.fy - a.fy).map(sec => ({
@@ -120,10 +160,37 @@ export function buildPf({ records = [], statements = [], base = DEFAULT_SETTINGS
   // where the balance came from: what you and the employer put in (every month known here) and the rest, which is interest
   const sumEe = r2(months.reduce((t, m) => t + m.ee, 0)), sumEr = r2(months.reduce((t, m) => t + m.er, 0))
   const split = { eeContrib: sumEe, erContrib: sumEr, interest: r2(eeBal + erBal - sumEe - sumEr), interestEe: r2(eeBal - sumEe), interestEr: r2(erBal - sumEr), since: months[0]?.month || null }
+  // the two halves of the picture: everything up to the end of last financial year, and this year on top of it (interest expected at 31 March)
+  let summary = null
+  if (balance && months.length) {
+    const curFy = lastFy
+    const prevSec = list.find(x => x.fy === curFy - 1)
+    const prev = `${curFy}-03-31` === balance.asOf ? { ee: num(balance.ee), er: num(balance.er) } : prevSec && prevSec.closingEe != null ? { ee: prevSec.closingEe, er: prevSec.closingEr } : null
+    const curSec = list.find(x => x.fy === curFy)
+    const before = months.filter(m => m.fy < curFy)
+    const pEe = r2(before.reduce((t, m) => t + m.ee, 0)), pEr = r2(before.reduce((t, m) => t + m.er, 0))
+    let cur = null
+    if (curSec && !curSec.credited) {
+      // the rest of the year: the latest month's contribution repeats, interest runs on the balance before each month's contribution
+      const lastM = months[months.length - 1]
+      let e = eeBal, r = erBal, aE = curSec.accruedEe, aR = curSec.accruedEr, remEe = 0, remEr = 0
+      for (let m = nextMonth(last), g = 0; m <= `${curFy + 1}-03` && g < 24; m = nextMonth(m), g++) {
+        aE += e * curSec.rate / 1200; aR += r * curSec.rate / 1200
+        e += lastM.ee; r += lastM.er; remEe += lastM.ee; remEr += lastM.er
+      }
+      cur = { ee: curSec.ee, er: curSec.er, accruedSoFar: r2(curSec.accruedEe + curSec.accruedEr), expectedInterest: r2(aE + aR), expectedInterestEe: r2(aE), expectedInterestEr: r2(aR), remainingEe: r2(remEe), remainingEr: r2(remEr), rate: curSec.rate }
+    }
+    summary = {
+      fy: curFy,
+      prev: prev ? { ee: r2(prev.ee), er: r2(prev.er), total: r2(prev.ee + prev.er), paidEe: pEe, paidEr: pEr, interest: r2(prev.ee + prev.er - pEe - pEr), interestEe: r2(prev.ee - pEe), interestEr: r2(prev.er - pEr) } : null,
+      cur,
+    }
+  }
   return {
-    empty: false, settings: s, months, sections: list, balanceFrom: balance,
+    summary, empty: false, settings: s, months, sections: list, balanceFrom: balance,
     eeBalance: r2(eeBal), erBalance: r2(erBal), epfBalance: r2(eeBal + erBal), pensionBalance: r2(pension),
     interestEarned, accrued: accruing ? accruing.accrued : 0, accruedFy: accruing?.fy ?? null,
+    accruedEe: accruing ? r2(accruing.accruedEe) : 0, accruedEr: accruing ? r2(accruing.accruedEr) : 0,
     totalEe: r2(months.reduce((t, m) => t + m.ee, 0)), totalEr: r2(months.reduce((t, m) => t + m.er, 0)), totalEps: r2(months.reduce((t, m) => t + m.eps, 0)),
     split,
     estimated: !balance, // no passbook balance: counted from the first payslip, so earlier years are not included

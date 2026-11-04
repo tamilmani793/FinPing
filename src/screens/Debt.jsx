@@ -54,7 +54,7 @@ const fmtD = d => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 const fmtS = d => (d ? format(new Date(d), 'd MMM') : '—')
 
 function ScheduleTable({ rows, footer }) {
-  const cols = '1.05fr 1fr 0.9fr 1fr 1.2fr'
+  const cols = '1.5fr 1fr 0.9fr 1fr 1.2fr'
   const cell = { fontSize: 11, padding: '5px 0', fontVariantNumeric: 'tabular-nums' }
   return (
     <div style={{ marginBottom: 8 }}>
@@ -503,8 +503,8 @@ export default function Debt() {
                         const incoming = r.direction === 'in'
                         const manual = r.source !== 'auto'
                         return {
-                          key: r.id, date: fmtS(r.date), dim: false, incoming,
-                          tag: incoming ? (d.type === 'FriendLent' ? 'received back' : 'received') : r.installmentNo ? `EMI #${r.installmentNo}${r.statementDate ? ` · stmt ${fmtS(r.statementDate)}` : ''}` : manual ? 'payment' : '',
+                          key: r.id, date: fmtD(r.date), dim: false, incoming,
+                          tag: incoming ? (d.type === 'FriendLent' ? 'received back' : 'received') : r.installmentNo ? `EMI #${r.installmentNo}${r.statementDate ? ` · stmt ${fmtD(r.statementDate)}` : ''}` : manual ? 'payment' : '',
                           emi: r.amount, interest: incoming ? 0 : r.interest, principal: incoming ? 0 : r.principal, balance: r.outstandingAfter ?? null,
                           onClick: manual ? async () => { if (await askConfirm({ title: 'Remove this entry?', message: 'The balance is put back as it was.', confirmLabel: 'Remove' })) handleUndo(r.id) } : undefined,
                         }
@@ -512,7 +512,7 @@ export default function Debt() {
                     ) : <div style={{ fontSize: 12, color: 'var(--txt2)', padding: '8px 0 12px' }}>Nothing posted yet. The first EMI posts on {fmtD(d.nextEmiDate)}.</div>)}
                     {view === 'upcoming' && (proj.rows.length ? (
                       <ScheduleTable
-                        rows={proj.rows.slice(0, showAll[d.id] ? proj.rows.length : 12).map(r => ({ key: r.no, date: fmtS(r.date), tag: `EMI #${r.no}${r.statementDate ? ` · stmt ${fmtS(r.statementDate)}` : ''}${r.final ? ' · last' : ''}`, emi: r.emi, interest: r.interest, principal: r.principal, balance: r.outstandingAfter, dim: true }))}
+                        rows={proj.rows.slice(0, showAll[d.id] ? proj.rows.length : 12).map(r => ({ key: r.no, date: fmtD(r.date), tag: `EMI #${r.no}${r.statementDate ? ` · stmt ${fmtD(r.statementDate)}` : ''}${r.final ? ' · last' : ''}`, emi: r.emi, interest: r.interest, principal: r.principal, balance: r.outstandingAfter, dim: true }))}
                         footer={proj.rows.length > 12 && !showAll[d.id] ? <div style={{ textAlign: 'center', padding: '8px 0', fontSize: 12, color: 'var(--gold-dim)', fontWeight: 700, cursor: 'pointer' }} onClick={() => setShowAll({ ...showAll, [d.id]: true })}>Show all {proj.rows.length} EMIs</div> : null}
                       />
                     ) : <div style={{ fontSize: 12, color: 'var(--txt2)', padding: '8px 0 12px' }}>{d.emiAmount > 0 ? 'No EMIs left.' : 'Add an EMI amount and date to see the schedule.'}</div>)}

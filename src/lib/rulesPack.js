@@ -215,11 +215,12 @@ export async function syncChannelRules() {
 export async function syncSwiggyHistory() {
   let n = 0
   for (const row of await db.card_reward_rules.toArray()) {
-    if (!(row.presetKey === 'hdfc-swiggy' || (row.accelerated || []).some(a => a.id === 'swiggy-10')) || !row.effectiveFrom || row.effectiveFrom > '2026-04-21') continue
-    // the current version: a Swiggy order under the minimum earns nothing (not the 1% base rate)
+    if (!(row.presetKey === 'hdfc-swiggy' || (row.accelerated || []).some(a => a.id === 'swiggy-10'))) continue
+    // the current version: a Swiggy order under the minimum earns nothing (not the 1% base rate); applies whenever the rules were saved
     const WORDS = ['swiggy', 'bundl', 'instamart']
-    const lacks = a => a.id === 'swiggy-10' && (!a.nothingBelowMin || WORDS.some(w => !(a.merchants || []).map(m => String(m).toLowerCase()).includes(w)))
-    if ((row.accelerated || []).some(lacks)) { await db.card_reward_rules.update(row.id, { accelerated: row.accelerated.map(a => (a.id === 'swiggy-10' ? { ...a, nothingBelowMin: true, merchants: [...new Set([...(a.merchants || []), ...WORDS])] } : a)) }); n++ }
+    const lacks = a => a.id === 'swiggy-10' && (!a.nothingBelowMin || a.minSpend !== 249 || WORDS.some(w => !(a.merchants || []).map(m => String(m).toLowerCase()).includes(w)))
+    if ((row.accelerated || []).some(lacks)) { await db.card_reward_rules.update(row.id, { accelerated: row.accelerated.map(a => (a.id === 'swiggy-10' ? { ...a, minSpend: 249, nothingBelowMin: true, merchants: [...new Set([...(a.merchants || []), ...WORDS])] } : a)) }); n++ }
+    if (!row.effectiveFrom || row.effectiveFrom > '2026-04-21') continue
     if ((row.history || []).some(h => h.effectiveFrom && h.effectiveFrom < row.effectiveFrom)) continue
     const old = { ...row, effectiveFrom: '2000-01-01', accelerated: (row.accelerated || []).map(a => (a.id === 'swiggy-10' ? { ...a, minSpend: 100, nothingBelowMin: false } : a)) }
     const keep = ['enabled', 'rewardType', 'base', 'minSpend', 'capPerCycle', 'rounding', 'capPeriod', 'baseCap', 'spendBlock', 'accelerated', 'exclusions', 'effectiveFrom', 'publishedOn', 'source']
@@ -231,6 +232,7 @@ export async function syncSwiggyHistory() {
 
 // Settlement: SBI Cashback adds spends up per statement cycle (cap per cycle), HSBC Live+ credits up to 45 days after the statement, and the Swiggy card's 10% also covers Bundl Technologies / Instamart lines. Rules saved
 // from an earlier bundle get those fields once; nothing else on them is touched.
+const num0 = v => (Number.isFinite(Number(v)) ? Number(v) : 0)
 export async function syncSettlementRules() {
   let n = 0
   const pack = allPack()
@@ -245,6 +247,12 @@ export async function syncSettlementRules() {
       // Swiggy's own company name (Bundl Technologies) and Instamart lines earn the 10% on the Swiggy app
       const own = (entry.rules.accelerated || []).find(x => x.id === 'swiggy-10')
       const accelerated = (row.accelerated || []).map(a => (a.id === 'swiggy-10' && own ? { ...a, merchants: [...new Set([...(a.merchants || []), ...(own.merchants || [])])] } : a))
+      if (JSON.stringify(accelerated) !== JSON.stringify(row.accelerated || [])) patch.accelerated = accelerated
+    }
+    if (row.presetKey === 'hsbc-live-plus') {
+      // HSBC Live+ has no minimum spend on the 10% or the 1.5%: even a ₹5 spend earns
+      if (num0(row.minSpend) > 0) patch.minSpend = 0
+      const accelerated = (row.accelerated || []).map(a => (num0(a.minSpend) > 0 || a.nothingBelowMin ? { ...a, minSpend: 0, nothingBelowMin: false } : a))
       if (JSON.stringify(accelerated) !== JSON.stringify(row.accelerated || [])) patch.accelerated = accelerated
     }
     if (row.presetKey === 'sbi-cashback') {
