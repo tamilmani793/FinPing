@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { Field, TextField } from '../components/Fields'
 import { SubHeader, formatINR } from '../components/UI'
 import { askConfirm } from '../lib/confirm'
+import { epsProjection } from '../lib/pf'
 import { PART_START, RETIRE_BASICS, retirementProjection, useAssets, useSaved } from '../lib/planning'
 
 const crore = v => (Math.abs(v) >= 1e7 ? `₹${(v / 1e7).toFixed(2)} crore` : Math.abs(v) >= 1e5 ? `₹${(v / 1e5).toFixed(1)} lakh` : formatINR(Math.round(v)))
@@ -118,6 +119,7 @@ export default function Retirement() {
   const [open, setOpen] = useState(null) // a part key, or 'plan'
   const p = a ? retirementProjection(saved, a) : null
   if (p) { p.savedParts = saved.parts; p.savedExpense = saved.expense }
+  const epsRows = a?.pf && p ? epsProjection(a.pf, p.basics.age) : null
   const part = p && p.parts.find(x => x.key === open)
   const resetBasics = () => save({ age: undefined, retireAt: undefined, lifeTo: undefined, inflation: undefined, postReturn: undefined, expense: undefined })
   const confirmResetAll = async () => { if (await askConfirm({ title: 'Reset everything?', message: 'Your changes on this page are removed and the figures go back to what the app works out from your data.', confirmLabel: 'Reset' })) resetAll() }
@@ -132,6 +134,7 @@ export default function Retirement() {
               <div className="label-caps">At {p.basics.retireAt}, you could have</div>
               <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.02em' }}>{crore(p.corpus)}</div>
               <div style={{ fontSize: 12.5, color: 'var(--txt2)', margin: '2px 0 8px' }}>You will need about <b style={{ color: 'var(--txt)' }}>{crore(p.need)}</b> to spend {formatINR(Math.round(p.expense))} a month in today's money, to age {p.basics.lifeTo}.</div>
+              {p.eps && <div style={{ fontSize: 12, color: 'var(--txt2)', margin: '0 0 8px' }}>This already counts your EPS pension of <b style={{ color: 'var(--txt)' }}>{formatINR(p.eps.pension)}</b> a month from {p.eps.startAge}, which is worth about {crore(p.epsPV)} at {p.basics.retireAt}.</div>}
               {p.gap > 0
                 ? <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)' }}>Short by {crore(p.gap)}. About {formatINR(Math.ceil(p.extraMonthly))} more a month into funds would close it.</div>
                 : <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--mint-dim)' }}>On track, with {crore(-p.gap)} to spare.</div>}
@@ -154,6 +157,30 @@ export default function Retirement() {
               </div>
               <ChevronRight size={18} color="var(--txt3)" />
             </div>
+
+            {p.eps && (
+              <div className="card" style={{ marginBottom: 14 }}>
+                <div className="label-caps">EPS pension (monthly, for life)</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--mint-dim)' }}>{formatINR(p.eps.pension)} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt2)' }}>a month from age {p.eps.startAge}</span></div>
+                <div style={{ fontSize: 11.5, color: 'var(--txt2)', margin: '2px 0 8px' }}>The pension stays the same in rupees, so it buys less as prices rise.</div>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+                  <Line k="Service so far" v={`${Math.floor(p.eps.serviceMonths / 12)} yr ${p.eps.serviceMonths % 12} mo (from ${p.eps.since})`} />
+                  <Line k={`Service at ${p.basics.retireAt}`} v={`${p.eps.years} years`} />
+                  <Line k="Pension wage (held at the ₹15,000 ceiling)" v={formatINR(Math.round(p.eps.salary))} />
+                  <Line k="Goes into EPS each month" v={formatINR(Math.round(p.eps.monthlyEps))} />
+                  <Line k="Wage × service ÷ 70" v={formatINR(Math.round(p.eps.salary * p.eps.years / 70))} />
+                  {p.eps.adj !== 1 && <Line k={`Starting at ${p.eps.startAge} instead of 58`} v={`${p.eps.adj > 1 ? '+' : ''}${Math.round((p.eps.adj - 1) * 100)}%`} />}
+                  <Line k="Pension each month" v={formatINR(p.eps.pension)} bold color="var(--mint-dim)" />
+                  <Line k="EPS balance by then" v={crore(p.eps.balance)} />
+                  <Line k={`Worth at ${p.basics.retireAt} (to age ${p.basics.lifeTo})`} v={crore(p.epsPV)} />
+                </div>
+                {epsRows && epsRows.rows.length > 0 && <>
+                  <div className="label-caps" style={{ margin: '8px 0 2px' }}>If you start it at another age</div>
+                  {epsRows.rows.map(r => <Line key={r.age} k={`At ${r.age} · ${r.years} yr service`} v={r.pension ? `${formatINR(r.pension)} a month` : 'no pension'} />)}
+                </>}
+                <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 6 }}>A pension needs 10 years of service. Starting before 58 cuts it 4% for each year; after 58, up to 60, adds 4% a year. It assumes you keep working and the ceiling stays. Service with an earlier employer that paid no pension is not counted. An estimate; EPFO decides the amount.</div>
+              </div>
+            )}
 
             <div className="label-caps" style={{ margin: '0 4px 6px' }}>Where it comes from · tap one for details</div>
             <div className="card rows" style={{ paddingTop: 2, paddingBottom: 2, marginBottom: 14 }}>

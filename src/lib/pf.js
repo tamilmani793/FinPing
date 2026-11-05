@@ -326,3 +326,33 @@ export async function savePassbook(p) {
   return rows.length
 }
 export const clearPassbooks = () => db.pf_statements.clear()
+
+// ── EPS pension projection ──
+// EPS pays a monthly pension of (pensionable salary x years of service) / 70 from age 58, after 10 years of service. Pensionable salary is the average of the
+// last 60 months' wage, held at the ₹15,000 ceiling. Taken from 50 to 57 it is cut 4% for each year before 58; left until 59 or 60 it grows 4% a year.
+// the pension for a member of `age` who keeps working until `endAge` and starts the pension at `startAge` (58 normally; 50 to 57 early, 59 or 60 later)
+export function epsPension(pf, age, endAge, startAge) {
+  if (!pf || pf.empty) return null
+  // with a passbook, pension service starts where the passbook's pension starts (earlier payslip months may belong to an employer that paid none)
+  const stFirst = pf.months.find(m => m.source === 'statement' && m.eps > 0)
+  const worked = pf.months.filter(m => m.eps > 0 && (!stFirst || m.month >= stFirst.month))
+  if (!worked.length) return null
+  const lastW = worked[worked.length - 1]
+  const salary = Math.min(lastW.wage > 0 ? lastW.wage : WAGE_CEILING, WAGE_CEILING)
+  const left = Math.max(0, Math.round((num(endAge) - num(age)) * 12))
+  const years = Math.round((worked.length + left) / 12) // 6 months or more in the last year counts as a full year
+  const adj = startAge < 58 ? 1 - 0.04 * (58 - startAge) : 1 + 0.04 * (Math.min(startAge, 60) - 58)
+  const pension = years >= 10 ? Math.max(1000, Math.round(salary * years / 70 * adj)) : 0
+  return { pension, years, adj, salary, serviceMonths: worked.length, since: worked[0].month, monthlyEps: lastW.eps, lastMonth: lastW.month, left, balance: r2(pf.pensionBalance + lastW.eps * left), startAge }
+}
+export function epsProjection(pf, age) {
+  const now = epsPension(pf, age, age, 58)
+  if (!now) return null
+  const a = num(age)
+  const rows = [50, 58, 60].filter(x => x > a).map(x => {
+    const r = epsPension(pf, age, x, x)
+    return { age: x, years: r.years, pension: r.pension, balance: r.balance, note: x < 58 ? 'taken early, 4% less for each year before 58' : x > 58 ? 'taken later, 4% more for each year after 58' : 'the normal pension age' }
+  })
+  const tenOn = now.serviceMonths >= 120 ? null : (() => { let m = now.lastMonth; for (let i = now.serviceMonths; i < 120; i++) m = nextMonth(m); return m })()
+  return { serviceMonths: now.serviceMonths, since: now.since, salary: now.salary, monthlyEps: now.monthlyEps, rows, tenOn }
+}

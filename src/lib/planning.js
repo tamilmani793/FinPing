@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/schema'
 import { isCardPayment } from './cardStats'
-import { buildPf, loadPfInputs } from './pf'
+import { buildPf, epsPension, loadPfInputs } from './pf'
 import { ppfCurrent } from './ppf'
 import { isLive } from './policies'
 
@@ -43,7 +43,7 @@ export function useAssets() {
     const epf = pf.empty ? 0 : (pf.epfBalance || 0)
     const sources = [...accounts, ...(epf > 0 ? [{ key: 'epf', label: 'Provident fund (EPF)', value: epf, group: 'Retirement' }] : []), ...inv]
     const lastPf = pf.months?.length ? pf.months[pf.months.length - 1] : null
-    return { sources, byKey: Object.fromEntries(sources.map(s => [s.key, s])), epf, epfMonthly: lastPf ? lastPf.ee + lastPf.er : 0, inv, txns, policies, records, avgSpend: avgMonthlySpend(txns), avgInvest: avgMonthlyInvest(txns), ppfYearly: ppfThisYear(invs) }
+    return { pf, sources, byKey: Object.fromEntries(sources.map(s => [s.key, s])), epf, epfMonthly: lastPf ? lastPf.ee + lastPf.er : 0, inv, txns, policies, records, avgSpend: avgMonthlySpend(txns), avgInvest: avgMonthlyInvest(txns), ppfYearly: ppfThisYear(invs) }
   }, [], null)
 }
 
@@ -109,12 +109,22 @@ export function retirementProjection(saved, a) {
   const stay = Math.max(1, num(b.lifeTo) - num(b.retireAt))
   const g = (1 + num(b.postReturn) / 100) / (1 + num(b.inflation) / 100) - 1 // growth after inflation while the money is being spent
   const need = Math.abs(g) < 1e-9 ? annualAtRetire * stay : annualAtRetire * ((1 - Math.pow(1 + g, -stay)) / g)
-  const gap = need - corpus
+  // the EPS pension: paid from 58 (50 to 57 early, 59 or 60 later), the same rupees every month, so it is not raised with inflation. What it will pay from then to the age you plan to
+  // spend until is worth less at retirement than its total, so it is brought back at the after-retiring return and taken off what you must have saved.
+  const startAge = Math.min(60, Math.max(58, num(b.retireAt))), endAge = num(b.lifeTo)
+  const eps = a.pf ? epsPension(a.pf, num(b.age), num(b.retireAt), startAge) : null
+  let epsPV = 0
+  if (eps && eps.pension > 0) {
+    const r = num(b.postReturn) / 1200, months = Math.max(0, (endAge - startAge) * 12), gap0 = Math.max(0, (startAge - num(b.retireAt)) * 12)
+    const annuity = r > 0 ? (1 - Math.pow(1 + r, -months)) / r : months
+    epsPV = eps.pension * annuity / Math.pow(1 + r, gap0)
+  }
+  const gap = need - epsPV - corpus
   const market = parts.find(p => p.key === 'market')
   const extraMonthly = gap > 0 && n > 0 ? gap / fvMonthly(1, num(market.rate), n) : 0
   const curve = []
   for (let y = 0; y <= years; y++) curve.push({ age: num(b.age) + y, corpus: Math.round(parts.reduce((t, p) => t + fvLump(p.now, p.rate, y * 12) + fvStepUp(num(p.monthly), num(p.rate), y, num(p.raise)), 0)) })
-  return { basics: b, edited: PART_KEYS.some(k => (saved.parts || {})[k]) || Object.entries(saved).some(([k, v]) => (k in RETIRE_BASICS || k === 'expense') && v !== undefined && v !== '' && v != null), parts, corpus, need, gap, expense, annualAtRetire, years, extraMonthly, curve }
+  return { basics: b, edited: PART_KEYS.some(k => (saved.parts || {})[k]) || Object.entries(saved).some(([k, v]) => (k in RETIRE_BASICS || k === 'expense') && v !== undefined && v !== '' && v != null), parts, corpus, need, gap, eps: eps && eps.pension > 0 ? { ...eps, startAge, pv: epsPV } : null, epsPV, expense, annualAtRetire, years, extraMonthly, curve }
 }
 
 // ── insurance cover ──

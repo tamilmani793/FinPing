@@ -4,7 +4,8 @@ import { ChevronDown, ChevronUp, Paperclip, Percent, Trash2 } from 'lucide-react
 import { db } from '../db/schema'
 import { useStore } from '../store'
 import { askConfirm } from '../lib/confirm'
-import { buildPf, loadPfInputs, saveSettings, saveRate, parsePassbookPdf, savePassbook, clearPassbooks, parsePastedContributions, WAGE_CEILING } from '../lib/pf'
+import { buildPf, loadPfInputs, saveSettings, saveRate, parsePassbookPdf, savePassbook, clearPassbooks, parsePastedContributions, epsProjection, WAGE_CEILING } from '../lib/pf'
+import { RETIRE_BASICS, useSaved } from '../lib/planning'
 import { fyLabel, monthLabel } from '../lib/salary'
 import { BtnPrimary, SubHeader, formatINR } from './UI'
 import { TextField } from './Fields'
@@ -115,7 +116,10 @@ export default function PfPage() {
   const [open, setOpen] = useState(null)
   const [editing, setEditing] = useState(false) // percentages and rates are read-only until you tap Edit
   const [upload, setUpload] = useState(false)
+  const [rs, saveRs] = useSaved('finping_retire2', {})
+  const age = rs.age ?? RETIRE_BASICS.age
   const pf = inputs ? buildPf(inputs) : null
+  const eps = pf && age !== '' ? epsProjection(pf, age) : null
   const saved = inputs?.statements.length || 0
   const jobs = inputs ? [...inputs.jobs].sort((a, b) => String(b.joinDate).localeCompare(String(a.joinDate))) : []
   const setPct = (job, patch) => {
@@ -169,6 +173,27 @@ export default function PfPage() {
               <div className="label-caps">Pension fund (EPS)</div>
               <div style={{ fontSize: 20, fontWeight: 800 }}>{formatINR(pf.pensionBalance, 2)}</div>
               <div style={{ fontSize: 11, color: 'var(--txt2)' }}>The employer's pension part. It earns no interest; it pays a monthly pension after 10 years of service.</div>
+              {eps && (
+                <div style={{ marginTop: 10 }}>
+                  <div className="label-caps" style={{ marginBottom: 4 }}>Pension you can expect</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 6 }}>
+                    <span>Your age now</span>
+                    <input type="number" inputMode="numeric" value={age} min={18} max={70} onChange={e => saveRs({ age: e.target.value === '' ? '' : Number(e.target.value) })} style={{ width: 64, height: 32, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'inherit', textAlign: 'center' }} />
+                    <span style={{ color: 'var(--txt3)' }}>(shared with the Retirement page)</span>
+                  </div>
+                  <Line k={`Service so far (from ${monthLabel(eps.since)})`} v={`${Math.floor(eps.serviceMonths / 12)} yr ${eps.serviceMonths % 12} mo`} />
+                  <Line k="Pension wage" v={formatINR(eps.salary, 0)} />
+                  <Line k="Goes in each month" v={formatINR(eps.monthlyEps, 0)} />
+                  {eps.tenOn && <Line k="Pension is earned from" v={monthLabel(eps.tenOn)} />}
+                  {eps.rows.map(r => (
+                    <div key={r.age} style={{ padding: '6px 0', borderTop: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700 }}><span>At {r.age} · {r.years} yr service</span><span style={{ color: 'var(--mint-dim)' }}>{r.pension ? `${formatINR(r.pension, 0)} a month` : 'no pension'}</span></div>
+                      <div style={{ fontSize: 10.5, color: 'var(--txt3)' }}>EPS balance then about {formatINR(r.balance, 0)} · {r.years < 10 ? 'under 10 years of service, so a withdrawal benefit instead of a pension' : r.note}</div>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 4 }}>Pension = pension wage × years of service ÷ 70, with the wage held at ₹15,000 (so at most ₹7,500 a month for 35 years). It assumes you keep working and the ₹15,000 ceiling stays. Service from an earlier employer that paid no pension is not counted; if you have a scheme certificate, add that service. The figure is an estimate; EPFO decides the actual amount.</div>
+                </div>
+              )}
             </div>
           </div>
         )}
