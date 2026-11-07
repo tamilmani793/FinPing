@@ -39,7 +39,7 @@ export function useAssets() {
     const [cards, invs, txns, pfIn, policies, records] = await Promise.all([db.creditCards.toArray(), db.investments.toArray(), db.transactions.toArray(), loadPfInputs(), db.policies.toArray(), db.salaryRecords.toArray()])
     const pf = buildPf(pfIn)
     const accounts = cards.filter(c => c.cardType === 'account' && c.accountBalance != null).map(c => ({ key: 'bank:' + c.id, label: `${c.name || c.bank}`, value: c.accountBalance, group: 'Bank accounts' }))
-    const inv = invs.map(i => ({ key: 'inv:' + i.id, id: i.id, type: i.type, label: i.name + (i.last4 ? ` ••${i.last4}` : ''), value: i.type === 'PPF' ? ppfCurrent(i) : (i.currentValue || 0), group: i.type === 'PPF' || i.type === 'NPS' ? 'Retirement' : ['MutualFund', 'Stock'].includes(i.type) ? 'Market' : 'Safe' }))
+    const inv = invs.filter(i => !i.excluded).map(i => ({ key: 'inv:' + i.id, id: i.id, type: i.type, label: i.name + (i.last4 ? ` ••${i.last4}` : ''), value: i.type === 'PPF' ? ppfCurrent(i) : (i.currentValue || 0), group: i.type === 'PPF' || i.type === 'NPS' ? 'Retirement' : ['MutualFund', 'Stock'].includes(i.type) ? 'Market' : 'Safe' }))
     const epf = pf.empty ? 0 : (pf.epfBalance || 0)
     const sources = [...accounts, ...(epf > 0 ? [{ key: 'epf', label: 'Provident fund (EPF)', value: epf, group: 'Retirement' }] : []), ...inv]
     const lastPf = pf.months?.length ? pf.months[pf.months.length - 1] : null

@@ -79,7 +79,7 @@ export default function Dashboard() {
 
   const bills = cur.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
   const prevBills = prev.filter(t => t.type === 'debit' && t.category === 'Utilities & Bills').reduce((s, t) => s + t.amount, 0)
-  const invested = investments.reduce((s, i) => s + (i.investedAmount || 0), 0)
+  const invested = investments.filter(i => !i.excluded).reduce((s, i) => s + (i.investedAmount || 0), 0)
   // Card dues = billed amounts still unpaid across credit cards (same figures as the Accounts screen)
   const { rows: dueRows, totalDue: cardDue, owingCount } = useCardDues()
   const [duesOpen, setDuesOpen] = useState(false)
