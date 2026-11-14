@@ -6,6 +6,7 @@ import { TopBar, Card, SectionHdr, Badge, ProgressBar, Divider, LabelCaps, MonoL
 import { ChevronRight, IndianRupee, TrendingUp, StickyNote } from 'lucide-react'
 import { Field, TextField, Picker, Segmented } from '../components/Fields'
 import { searchSchemes, fetchNav } from '../lib/mfNav'
+import { searchStocks, fetchPrice } from '../lib/stockPrice'
 import { GOLD_CITIES, fetchGoldRates, purityRate, rateOnDate, splitPrice, coinPrice } from '../lib/goldRate'
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
@@ -44,23 +45,25 @@ export default function Wealth() {
   // mutual fund with a live NAV: pick the scheme by name, enter units, and the value follows the NAV
   const EMPTY_MF = { track: true, q: '', results: [], code: null, schemeName: '', units: '', nav: null, navDate: '', busy: false, err: '' }
   const [mf, setMf] = useState(EMPTY_MF)
-  const mfForm = form.type === 'MutualFund' && mf.track
+  const isStock = form.type === 'Stock'
+  const mfForm = (form.type === 'MutualFund' || isStock) && mf.track // shares work the same way: pick the company, enter units, price follows
   useEffect(() => {
     if (!addOpen || !mfForm || mf.code || mf.q.trim().length < 3) { if (mf.results.length && mf.q.trim().length < 3) setMf(m => ({ ...m, results: [], err: '' })); return }
     let live = true
     setMf(m => ({ ...m, busy: true, err: '' }))
     const t = setTimeout(() => {
-      searchSchemes(mf.q).then(r => { if (live) setMf(m => ({ ...m, results: r, busy: false, err: r.length ? '' : 'No scheme found. Try fewer words.' })) })
-        .catch(() => { if (live) setMf(m => ({ ...m, busy: false, err: "Couldn't reach the NAV service. Turn off live NAV to type the value yourself." })) })
+      ;(isStock ? searchStocks : searchSchemes)(mf.q).then(r => { if (live) setMf(m => ({ ...m, results: r, busy: false, err: r.length ? '' : 'No match found. Try fewer words.' })) })
+        .catch(() => { if (live) setMf(m => ({ ...m, busy: false, err: isStock ? "Live prices work in the Android app only. Turn off live price to type the value yourself." : "Couldn't reach the NAV service. Turn off live NAV to type the value yourself." })) })
     }, 400)
     return () => { live = false; clearTimeout(t) }
-  }, [addOpen, mfForm, mf.q, mf.code])
+  }, [addOpen, mfForm, isStock, mf.q, mf.code])
   const pickScheme = async s => {
     setMf(m => ({ ...m, code: s.code, schemeName: s.name, results: [], busy: true, err: '' }))
-    try { const r = await fetchNav(s.code); setMf(m => ({ ...m, nav: r.nav, navDate: r.date, busy: false })) }
-    catch { setMf(m => ({ ...m, busy: false, err: "Couldn't fetch the NAV for this scheme." })) }
+    try { const r = await (isStock ? fetchPrice : fetchNav)(s.code); setMf(m => ({ ...m, nav: r.nav, navDate: r.date, busy: false })) }
+    catch { setMf(m => ({ ...m, busy: false, err: isStock ? "Couldn't fetch the price. Live prices work in the Android app only." : "Couldn't fetch the NAV for this scheme." })) }
   }
   useEffect(() => { if (!addOpen) setMf(EMPTY_MF) }, [addOpen])
+  useEffect(() => { setMf(EMPTY_MF) }, [form.type]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // the live rate for the chosen city, whenever the physical gold form is showing
   useEffect(() => {
@@ -82,16 +85,16 @@ export default function Wealth() {
   const investments = allInvestments && allInvestments.filter(i => !i.excluded) // coins turned into jewellery are not counted
   const jewellery = (allInvestments || []).filter(i => i.excluded)
 
-  // tracked mutual funds are worth units × the latest NAV
-  const mfKey = (rawInvestments || []).filter(i => i.mfCode && !i.excluded).map(i => `${i.id}:${i.mfCode}:${i.units}`).join('|')
+  // tracked mutual funds and shares are worth units × the latest NAV / price
+  const mfKey = (rawInvestments || []).filter(i => (i.mfCode || i.stockSymbol) && !i.excluded).map(i => `${i.id}:${i.mfCode || i.stockSymbol}:${i.units}`).join('|')
   useEffect(() => {
-    const funds = (rawInvestments || []).filter(i => i.mfCode && !i.excluded)
+    const funds = (rawInvestments || []).filter(i => (i.mfCode || i.stockSymbol) && !i.excluded)
     if (!funds.length) return
     let live = true
     ;(async () => {
       for (const f of funds) {
         try {
-          const r = await fetchNav(f.mfCode)
+          const r = await (f.stockSymbol ? fetchPrice(f.stockSymbol) : fetchNav(f.mfCode))
           if (!live) return
           const value = Math.round(f.units * r.nav * 100) / 100
           if (value > 0 && (value !== f.currentValue || f.nav !== r.nav || f.navDate !== r.date)) await db.investments.update(f.id, { currentValue: value, nav: r.nav, navDate: r.date })
@@ -166,9 +169,9 @@ export default function Wealth() {
     const amount = parseFloat(dep.amount)
     if (!(amount > 0)) { showNotification('Enter the amount', 'error'); return }
     const addUnits = parseFloat(dep.units)
-    if (openInv.mfCode && !(addUnits > 0)) { showNotification('Enter the units you got', 'error'); return }
+    if ((openInv.mfCode || openInv.stockSymbol) && !(addUnits > 0)) { showNotification('Enter the units you got', 'error'); return }
     const entries = [...(openInv.entries || (openInv.investedAmount ? [{ date: openInv.startDate || new Date(), amount: openInv.investedAmount, opening: true }] : [])), { date: new Date(dep.date), amount }]
-    await db.investments.update(openInv.id, { entries, investedAmount: entries.reduce((a, e) => a + e.amount, 0), ...(openInv.mfCode ? { units: Math.round(((openInv.units || 0) + addUnits) * 1e4) / 1e4, currentValue: Math.round(((openInv.units || 0) + addUnits) * (openInv.nav || 0) * 100) / 100 } : { currentValue: (openInv.currentValue || 0) + amount }) })
+    await db.investments.update(openInv.id, { entries, investedAmount: entries.reduce((a, e) => a + e.amount, 0), ...((openInv.mfCode || openInv.stockSymbol) ? { units: Math.round(((openInv.units || 0) + addUnits) * 1e4) / 1e4, currentValue: Math.round(((openInv.units || 0) + addUnits) * (openInv.nav || 0) * 100) / 100 } : { currentValue: (openInv.currentValue || 0) + amount }) })
     setDep({ ...dep, amount: '', units: '' })
     setDepOpen(false)
     showNotification('Deposit added', 'success')
@@ -237,17 +240,17 @@ export default function Wealth() {
 
   const addTrackedFund = async () => {
     const units = parseFloat(mf.units), invested = parseFloat(form.investedAmount)
-    if (!mf.code) { showNotification('Search and pick the scheme', 'error'); return }
+    if (!mf.code) { showNotification(isStock ? 'Search and pick the company' : 'Search and pick the scheme', 'error'); return }
     if (!(units > 0) || !(invested > 0)) { showNotification('Units and invested amount required', 'error'); return }
-    if (!mf.nav) { showNotification('NAV not loaded yet', 'error'); return }
+    if (!mf.nav) { showNotification(isStock ? 'Price not loaded yet' : 'NAV not loaded yet', 'error'); return }
     await db.investments.add({
-      name: form.name || mf.schemeName, type: 'MutualFund', mfCode: mf.code, units, nav: mf.nav, navDate: mf.navDate,
+      name: form.name || mf.schemeName, type: isStock ? 'Stock' : 'MutualFund', ...(isStock ? { stockSymbol: mf.code } : { mfCode: mf.code }), units, nav: mf.nav, navDate: mf.navDate,
       investedAmount: invested, currentValue: Math.round(units * mf.nav * 100) / 100,
       startDate: new Date(), entries: [{ date: new Date(), amount: invested, opening: true }], source: 'manual', notes: form.notes, last4: null,
     })
     setForm(EMPTY_FORM); setMf(EMPTY_MF)
     setAddOpen(false)
-    showNotification('Mutual fund added!', 'success')
+    showNotification(isStock ? 'Equity added!' : 'Mutual fund added!', 'success')
   }
 
   const handleAddManual = async () => {
@@ -416,7 +419,7 @@ export default function Wealth() {
                           <div style={{ fontSize: 11, color: gain >= 0 ? 'var(--mint-dim)' : 'var(--red)' }}>{gain >= 0 ? '+' : '−'}{formatINR(Math.abs(gain))}{i.investedAmount > 0 ? ` · ${(gain / i.investedAmount * 100).toFixed(1)}%` : ''}</div>
                         </div>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 3 }}>Invested {formatINR(i.investedAmount)}{i.units ? ` · ${i.units} units` : ''}{i.nav ? ` · NAV ${i.nav}` : ''}</div>
+                      <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 3 }}>Invested {formatINR(i.investedAmount)}{i.units ? ` · ${i.units} units` : ''}{i.nav ? ` · ${i.stockSymbol ? 'price' : 'NAV'} ${i.nav}` : ''}</div>
                       {pf && <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 2 }}>FY {pf.fy}: deposited {formatINR(pf.deposited)}, {formatINR(pf.remaining)} left of ₹1.5 lakh · interest {formatINR(pf.projected)} expected</div>}
                     </div>
                   )
@@ -500,9 +503,9 @@ export default function Wealth() {
 <div className="sheet-handle" />
             <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 14 }}>Log an investment</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <Field label={physicalForm || (mfForm && mf.code) ? 'Name (optional)' : mfForm ? 'Search fund by name' : 'Fund / stock name'}><TextField icon={<TrendingUp size={17} />} placeholder={physicalForm ? 'e.g. 8 g Tanishq coin' : mfForm && !mf.code ? 'e.g. parag parikh flexi' : mfForm ? mf.schemeName : 'e.g. Nifty 50 index fund'} value={mfForm && !mf.code ? mf.q : form.name} onChange={e => (mfForm && !mf.code ? setMf({ ...mf, q: e.target.value }) : setForm({ ...form, name: e.target.value }))} /></Field>
-              {form.type === 'MutualFund' && (
-                <Segmented value={mf.track ? 'live' : 'manual'} options={[{ value: 'live', label: '📈 Live NAV' }, { value: 'manual', label: 'Type the value' }]} onChange={v => setMf({ ...EMPTY_MF, track: v === 'live' })} />
+              <Field label={physicalForm || (mfForm && mf.code) ? 'Name (optional)' : mfForm ? (isStock ? 'Search company by name' : 'Search fund by name') : 'Fund / stock name'}><TextField icon={<TrendingUp size={17} />} placeholder={physicalForm ? 'e.g. 8 g Tanishq coin' : mfForm && !mf.code ? (isStock ? 'e.g. reliance' : 'e.g. parag parikh flexi') : mfForm ? mf.schemeName : 'e.g. Nifty 50 index fund'} value={mfForm && !mf.code ? mf.q : form.name} onChange={e => (mfForm && !mf.code ? setMf({ ...mf, q: e.target.value }) : setForm({ ...form, name: e.target.value }))} /></Field>
+              {(form.type === 'MutualFund' || isStock) && (
+                <Segmented value={mf.track ? 'live' : 'manual'} options={[{ value: 'live', label: isStock ? '📊 Live price' : '📈 Live NAV' }, { value: 'manual', label: 'Type the value' }]} onChange={v => setMf({ ...EMPTY_MF, track: v === 'live' })} />
               )}
               {mfForm && !mf.code && (mf.busy || mf.err || mf.results.length > 0) && (
                 <div className="card" style={{ padding: 0, maxHeight: 220, overflowY: 'auto', fontSize: 12.5 }}>
@@ -563,8 +566,8 @@ export default function Wealth() {
                   <>
                     <div className="card" style={{ fontSize: 12.5 }}>
                       <div style={{ fontWeight: 700 }}>{mf.schemeName}</div>
-                      <div style={{ color: 'var(--txt2)', marginTop: 4 }}>{mf.nav ? `NAV ₹${mf.nav} · ${mf.navDate} · AMFI via mfapi.in` : mf.busy ? 'Fetching NAV…' : mf.err}</div>
-                      <button className="btn-ghost" style={{ height: 30, padding: '0 12px', fontSize: 11, marginTop: 6 }} onClick={() => setMf({ ...EMPTY_MF })}>Change scheme</button>
+                      <div style={{ color: 'var(--txt2)', marginTop: 4 }}>{mf.nav ? (isStock ? `Price ₹${mf.nav} · ${mf.navDate} · Yahoo Finance` : `NAV ₹${mf.nav} · ${mf.navDate} · AMFI via mfapi.in`) : mf.busy ? 'Fetching…' : mf.err}</div>
+                      <button className="btn-ghost" style={{ height: 30, padding: '0 12px', fontSize: 11, marginTop: 6 }} onClick={() => setMf({ ...EMPTY_MF })}>Change</button>
                     </div>
                     <div className="form-grid">
                       <Field label="Units held"><TextField type="number" inputMode="decimal" placeholder="e.g. 125.432" value={mf.units} onChange={e => setMf({ ...mf, units: e.target.value })} /></Field>
@@ -572,7 +575,7 @@ export default function Wealth() {
                     </div>
                     {mf.nav > 0 && parseFloat(mf.units) > 0 && <div className="card" style={{ fontSize: 12.5, color: 'var(--mint-dim)' }}>Worth today: <b>{formatINR(parseFloat(mf.units) * mf.nav, 2)}</b> · updates by itself when you open Wealth</div>}
                   </>
-                ) : <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>Type at least 3 letters of the fund's name, then pick the exact plan (Direct or Regular, Growth).</div>
+                ) : <div style={{ fontSize: 11.5, color: 'var(--txt2)' }}>{isStock ? 'Type at least 3 letters of the company name, then pick the NSE listing.' : "Type at least 3 letters of the fund's name, then pick the exact plan (Direct or Regular, Growth)."}</div>
               ) : (
                 <>
                   <div className="form-grid">
@@ -665,7 +668,7 @@ export default function Wealth() {
                   <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 6 }}>Current = {openInv.grams} g × today's {openInv.purity}K rate{openInv.liveRate ? ` (₹${openInv.liveRate.toLocaleString('en-IN')}/g, ${openInv.cityLabel}, goodreturns.in)` : ''}. GST and making charges are not recovered on resale.</div>
                 </div>
               )}
-              {openInv.mfCode && <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginBottom: 12 }}>{openInv.units} units × NAV ₹{openInv.nav}{openInv.navDate ? ` (${openInv.navDate})` : ''} · refreshes when you open Wealth</div>}
+              {(openInv.mfCode || openInv.stockSymbol) && <div style={{ fontSize: 11.5, color: 'var(--txt2)', marginBottom: 12 }}>{openInv.units} {openInv.stockSymbol ? 'shares' : 'units'} × {openInv.stockSymbol ? 'price' : 'NAV'} ₹{openInv.nav}{openInv.navDate ? ` (${openInv.navDate})` : ''} · refreshes when you open Wealth</div>}
               {!openInv.physicalGold && !editing && !depOpen && <button className="btn-primary" style={{ width: '100%', height: 46, marginBottom: 12 }} onClick={() => setDepOpen(true)}>+ Add deposit</button>}
               {!openInv.physicalGold && (editing || depOpen) && (
                 <>
@@ -673,13 +676,13 @@ export default function Wealth() {
               <div className="form-grid">
                 <Field label="Amount"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder="0" value={dep.amount} onChange={e => setDep({ ...dep, amount: e.target.value })} /></Field>
                 <Field label="Date"><TextField type="date" value={dep.date} onChange={e => setDep({ ...dep, date: e.target.value })} /></Field>
-                {openInv.mfCode && <Field label="Units bought"><TextField type="number" inputMode="decimal" placeholder="e.g. 12.345" value={dep.units} onChange={e => setDep({ ...dep, units: e.target.value })} /></Field>}
+                {(openInv.mfCode || openInv.stockSymbol) && <Field label="Units bought"><TextField type="number" inputMode="decimal" placeholder="e.g. 12.345" value={dep.units} onChange={e => setDep({ ...dep, units: e.target.value })} /></Field>}
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 {depOpen && !editing && <button className="btn-ghost" style={{ height: 52, padding: '0 18px' }} onClick={() => setDepOpen(false)}>Cancel</button>}
                 <BtnPrimary onClick={addDeposit} style={{ flex: 1 }}>Add deposit</BtnPrimary>
               </div>
-              {editing && openInv.type !== 'PPF' && !openInv.mfCode && (
+              {editing && openInv.type !== 'PPF' && !(openInv.mfCode || openInv.stockSymbol) && (
                 <>
                   <LabelCaps style={{ margin: '16px 0 4px' }}>Update current value (balance from the passbook / app)</LabelCaps>
                   <div style={{ display: 'flex', gap: 8 }}>
