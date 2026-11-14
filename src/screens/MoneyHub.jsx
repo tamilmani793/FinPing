@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Briefcase, ChevronRight, Landmark, Lightbulb, PieChart, PiggyBank, Receipt, ShieldCheck, TrendingUp, CreditCard, CalendarClock, Target, Palmtree } from 'lucide-react'
+import { Briefcase, ChevronRight, Landmark, Lightbulb, PieChart, PiggyBank, Receipt, ShieldCheck, TrendingUp, CreditCard, CalendarClock, Target, Palmtree, Users } from 'lucide-react'
 import { useStore } from '../store'
 import AdvisorySheet from '../components/AdvisorySheet'
 import { SubHeader } from '../components/UI'
@@ -42,6 +42,7 @@ export default function MoneyHub() {
           <Row Icon={Receipt} title="Bills" sub="Cards, electricity, mobile, broadband and gas" onClick={() => setActiveTab('bills')} />
           <Row Icon={Landmark} title="Debt & loans" sub="EMIs, loans and repayments" onClick={() => setActiveTab('debt')} />
           <Row Icon={ShieldCheck} title="Insurance" sub="Policies, premiums and due dates" onClick={() => setActiveTab('insurance')} />
+          <Row Icon={Users} title="Chit funds" sub="Monthly chit payments, pot received and months left" onClick={() => setActiveTab('chits')} />
           <Row Icon={CalendarClock} title="Yearly costs" sub="Set aside a little each month for premiums, fees and service" onClick={() => setActiveTab('sinking')} />
         </Group>
         <Group title="Grow">

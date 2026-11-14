@@ -99,3 +99,8 @@ db.version(14).stores({
 db.version(15).stores({
   goals: '++id',
 })
+
+// v16: chit funds - each chit with its month-by-month money paid in and pot received
+db.version(16).stores({
+  chits: '++id',
+})
