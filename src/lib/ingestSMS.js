@@ -1,6 +1,6 @@
 import { db } from '../db/schema'
 import { parseSMS, isCreditCardSMS, detectCardKind, extractAvailableLimit } from './smsParser'
-import { shiftAvailable, setLimitFields, groupOf } from './cards'
+import { shiftAvailable, setLimitFields, groupOf, hasNumber } from './cards'
 import { cycleDates } from './cycle'
 import { findDuplicate, mergeDuplicate, pairTransfer } from './dedupe'
 import { canonCategory } from './options'
@@ -12,7 +12,8 @@ export async function findOrCreateCard(parsed, kind, create = true) {
   if (!parsed.cardLast4) return null
   // Bank accounts and cards live in the same list but never match each other, even with the same last four digits.
   const isAccount = kind === 'account'
-  const matches = (await db.creditCards.where('cardLast4').equals(parsed.cardLast4).toArray()).filter(c => (c.cardType === 'account') === isAccount)
+  // a replaced card still answers to its earlier numbers
+  const matches = (await db.creditCards.toArray()).filter(c => hasNumber(c, parsed.cardLast4) && (c.cardType === 'account') === isAccount)
   const existing = matches.find(c => c.bank === parsed.bank) || matches[0]
   if (existing) {
     // A card created from an ambiguous SMS becomes credit/debit as soon as an SMS says so.

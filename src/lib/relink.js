@@ -70,6 +70,6 @@ export function entityIdFor(txn, entities) {
   if (txn.cardId != null && entities.some(c => c.id === txn.cardId)) return txn.cardId
   if (!txn.accountLast4) return null
   const wantCard = CARD_MODES.includes(txn.paymentMode)
-  const hits = entities.filter(c => c.cardLast4 === txn.accountLast4 && (wantCard ? c.cardType !== 'account' : c.cardType === 'account'))
+  const hits = entities.filter(c => (c.cardLast4 === txn.accountLast4 || (c.previousLast4 || []).includes(txn.accountLast4)) && (wantCard ? c.cardType !== 'account' : c.cardType === 'account'))
   return (hits.find(c => sameBank(c.bank, txn.bank)) || null)?.id ?? null
 }

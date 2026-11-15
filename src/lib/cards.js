@@ -5,6 +5,29 @@ import { cycleDates } from './cycle'
 export const groupOf = (card, cards) =>
   card?.limitGroup ? cards.filter(c => c.limitGroup === card.limitGroup) : card ? [card] : []
 
+// Every number a card has carried: the current one first, then the earlier ones from before it was replaced.
+export const numbersOf = c => [c?.cardLast4, ...(c?.previousLast4 || [])].filter(Boolean)
+export const hasNumber = (c, last4) => !!last4 && numbersOf(c).includes(last4)
+
+// A replacement card (same account, new number): the old number is kept on the card so spends under either number belong to it, and
+// a card the SMS already created for the new number is folded in (its spends move here) when it holds no limit or statement of its own.
+// Returns the earlier numbers to save and how many spends were moved over.
+async function applyNumberChange(me, newLast4) {
+  const keep = me.previousLast4 || []
+  if (!newLast4 || !me.cardLast4 || newLast4 === me.cardLast4) return { previousLast4: keep, moved: 0 }
+  const previousLast4 = [...new Set([...keep, me.cardLast4])].filter(n => n !== newLast4)
+  let moved = 0
+  const isAcct = me.cardType === 'account'
+  for (const dup of await db.creditCards.toArray()) {
+    if (dup.id === me.id || (dup.cardType === 'account') !== isAcct || !hasNumber(dup, newLast4)) continue
+    if (dup.creditLimit > 0 || dup.statementBalance > 0 || dup.draft === false && dup.name && !/••\d{4}$/.test(dup.name)) continue // a card you set up yourself stays as it is
+    moved += await db.transactions.where('cardId').equals(dup.id).modify({ cardId: me.id })
+    for (const n of dup.previousLast4 || []) if (n !== newLast4 && !previousLast4.includes(n)) previousLast4.push(n)
+    await db.creditCards.delete(dup.id)
+  }
+  return { previousLast4, moved }
+}
+
 // Sum of available credit across cards, counting a shared limit only once.
 export function totalAvailableCredit(cards) {
   const seen = new Set()
@@ -76,9 +99,11 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
   if (cardType !== 'credit') {
     const me = await db.creditCards.get(cardId)
     if (!me) throw new Error('Card not found')
+    const newNo0 = (form.cardLast4 || '').replace(/\D/g, '').slice(-4)
+    const change0 = await applyNumberChange(me, newNo0)
     await db.creditCards.update(cardId, {
       ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
-      cardLast4: (form.cardLast4 || '').replace(/\D/g, '').slice(-4) || me.cardLast4, notes: form.notes || '',
+      cardLast4: newNo0 || me.cardLast4, previousLast4: change0.previousLast4, notes: form.notes || '',
       linkedAccountId: cardType === 'debit' && form.linkedAccountId !== '' && form.linkedAccountId != null ? Number(form.linkedAccountId) : null,
       ...(cardType === 'account' ? { accountBalance: form.accountBalance === '' || form.accountBalance == null ? null : Number(form.accountBalance) || 0, network: '', variant: (form.variant || '').trim(), partner: '' } : {}),
       limitGroup: null, creditLimit: 0, availableCredit: 0, currentBalance: 0, statementBalance: 0, pendingDue: 0, minimumDue: 0, unbilled: 0,
@@ -86,7 +111,7 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
     })
     const left = await db.creditCards.toArray()
     for (const c of left) if (c.limitGroup && left.filter(x => x.limitGroup === c.limitGroup).length < 2) await db.creditCards.update(c.id, { limitGroup: null })
-    return
+    return { moved: change0.moved }
   }
 
   const limit = num(form.creditLimit)
@@ -136,9 +161,11 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
   for (const id of targets) await db.creditCards.update(id, { ...statementFields, ...cycle, ...status })
 
   // 4. Card's own details.
+  const newNo = (form.cardLast4 || '').replace(/\D/g, '').slice(-4)
+  const change = await applyNumberChange(me, newNo)
   await db.creditCards.update(cardId, {
     ...identity, name: identity.name || me.name, bank: identity.bank || me.bank,
-    cardLast4: (form.cardLast4 || '').replace(/\D/g, '').slice(-4) || me.cardLast4,
+    cardLast4: newNo || me.cardLast4, previousLast4: change.previousLast4,
     linkedAccountId: null,
     ...annualFeeFields(form.feeType === 'ltf' ? 0 : num(form.annualFee)),
     feeWaiverThreshold: form.feeType === 'ltf' ? 0 : num(form.feeWaiverThreshold),
@@ -149,6 +176,7 @@ export async function saveCardEdit(cardId, form, { sharedWith = [], sameStatemen
     notes: form.notes || '',
     ...(Array.isArray(form.excludedCategories) ? { excludedCategories: form.excludedCategories } : {}),
   })
+  return { moved: change.moved }
 }
 
 // Records a payment made towards a credit card (for payments the SMS did not capture).

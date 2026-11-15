@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import { reconcile, correction, newEntry } from './statement'
 import { applyTxnToCard } from './ingestSMS'
 import { cycleDates } from './cycle'
-import { setLimitFields } from './cards'
+import { setLimitFields, numbersOf } from './cards'
 import { saveRewardStatement } from './rewardTagging'
 
 // The saved entries a bank account's statement should agree with: the account's own and those of its linked debit cards.
@@ -21,7 +21,7 @@ export async function accountEntries(account) {
     // an SMS that named no card, or only an untyped one, may still be this account's: it is matched too,
     // but only ever removed when it duplicates a statement line. For a card, the last 4 digits must agree.
     const twin = !mine && !isCard && account.cardLast4 && t.accountLast4 === account.cardLast4 && sameAccountRecord.has(t.cardId) // another record of this same account
-    const loose = twin || (!mine && (t.cardId == null || unknownCards.has(t.cardId)) && (!isCard || (account.cardLast4 && t.accountLast4 === account.cardLast4)))
+    const loose = twin || (!mine && (t.cardId == null || unknownCards.has(t.cardId)) && (!isCard || (account.cardLast4 && numbersOf(account).includes(t.accountLast4))))
     if (!mine && !loose) continue
     out.push({ ...t, ...(loose ? { _loose: true } : {}), ...(debtLinked.has(t.id) ? { kind: t.kind || 'loan_payment' } : {}) })
   }

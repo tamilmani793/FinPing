@@ -97,7 +97,7 @@ export function planCleanup(txns, cards) {
     if (p && (p.type === 'transaction' || p.type === 'cashback_credited')) continue // a real money movement
     if (p && p.type === 'payment_received') {
       // the issuer confirming a card bill payment: it belongs on that card as a payment, not as a spend
-      const candidates = creditCards.filter(c => (p.cardLast4 ? c.cardLast4 === p.cardLast4 : sameBank(c.bank, p.bank)))
+      const candidates = creditCards.filter(c => (p.cardLast4 ? (c.cardLast4 === p.cardLast4 || (c.previousLast4 || []).includes(p.cardLast4)) : sameBank(c.bank, p.bank)))
       if (candidates.length === 1) { plan.payments.push({ id: t.id, cardId: candidates[0].id }); gone.add(t.id); continue }
     }
     plan.remove.push(t.id); gone.add(t.id)

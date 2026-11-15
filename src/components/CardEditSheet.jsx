@@ -97,8 +97,9 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
         if (form.cardType === 'credit') throw new Error('Choose your card from the list, or type its name')
         data = { ...form, name: `${form.bank || 'Bank'} ${form.cardType === 'account' ? 'account' : 'debit card'}` }
       }
-      await saveCardEdit(card.id, data, { sharedWith: [...shared], sameStatement: sameStatement && shared.size > 0 })
+      const res = await saveCardEdit(card.id, data, { sharedWith: [...shared], sameStatement: sameStatement && shared.size > 0 })
       savedRef.current = true
+      if (res?.moved > 0) showNotification(`${res.moved} spend${res.moved === 1 ? '' : 's'} on the new number moved to this card`, 'success')
       // A card / account you just added or re-numbered may match spends that were tagged but unlinked.
       await relinkTransactions({ create: false }).catch(() => {})
       showNotification(isNew ? 'Added' : 'Card updated', 'success')
@@ -169,7 +170,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
             <Field label={form.cardType === 'account' ? 'Account type' : 'Variant'}>
               <Picker value={form.variant} options={variantOptions} onChange={v => upd({ variant: v })} allowCustom icon={<Award size={I} />} title={form.cardType === 'account' ? 'Account type' : 'Card variant'} placeholder={form.cardType === 'account' ? 'Savings' : 'Optional'} clearLabel="Not set" />
             </Field>
-            <Field label={form.cardType === 'account' ? 'Account last 4 digits' : 'Card last 4 digits'}><TextField icon={<Hash size={I} />} inputMode="numeric" maxLength={4} value={form.cardLast4} onChange={set('cardLast4')} placeholder="1234" /></Field>
+            <Field label={form.cardType === 'account' ? 'Account last 4 digits' : 'Card last 4 digits'} hint={form.cardLast4 && card.cardLast4 && form.cardLast4 !== card.cardLast4 ? `New number: spends on ••${card.cardLast4} stay on this card, and SMS with either number land here` : card.previousLast4?.length ? `Earlier numbers: ••${card.previousLast4.join(', ••')}` : undefined}><TextField icon={<Hash size={I} />} inputMode="numeric" maxLength={4} value={form.cardLast4} onChange={set('cardLast4')} placeholder="1234" /></Field>
             {form.cardType === 'account' && <Field label="Balance"><TextField icon={rupee} {...money('accountBalance')} /></Field>}
           </div>
           {isCredit && (

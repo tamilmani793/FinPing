@@ -391,7 +391,7 @@ function Detail({ card, cards, byCard, onBack }) {
             <div style={{ width: 34, height: 34, borderRadius: 17, background: 'rgba(232,210,154,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8D29A' }}><CreditCard size={18} /></div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{cardTitle(card, { last4: false })}</div>
-              <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.cardType === 'account' ? (card.variant || 'Bank account') : card.bank}{card.cardLast4 ? ` •• ${card.cardLast4}` : ''}</div>
+              <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.cardType === 'account' ? (card.variant || 'Bank account') : card.bank}{card.cardLast4 ? ` •• ${card.cardLast4}` : ''}{card.previousLast4?.length ? ` · earlier ••${card.previousLast4.join(', ••')}` : ''}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#E8D29A' }}>{networkLabel(card) || typeLabel(card)}</div>
