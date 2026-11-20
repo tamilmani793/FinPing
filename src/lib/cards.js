@@ -5,6 +5,21 @@ import { cycleDates } from './cycle'
 export const groupOf = (card, cards) =>
   card?.limitGroup ? cards.filter(c => c.limitGroup === card.limitGroup) : card ? [card] : []
 
+// A closed card is kept (its history and numbers stay) but leaves your lists, totals, dues and pickers.
+export const isOpen = c => !c?.closed
+
+// Closes a card / account, or opens it again. A closed card leaves the shared limit it was in, so the cards still open keep their own pool.
+export async function setCardClosed(cardId, closed) {
+  const me = await db.creditCards.get(cardId)
+  if (!me) throw new Error('Card not found')
+  if (!closed) { await db.creditCards.update(cardId, { closed: false, closedAt: null }); return }
+  await db.creditCards.update(cardId, { closed: true, closedAt: new Date(), limitGroup: null })
+  if (me.limitGroup) {
+    const rest = (await db.creditCards.toArray()).filter(c => c.limitGroup === me.limitGroup)
+    if (rest.length < 2) for (const c of rest) await db.creditCards.update(c.id, { limitGroup: null })
+  }
+}
+
 // Every number a card has carried: the current one first, then the earlier ones from before it was replaced.
 export const numbersOf = c => [c?.cardLast4, ...(c?.previousLast4 || [])].filter(Boolean)
 export const hasNumber = (c, last4) => !!last4 && numbersOf(c).includes(last4)

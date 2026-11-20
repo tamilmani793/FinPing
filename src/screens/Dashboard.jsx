@@ -63,7 +63,7 @@ export default function Dashboard() {
   const prevStart = startOfMonth(subMonths(now, 1))
 
   const txnsAll = useLiveQuery(() => db.transactions.filter(t => new Date(t.date) >= prevStart && !t.isExcluded).toArray()) || []
-  const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft)
+  const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft && !c.closed)
   const investments = useLiveQuery(() => db.investments.toArray()) || []
 
   const cur = txnsAll.filter(t => new Date(t.date) >= monthStart)

@@ -96,7 +96,7 @@ export default function Expenses() {
     showNotification('Transaction added!', 'success')
   }
 
-  const cardOptions = accountList.map(c => ({
+  const cardOptions = accountList.filter(c => !c.closed).map(c => ({
     value: String(c.id), label: cardTitle(c),
     sub: c.cardType === 'account' ? 'bank account' : c.cardType === 'debit' ? 'debit card' : 'credit card',
   }))

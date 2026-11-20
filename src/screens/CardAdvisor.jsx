@@ -40,7 +40,7 @@ function Pick({ e, label }) {
 // Use your cards better: the best card for each spend, the reward missed last month, and annual-fee waivers.
 export default function CardAdvisor() {
   const data = useLiveQuery(async () => ({
-    cards: await db.creditCards.toArray(), rules: await db.card_reward_rules.toArray(), txns: await db.transactions.filter(t => t.cardId != null).toArray(),
+    cards: (await db.creditCards.toArray()).filter(c => !c.closed), rules: await db.card_reward_rules.toArray(), txns: await db.transactions.filter(t => t.cardId != null).toArray(),
   }), [], null)
   const catList = useOptions('categories')
   const categories = catList.map(c => c.name).filter(n => !NOT_SPENDS.includes(n))

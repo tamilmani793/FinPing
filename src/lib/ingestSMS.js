@@ -68,7 +68,7 @@ async function applyBankLimit(cardId, availableLimit) {
 async function soleCardOfBank(bank) {
   if (!bank || bank === 'Unknown Bank') return null
   const first = bank.toLowerCase().split(' ')[0]
-  const cards = (await db.creditCards.toArray()).filter(c => !c.draft && (!c.cardType || c.cardType === 'credit') && String(c.bank || '').toLowerCase().split(' ')[0] === first)
+  const cards = (await db.creditCards.toArray()).filter(c => !c.draft && !c.closed && (!c.cardType || c.cardType === 'credit') && String(c.bank || '').toLowerCase().split(' ')[0] === first)
   return cards.length === 1 ? cards[0] : null
 }
 
@@ -76,7 +76,7 @@ async function soleCardOfBank(bank) {
 async function accountOfDebitCard(card) {
   if (card.linkedAccountId != null) return card.linkedAccountId
   const first = String(card.bank || '').toLowerCase().split(' ')[0]
-  const accts = (await db.creditCards.toArray()).filter(c => c.cardType === 'account' && String(c.bank || '').toLowerCase().split(' ')[0] === first)
+  const accts = (await db.creditCards.toArray()).filter(c => c.cardType === 'account' && !c.closed && String(c.bank || '').toLowerCase().split(' ')[0] === first)
   if (accts.length !== 1) return null
   await db.creditCards.update(card.id, { linkedAccountId: accts[0].id })
   return accts[0].id

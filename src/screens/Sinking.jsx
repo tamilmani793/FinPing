@@ -49,7 +49,7 @@ function ItemForm({ item, onClose }) {
 
 // Yearly costs as a monthly set-aside: insurance premiums and card annual fees come from the app, and you add your own.
 export default function Sinking() {
-  const data = useLiveQuery(async () => ({ policies: await db.policies.toArray(), cards: await db.creditCards.toArray(), items: await db.sinking_items.toArray() }), [], null)
+  const data = useLiveQuery(async () => ({ policies: await db.policies.toArray(), cards: (await db.creditCards.toArray()).filter(c => !c.closed), items: await db.sinking_items.toArray() }), [], null)
   const [form, setForm] = useState(undefined) // undefined: closed, null: new, object: editing
   const s = data ? sinkingItems(data) : null
   const own = id => data.items.find(i => 's' + i.id === id)

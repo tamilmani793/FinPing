@@ -372,7 +372,7 @@ export default function BillsPage() {
   const { setActiveTab, openCard, showNotification } = useStore()
   const data = useLiveQuery(async () => ({
     bills: await db.bills.toArray(), entries: await db.bill_entries.toArray(),
-    cards: await db.creditCards.toArray(), policies: await db.policies.toArray(),
+    cards: (await db.creditCards.toArray()).filter(c => !c.closed), policies: await db.policies.toArray(),
   }), [], null)
   const [filter, setFilter] = useState('all')
   const [adding, setAdding] = useState(false)

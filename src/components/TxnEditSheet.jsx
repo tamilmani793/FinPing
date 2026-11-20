@@ -177,7 +177,7 @@ export default function TxnEditSheet({ txn, onClose }) {
           </Field>
           )}
           <Field label="Card or account">
-            <Picker value={String(f.cardId)} options={cards.map(c => ({ value: String(c.id), label: cardTitle(c) }))}
+            <Picker value={String(f.cardId)} options={cards.filter(c => !c.closed || String(c.id) === String(f.cardId)).map(c => ({ value: String(c.id), label: cardTitle(c) }))}
               onChange={v => setF({ ...f, cardId: v })} icon={<CreditCard size={I} />} title="Card or account" placeholder="None (cash / other)" clearLabel="None (bank account / cash)" />
           </Field>
           <Field label="Notes"><TextField value={f.notes} onChange={set('notes')} placeholder="Optional" /></Field>

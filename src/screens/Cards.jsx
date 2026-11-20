@@ -8,7 +8,7 @@ import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../comp
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { askConfirm } from '../lib/confirm'
-import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary } from '../lib/cards'
+import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary, isOpen } from '../lib/cards'
 import { cardStats, isCardPayment, feeWaiverSpend } from '../lib/cardStats'
 import { ordinal } from '../lib/cycle'
 import { typeLabel, networkLabel, excludedFor, cardTitle } from '../lib/cardCatalog'
@@ -148,8 +148,9 @@ const reorderPill = (on, toggle) => (
   <button onClick={toggle} style={{ height: 28, padding: '0 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', border: '1px solid var(--gold-border)', background: on ? 'var(--gold-grad)' : 'var(--gold-bg)', color: on ? 'var(--on-accent)' : 'var(--gold-dim)' }}>{on ? 'Done' : '⇅ Reorder'}</button>
 )
 
-function Portfolio({ cards, byCard, onOpen, onAdd }) {
+function Portfolio({ cards, closedCards = [], byCard, onOpen, onAdd }) {
   const [editing, setEditing] = useState(null) // title of the group being rearranged
+  const [showClosed, setShowClosed] = useState(false)
   const credit = cards.filter(isCredit)
   const debit = cards.filter(c => c.cardType === 'debit')
   const accounts = cards.filter(c => c.cardType === 'account')
@@ -211,6 +212,21 @@ function Portfolio({ cards, byCard, onOpen, onAdd }) {
         {!cards.length && (
           <div className="card" style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--txt2)', fontSize: 13 }}>
             No cards or accounts yet. Add one above, or they appear automatically when bank SMS arrive.
+          </div>
+        )}
+
+        {closedCards.length > 0 && (
+          <div style={{ marginTop: 6 }}>
+            <div onClick={() => setShowClosed(v => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 2px 8px', cursor: 'pointer' }}>
+              <div className="label-caps">Closed · {closedCards.length}</div>
+              <span style={{ fontSize: 11, color: 'var(--gold-dim)', fontWeight: 700 }}>{showClosed ? 'Hide' : 'Show'}</span>
+            </div>
+            {showClosed && closedCards.map(c => (
+              <div key={c.id} onClick={() => onOpen(c.id)} style={{ background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 14, padding: '10px 14px', marginBottom: 8, cursor: 'pointer', opacity: 0.75 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.name || c.bank}{c.cardLast4 ? ` ••${c.cardLast4}` : ''}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt2)' }}>{c.cardType === 'account' ? 'Bank account' : c.cardType === 'debit' ? 'Debit card' : 'Credit card'}{c.closedAt ? ` · closed ${fmtD(c.closedAt)}` : ' · closed'} · tap to see its history or reopen</div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -391,7 +407,7 @@ function Detail({ card, cards, byCard, onBack }) {
             <div style={{ width: 34, height: 34, borderRadius: 17, background: 'rgba(232,210,154,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8D29A' }}><CreditCard size={18} /></div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{cardTitle(card, { last4: false })}</div>
-              <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.cardType === 'account' ? (card.variant || 'Bank account') : card.bank}{card.cardLast4 ? ` •• ${card.cardLast4}` : ''}{card.previousLast4?.length ? ` · earlier ••${card.previousLast4.join(', ••')}` : ''}</div>
+              <div style={{ fontSize: 10, color: 'var(--txt2)' }}>{card.cardType === 'account' ? (card.variant || 'Bank account') : card.bank}{card.cardLast4 ? ` •• ${card.cardLast4}` : ''}{card.previousLast4?.length ? ` · earlier ••${card.previousLast4.join(', ••')}` : ''}{card.closed ? ' · closed' + (card.closedAt ? ' ' + fmtD(card.closedAt) : '') : ''}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#E8D29A' }}>{networkLabel(card) || typeLabel(card)}</div>
@@ -599,6 +615,8 @@ export default function Accounts() {
     if (id != null) (byCard[id] ||= []).push(t)
   }
   const card = visible.find(c => c.id === openId)
+  const openCards = visible.filter(isOpen)
+  const closedCards = visible.filter(c => c.closed)
   const draft = cards.find(c => c.id === newId)
 
   // Adds a hidden draft entry of the chosen type and opens the form for it.
@@ -615,7 +633,7 @@ export default function Accounts() {
     <>
       {card
         ? <Detail card={card} cards={visible} byCard={byCard} onBack={() => setOpenId(null)} />
-        : <Portfolio cards={visible} byCard={byCard} onOpen={setOpenId} onAdd={addNew} />}
+        : <Portfolio cards={openCards} closedCards={closedCards} byCard={byCard} onOpen={setOpenId} onAdd={addNew} />}
       {draft && <CardEditSheet isNew card={draft} cards={visible} onClose={id => { setNewId(null); if (id) setOpenId(id) }} />}
     </>
   )

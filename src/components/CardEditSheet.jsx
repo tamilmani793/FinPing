@@ -3,7 +3,7 @@ import { format } from 'date-fns'
 import { CreditCard, Landmark, Globe, Hash, IndianRupee, Calendar, Percent, Award, Link2, Gift, User, Sparkles } from 'lucide-react'
 import { db } from '../db/schema'
 import { useStore } from '../store'
-import { saveCardEdit, groupOf, nextAnniversary } from '../lib/cards'
+import { saveCardEdit, groupOf, nextAnniversary, setCardClosed } from '../lib/cards'
 import { syncCardAmounts } from '../lib/cardSync'
 import { cycleDates, isStatementPaid, ordinal } from '../lib/cycle'
 import { BtnPrimary } from './UI'
@@ -105,6 +105,18 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
       showNotification(isNew ? 'Added' : 'Card updated', 'success')
       close(card.id)
     } catch (e) { showNotification(e.message, 'error') }
+  }
+
+  // Closing keeps the card and all its history but takes it out of your lists, dues and totals
+  const toggleClosed = async () => {
+    if (!card.closed) {
+      const owed = (card.cardType === 'account' || card.cardType === 'debit') ? 0 : Math.max(0, (card.pendingDue || 0) + (card.unbilled || 0))
+      const msg = `${owed > 0 ? `About ₹${Math.round(owed).toLocaleString('en-IN')} still shows as owed on it. Pay it off first, or it stops appearing in your dues. ` : ''}Its history stays, and it no longer counts in your totals, dues, card advice or "Paid from" lists. You can reopen it any time.`
+      if (!(await askConfirm({ title: `Close ${cardTitle(card, { last4: false })}?`, message: msg, confirmLabel: 'Close it' }))) return
+    }
+    await setCardClosed(card.id, !card.closed)
+    showNotification(card.closed ? 'Reopened' : 'Closed', 'success')
+    onClose()
   }
 
   const remove = async () => {
@@ -276,6 +288,7 @@ export default function CardEditSheet({ card, cards, isNew = false, onClose }) {
             <button className="btn-ghost" style={{ height: 52, padding: '0 22px', fontSize: 14 }} onClick={() => close()}>Cancel</button>
             <BtnPrimary onClick={save} style={{ flex: 1 }}>{isNew ? 'Add' : 'Save changes'}</BtnPrimary>
           </div>
+          {!isNew && <button className="btn-secondary" style={{ height: 46 }} onClick={toggleClosed}>{card.closed ? 'Reopen this ' + kind : 'Mark this ' + kind + ' as closed'}</button>}
           {!isNew && <button className="btn-ghost" style={{ color: 'var(--red-dim)', borderColor: 'var(--red-border)', height: 46 }} onClick={remove}>Remove</button>}
         </div>
       </div>

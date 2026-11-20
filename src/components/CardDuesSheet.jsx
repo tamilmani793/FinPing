@@ -13,7 +13,7 @@ const STATUS = {
 
 // One row per credit card with what is due on the bill and what is owed in total right now.
 export function useCardDues() {
-  const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft && (!c.cardType || c.cardType === 'credit'))
+  const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft && !c.closed && (!c.cardType || c.cardType === 'credit'))
   const txns = useLiveQuery(() => db.transactions.filter(t => t.cardId != null).toArray()) || []
   const rows = cards.map(c => ({ card: c, s: cardStats(c, txns.filter(t => t.cardId === c.id)) }))
   // cards that owe something first, soonest due date first

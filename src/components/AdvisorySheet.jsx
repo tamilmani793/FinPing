@@ -28,7 +28,7 @@ export default function AdvisorySheet({ onClose }) {
   const [result, setResult] = useState(null)
   const [open, setOpen] = useState(null)
   const [edit, setEdit] = useState(null)
-  const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft && c.cardType !== 'unknown')
+  const cards = (useLiveQuery(() => db.creditCards.toArray()) || []).filter(c => !c.draft && !c.closed && c.cardType !== 'unknown')
   const kept = useLiveQuery(() => db.advisory_notes.orderBy('savedAt').reverse().toArray()) || []
   const keptKeys = new Set(kept.map(k => k.key))
 
