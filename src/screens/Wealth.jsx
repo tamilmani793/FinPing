@@ -228,7 +228,7 @@ export default function Wealth() {
       name: form.name || `${grams} g ${gold.purity}K gold coin`, buyDate: gold.date, rateOnBuyDate: dayRate || null, type: 'Gold', physicalGold: true,
       goldMode: gold.mode, grams, purity: gold.purity, city: gold.city, cityLabel: city,
       buyRate: gold.mode === 'split' ? parseFloat(gold.rate) : null, gstPct: gold.mode === 'split' ? parseFloat(gold.gstPct) || 0 : null,
-      goldValue: gold.mode === 'split' ? goldCalc.gold : null, making: gold.mode === 'split' ? goldCalc.making : null, gst: gold.mode === 'split' ? goldCalc.gst : null,
+      goldValue: gold.mode === 'split' ? goldCalc.gold : null, making: gold.mode === 'split' ? goldCalc.making : null, makingPct: gold.mode === 'split' ? goldCalc.makingPct : null, gst: gold.mode === 'split' ? goldCalc.gst : null,
       mrp: gold.mode === 'coin' ? goldCalc.mrp : null, cashback: goldCalc.cashback || 0,
       investedAmount: goldPaid, currentValue: goldNow || goldPaid, liveRate: liveRates ? purityRate(liveRates, gold.purity) : null, rateAt: liveRates?.at || null,
       units: null, nav: null, startDate: new Date(gold.date + 'T00:00:00'), entries: [{ date: new Date(gold.date + 'T00:00:00'), amount: goldPaid, opening: true }], source: 'manual', notes: form.notes, last4: null,
@@ -464,7 +464,7 @@ export default function Wealth() {
               <div style={{ fontSize: 10.5, color: 'var(--txt2)', marginTop: 4, lineHeight: 1.5 }}>
                 {c.goldMode === 'coin'
                   ? `MRP ${formatINR(c.mrp)} − cashback ${formatINR(c.cashback)} = ${formatINR(c.investedAmount)}`
-                  : `Gold ${formatINR(c.goldValue)}${c.buyRate ? ` (₹${c.buyRate.toLocaleString('en-IN')}/g)` : ''} + making ${formatINR(c.making)} + GST ${formatINR(c.gst)}${c.cashback > 0 ? ` − cashback ${formatINR(c.cashback)}` : ''} = ${formatINR(c.investedAmount)}`}
+                  : `Gold ${formatINR(c.goldValue)}${c.buyRate ? ` (₹${c.buyRate.toLocaleString('en-IN')}/g)` : ''} + making ${formatINR(c.making)}${c.makingPct != null ? ` (${c.makingPct}%)` : ''} + GST ${formatINR(c.gst)}${c.cashback > 0 ? ` − cashback ${formatINR(c.cashback)}` : ''} = ${formatINR(c.investedAmount)}`}
                 {c.rateOnBuyDate ? ` · rate that day ₹${c.rateOnBuyDate.toLocaleString('en-IN')}/g` : ''}
                 {dim ? ' · converted to jewellery' : ''}
               </div>
@@ -539,7 +539,7 @@ export default function Wealth() {
                     <>
                       <div className="form-grid">
                         <Field label="Rate per gram (on buying date)"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder="0" value={gold.rate} onChange={e => { setRateTouched(true); setGold({ ...gold, rate: e.target.value }) }} /></Field>
-                        <Field label="Making charge (total)"><TextField icon={<IndianRupee size={17} />} type="number" inputMode="decimal" placeholder="0 if none" value={gold.making} onChange={e => setGold({ ...gold, making: e.target.value })} /></Field>
+                        <Field label="Making charge" hint={String(gold.making).trim().endsWith('%') ? `${goldCalc.makingPct}% of ${formatINR(goldCalc.gold)} = ${formatINR(goldCalc.making)}` : '₹ amount, or a % like 2%'}><TextField icon={<IndianRupee size={17} />} inputMode="decimal" placeholder="₹ or %, e.g. 2%" value={gold.making} onChange={e => setGold({ ...gold, making: e.target.value.replace(/[^0-9.%]/g, '').replace(/%.*/, '%') })} /></Field>
                       </div>
                       <div className="form-grid">
                         <Field label="GST %" hint="3% on gold and making is usual"><TextField type="number" inputMode="decimal" value={gold.gstPct} onChange={e => setGold({ ...gold, gstPct: e.target.value })} /></Field>
@@ -557,7 +557,7 @@ export default function Wealth() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}><span style={{ color: 'var(--txt2)' }}>Gold value on buying date ({gold.grams} g × ₹{dayRate.toLocaleString('en-IN')})</span><span>{formatINR(parseFloat(gold.grams) * dayRate, 2)}</span></div>
                     )}
                     {(gold.mode === 'split'
-                      ? [['Gold value', goldCalc.gold], ['Making charge', goldCalc.making], [`GST (${gold.gstPct || 0}%)`, goldCalc.gst], ...(goldCalc.cashback > 0 ? [['Cashback', -goldCalc.cashback]] : [])]
+                      ? [['Gold value', goldCalc.gold], [goldCalc.makingPct != null ? `Making charge (${goldCalc.makingPct}%)` : 'Making charge', goldCalc.making], [`GST (${gold.gstPct || 0}%)`, goldCalc.gst], ...(goldCalc.cashback > 0 ? [['Cashback', -goldCalc.cashback]] : [])]
                       : [['MRP', goldCalc.mrp], ['Cashback', -goldCalc.cashback]]
                     ).map(([l, v]) => <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}><span style={{ color: 'var(--txt2)' }}>{l}</span><span>{v < 0 ? '−' : ''}{formatINR(Math.abs(v), 2)}</span></div>)}
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 3px', marginTop: 4, borderTop: '1px solid var(--border)', fontWeight: 700 }}><span>{gold.mode === 'split' && !(goldCalc.cashback > 0) ? 'Total paid' : 'Net price'}</span><span>{formatINR(goldPaid, 2)}</span></div>
@@ -665,7 +665,7 @@ export default function Wealth() {
                   {openInv.excluded && <div style={{ fontSize: 11.5, color: 'var(--amber, #D97706)', marginBottom: 6 }}>Converted to jewellery · not counted in your investments</div>}
                   {(openInv.goldMode === 'coin'
                     ? [['MRP', openInv.mrp], ['Cashback', -(openInv.cashback || 0)]]
-                    : [[`Gold value (₹${(openInv.buyRate || 0).toLocaleString('en-IN')}/g)`, openInv.goldValue], ['Making charge', openInv.making], [`GST (${openInv.gstPct || 0}%)`, openInv.gst], ...(openInv.cashback > 0 ? [['Cashback', -openInv.cashback]] : [])]
+                    : [[`Gold value (₹${(openInv.buyRate || 0).toLocaleString('en-IN')}/g)`, openInv.goldValue], [openInv.makingPct != null ? `Making charge (${openInv.makingPct}%)` : 'Making charge', openInv.making], [`GST (${openInv.gstPct || 0}%)`, openInv.gst], ...(openInv.cashback > 0 ? [['Cashback', -openInv.cashback]] : [])]
                   ).map(([l, v]) => <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}><span style={{ color: 'var(--txt2)' }}>{l}</span><span>{v < 0 ? '−' : ''}{formatINR(Math.abs(v || 0), 2)}</span></div>)}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 3px', marginTop: 4, borderTop: '1px solid var(--border)', fontWeight: 700 }}><span>{openInv.goldMode === 'coin' || openInv.cashback > 0 ? 'Net price' : 'Total paid'}</span><span>{formatINR(openInv.investedAmount, 2)}</span></div>
                   <div style={{ fontSize: 11, color: 'var(--txt2)', marginTop: 6 }}>Current = {openInv.grams} g × today's {openInv.purity}K rate{openInv.liveRate ? ` (₹${openInv.liveRate.toLocaleString('en-IN')}/g, ${openInv.cityLabel}, goodreturns.in)` : ''}. GST and making charges are not recovered on resale.</div>

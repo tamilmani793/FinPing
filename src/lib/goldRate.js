@@ -72,15 +72,23 @@ export const purityRate =(rates, purity) => (!rates ? 0 : purity === '22' ? rate
 const n = v => { const x = parseFloat(v); return Number.isFinite(x) ? x : 0 }
 const r2 = v => Math.round(v * 100) / 100
 
+// The making charge is one field: "2%" means 2% of the gold value (weight × rate), a plain number is the amount in rupees.
+export function parseMaking(input, goldValue) {
+  const t = String(input ?? '').trim()
+  if (t.endsWith('%')) { const p = n(t.slice(0, -1)); return { amount: r2(goldValue * p / 100), pct: p } }
+  return { amount: r2(n(t)), pct: null }
+}
+
 // Split purchase: grams × rate per gram, plus making charge, plus GST on both (3% by default), less any cashback.
 // `bill` is what the jeweller charged; `total` is what it really cost you after cashback.
 export function splitPrice({ grams, rate, making, gstPct, cashback }) {
   const gold = r2(n(grams) * n(rate))
-  const mk = r2(n(making))
+  const mkp = parseMaking(making, gold)
+  const mk = mkp.amount
   const gst = r2((gold + mk) * n(gstPct) / 100)
   const bill = r2(gold + mk + gst)
   const cb = Math.min(r2(n(cashback)), bill)
-  return { gold, making: mk, gst, bill, cashback: cb, total: r2(bill - cb) }
+  return { gold, making: mk, makingPct: mkp.pct, gst, bill, cashback: cb, total: r2(bill - cb) }
 }
 
 // Coin bought at the seller's MRP: the net price is MRP less cashback.
