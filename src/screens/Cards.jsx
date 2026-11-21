@@ -8,7 +8,7 @@ import { TopBar, ProgressBar, TxnRow, formatINR, getMerchantIcon } from '../comp
 import { useStore } from '../store'
 import { useBackHandler } from '../lib/backNav'
 import { askConfirm } from '../lib/confirm'
-import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary, isOpen } from '../lib/cards'
+import { groupOf, totalAvailableCredit, recordPayment, removePayment, nextAnniversary, isOpen, setCardClosed } from '../lib/cards'
 import { cardStats, isCardPayment, feeWaiverSpend } from '../lib/cardStats'
 import { ordinal } from '../lib/cycle'
 import { typeLabel, networkLabel, excludedFor, cardTitle } from '../lib/cardCatalog'
@@ -371,6 +371,18 @@ function Detail({ card, cards, byCard, onBack }) {
   const linkedAccount = card.cardType === 'debit' && card.linkedAccountId != null ? cards.find(c => c.id === card.linkedAccountId) : null
   const linkedCards = card.cardType === 'account' ? cards.filter(c => c.linkedAccountId === card.id) : []
   const s = cardStats(card, txns)
+  // close / reopen right from the card's page
+  const kindWord = card.cardType === 'account' ? 'bank account' : card.cardType === 'debit' ? 'debit card' : 'credit card'
+  const toggleClosed = async () => {
+    if (!card.closed) {
+      const owed = credit ? Math.max(0, s.outstanding || 0) : 0
+      const msg = `${owed > 0 ? `About ${formatINR(owed)} still shows as owed on it. Pay it off first, or it stops appearing in your dues. ` : ''}Its history stays, and it no longer counts in your totals, dues, card advice or "Paid from" lists. You can reopen it any time.`
+      if (!(await askConfirm({ title: `Close ${cardTitle(card, { last4: false })}?`, message: msg, confirmLabel: 'Close it' }))) return
+    }
+    await setCardClosed(card.id, !card.closed)
+    showNotification(card.closed ? 'Reopened' : 'Closed', 'success')
+    onBack()
+  }
   const st = STATUS[s.status]
   const shared = groupOf(card, cards).filter(c => c.id !== card.id)
   const monthStart = startOfMonth(new Date())
@@ -398,6 +410,18 @@ function Detail({ card, cards, byCard, onBack }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber-dim)' }}>Is this a credit card, a debit card or a bank account?</div>
             <div style={{ fontSize: 11, color: 'var(--txt2)', margin: '2px 0 8px' }}>The SMS didn't say. Until you choose, its spends are listed but no balance is tracked.</div>
             <button className="btn-secondary" style={{ height: 34 }} onClick={() => setEditOpen(true)}>Choose card type</button>
+          </div>
+        )}
+
+        {card.closed && (
+          <div className="card" style={{ marginBottom: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1, fontSize: 12, color: 'var(--txt2)' }}>This {kindWord} is <b style={{ color: 'var(--txt)' }}>closed</b>{card.closedAt ? ` (${fmtD(card.closedAt)})` : ''}. Its history stays here, but it is left out of your totals and dues.</div>
+            <button className="btn-secondary" style={{ height: 34, flexShrink: 0 }} onClick={toggleClosed}>Reopen</button>
+          </div>
+        )}
+        {!card.closed && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-4px 2px 8px' }}>
+            <span onClick={toggleClosed} style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-dim)', cursor: 'pointer' }}>Mark this {kindWord} as closed</span>
           </div>
         )}
 
