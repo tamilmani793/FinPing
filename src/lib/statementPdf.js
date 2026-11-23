@@ -191,7 +191,7 @@ function assignRows(body, headCells, cols, numericCols, width) {
 // column holds a date (a value date in another column does not count). Lines are then joined cell by cell.
 const DATE_ONLY = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ ,.-]*\d{2,4})$/
 const DATE_AT_START = /^(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}[ -][A-Za-z]{3}[a-z]*[ ,.-]*\d{2,4})/
-const FOOTER = /(statement summary|end of statement|generated (on|by)|this is a computer|registered office|closing balance\s*:|page \d+ of \d+|gstin|state account branch)/i
+const FOOTER = /(net outstanding balance|total (purchase|cash|balance transfer|loan) outstanding|statement summary|end of statement|generated (on|by)|this is a computer|registered office|closing balance\s*:|page \d+ of \d+|gstin|state account branch)/i
 
 function foldContinuations(table, c, pages, ys = []) {
   const hdr = norm(table[0].join(' '))
@@ -338,6 +338,81 @@ export function findCardSummary(lines) {
   return out.totalDue != null && out.statementDate ? out : null
 }
 
+// Some issuers (HSBC) print a transaction date as "26OCT": the day and the month stuck together, with no year. The year comes from the
+// statement period printed on the page ("21 OCT 2026 To 20 NOV 2026"): the date that falls inside that period (or just around it) wins,
+// so a December card cycle running into January gets the right year for each line. Such cells are rewritten as "26 OCT 2026".
+const SHORT_DATE = /^(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/
+export function fixShortDates(lines) {
+  const text = lines.map(l => l.map(c => c.text).join(' '))
+  let period = null
+  for (const t of text) {
+    const m = t.match(/(\d{1,2})\s+([A-Za-z]{3})[a-z]*,?\s+(\d{4})\s+(?:to|-)\s+(\d{1,2})\s+([A-Za-z]{3})[a-z]*,?\s+(\d{4})/i)
+    if (m && MONTHS[m[2].toLowerCase()] != null && MONTHS[m[5].toLowerCase()] != null) {
+      period = { from: new Date(+m[3], MONTHS[m[2].toLowerCase()], +m[1], 12), to: new Date(+m[6], MONTHS[m[5].toLowerCase()], +m[4], 12) }
+      break
+    }
+  }
+  if (!period) return lines
+  const DAY = 86400000
+  const yearFor = (day, mon) => {
+    for (const y of [period.to.getFullYear(), period.from.getFullYear()]) {
+      const d = new Date(y, mon, day, 12)
+      if (d >= period.from - 10 * DAY && d <= period.to + 10 * DAY) return y
+    }
+    return period.to.getFullYear()
+  }
+  for (const l of lines) for (const c of l) {
+    const m = c.text.trim().match(SHORT_DATE)
+    if (m) c.text = `${m[1]} ${m[2]} ${yearFor(+m[1], MONTHS[m[2].toLowerCase()])}`
+  }
+  return lines
+}
+
+// HSBC credit card statements: "DATE | TRANSACTION DETAILS | AMOUNTS", one amount column with a credit marked "CR" after it, and the city
+// printed after the merchant. Every dated line with an amount is one transaction, whatever column the city lands in, so this layout is
+// read line by line instead of by column. Balance and total lines are left out.
+const HSBC_SKIP = /(net outstanding balance|total (purchase|cash|balance transfer|loan) outstanding|opening balance|available credit limit)/i
+export function hsbcCardTable(lines) {
+  const bank = lines.some(l => l.some(c => /hsbc/i.test(c.text)))
+  const head = lines.find(l => l.some(c => /^date$/i.test(c.text)) && l.some(c => /^transaction details$/i.test(c.text)) && l.some(c => /^amounts/i.test(c.text)))
+  if (!bank || !head) return null
+  const rows = [['DATE', 'TRANSACTION DETAILS', 'AMOUNT']]
+  for (const l of lines) {
+    const d = l[0]
+    if (!d || d.x0 > 60 || !DATE_ONLY.test(d.text)) continue
+    const mi = l.findIndex((c, i) => i > 0 && /^[\d,]+\.\d{2}$/.test(c.text))
+    if (mi < 0) continue
+    const what = l.slice(1, mi).map(c => c.text).join(' ').replace(/\s+/g, ' ').trim()
+    if (!what || HSBC_SKIP.test(what)) continue
+    const credit = l.slice(mi + 1).some(c => /^cr$/i.test(c.text.trim()))
+    rows.push([d.text, what, `${l[mi].text}${credit ? ' Cr' : ''}`])
+  }
+  return rows.length > 1 ? rows : null
+}
+
+// The first-page bill summary on an HSBC card statement: due date and minimum due, statement period and total due, credit limit, available limit.
+export function findHsbcSummary(lines) {
+  if (!lines.some(l => l.some(c => /hsbc/i.test(c.text)))) return null
+  const money = l => l.filter(c => /^[\d,]+\.\d{2}$/.test(c.text)).map(c => num(c.text))
+  const lineAfter = re => { const i = lines.findIndex(l => re.test(l.map(c => c.text).join(' '))); return i >= 0 ? lines[i + 1] : null }
+  const out = {}
+  const due = lineAfter(/payment due date.*minimal payment due/i)
+  if (due) { const d = due.map(c => dateOf(c.text)).find(Boolean); if (d) out.dueDate = d; const m = money(due); if (m.length) out.minDue = m[0] }
+  const tot = lineAfter(/statement period.*total payment due/i)
+  if (tot) {
+    const per = tot.map(c => c.text).join(' ').match(/(\d{1,2}\s+[A-Za-z]{3}[a-z]*\s+\d{4})\s+to\s+(\d{1,2}\s+[A-Za-z]{3}[a-z]*\s+\d{4})/i)
+    if (per) out.statementDate = dateOf(per[2])
+    const m = money(tot); if (m.length) out.totalDue = m[m.length - 1]
+  }
+  const lim = lineAfter(/credit limit.*cash limit/i)
+  if (lim) { const m = money(lim); if (m.length) out.creditLimit = m[0] }
+  const av = lines.find(l => /^available credit limit/i.test(l.map(c => c.text).join(' ')))
+  if (av) { const m = money(av); if (m.length) out.availableCredit = m[m.length - 1] }
+  const acc = lineAfter(/opening balance.*purchase & other charges.*payment & other credits/i)
+  if (acc) { const m = money(acc); if (m.length === 4) out.purchases = m[1] }
+  return out.totalDue != null && out.statementDate ? out : null
+}
+
 // `pdfjs` can be handed in (tests); the app loads it on first use so it is not part of the normal start-up
 export async function parsePdf(arrayBuffer, password, pdfjs) {
   if (!pdfjs) {
@@ -359,8 +434,9 @@ export async function parsePdf(arrayBuffer, password, pdfjs) {
   }
   await task.destroy()
   if (!lines.length) throw new Error('This PDF has no readable text (it may be a scanned image). Download the statement as CSV or Excel instead.')
-  const table = linesToTable(lines)
+  fixShortDates(lines)
+  const table = hsbcCardTable(lines) || linesToTable(lines)
   table.summary = findSummary(lines)
-  table.cardSummary = findCardSummary(lines)
+  table.cardSummary = findCardSummary(lines) || findHsbcSummary(lines)
   return table
 }
